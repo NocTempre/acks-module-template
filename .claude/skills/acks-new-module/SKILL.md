@@ -1,0 +1,27 @@
+---
+name: acks-new-module
+description: Scaffold a new ACKS II Foundry module repo from acks-module-template. Use when the user wants to start a new acks-* module.
+---
+
+Scaffold a new module in the NocTempre ACKS family. The canonical toolchain and
+conventions live in `C:\Proj\acks-module-template` (read `docs/TOOLCHAIN.md`
+before deviating from anything).
+
+1. Establish the module id (lowercase kebab, `acks-` prefix), feature title
+   (without the "ACKS II — " prefix), and a one-line description. Ask only if
+   the user's request doesn't determine them.
+2. Run:
+   `node C:\Proj\acks-module-template\bin\new-module.mjs <id> --title "<Title>" --desc "<Description>"`
+   This creates `C:\Proj\<id>`, renders placeholders, `git init -b main`, and
+   makes the first commit.
+3. In the new repo: `npm install`, then `npm run validate` — both must pass.
+4. Start the design docs: fill `docs/RULES.md` with the canonical rules extract
+   for the feature (cite book/chapter/section) and `docs/MODEL.md` with the
+   reuse → extend → enhance → invent breakdown, before writing runtime code.
+5. Publishing is a separate, user-confirmed step — ask before running
+   `gh repo create NocTempre/<id> --public --source . --push`.
+6. Foundry dev install (junction, not copy):
+   `New-Item -ItemType Junction -Path "$env:LOCALAPPDATA\FoundryVTT\Data\modules\<id>" -Target "C:\Proj\<id>"`
+
+Never copy toolchain files from a sibling module — the template is the only
+source; sibling copies may carry stale drift.
