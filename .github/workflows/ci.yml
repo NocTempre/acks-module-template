@@ -1,0 +1,44 @@
+name: CI
+
+# Smoke-test the template itself: syntax-check the scripts, scaffold a module
+# from the skeleton, and run the canonical build + validate inside it.
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  smoke:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Syntax-check template scripts
+        run: |
+          for f in bin/*.mjs manifest.mjs skeleton/tools/*.mjs; do
+            node --check "$f"
+          done
+
+      - name: Scaffold a module from the skeleton
+        run: |
+          git config --global user.email "ci@example.invalid"
+          git config --global user.name "template-ci"
+          node bin/new-module.mjs acks-ci-smoke --title "CI Smoke" --desc "Scaffold smoke test."
+
+      - name: Build and validate the scaffolded module
+        working-directory: ../acks-ci-smoke
+        run: |
+          npm install --no-audit --no-fund
+          npm run build:packs
+          npm run validate
+          grep -rn "{{" --include="*.json" --include="*.md" --include="*.mjs" . --exclude-dir=node_modules --exclude-dir=.git \
+            | grep -v "pack-data.mjs" && { echo "::error::unrendered placeholders"; exit 1; } || echo "placeholders fully rendered"

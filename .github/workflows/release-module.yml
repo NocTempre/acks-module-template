@@ -1,0 +1,86 @@
+name: Release (reusable)
+
+# THE canonical release procedure for every acks-* module. Module repos call
+# this via a thin release.yml referencing @main, so changes here propagate to
+# all modules automatically — edit this file, never the callers.
+#
+# dry_run (manual "Run workflow" in a module) builds and validates everything
+# but skips the tag check and publishing.
+
+on:
+  workflow_call:
+    inputs:
+      dry_run:
+        description: Build and validate without tag-checking or publishing
+        type: boolean
+        required: false
+        default: false
+
+jobs:
+  build-release:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Verify tag matches module.json version
+        if: ${{ !inputs.dry_run }}
+        run: |
+          MANIFEST_VERSION=$(node -p "require('./module.json').version")
+          TAG_VERSION="${GITHUB_REF_NAME#v}"
+          echo "manifest=$MANIFEST_VERSION  tag=$TAG_VERSION"
+          if [ "$MANIFEST_VERSION" != "$TAG_VERSION" ]; then
+            echo "::error::module.json version ($MANIFEST_VERSION) does not match tag ($TAG_VERSION)"
+            exit 1
+          fi
+
+      - name: Install dev dependencies
+        run: npm ci
+
+      - name: Build compendium packs
+        run: npm run build:packs --if-present
+
+      - name: Validate scripts, templates, JSON, and packs
+        run: npm run validate --if-present
+
+      - name: Run logic tests
+        run: npm run test --if-present
+
+      - name: Verify every declared pack exists
+        run: |
+          node -e '
+            const fs = require("fs");
+            const m = require("./module.json");
+            let missing = false;
+            for (const p of m.packs ?? []) {
+              if (!fs.existsSync(p.path + "/CURRENT")) {
+                console.error(`::error::declared pack "${p.name}" is missing its compiled LevelDB at ${p.path}`);
+                missing = true;
+              }
+            }
+            if (missing) process.exit(1);
+          '
+
+      - name: Create module.zip
+        run: |
+          # Ship-by-default: everything the module needs at runtime is included
+          # automatically (docs/, ruledata/, future dirs). The -x list names
+          # dev-only paths; extend it only for new DEV-ONLY content.
+          zip -r module.zip . \
+            -x '.git/*' '.github/*' '.claude/*' 'node_modules/*' \
+               'packs/_source/*' 'tools/*' \
+               'package.json' 'package-lock.json' \
+               '.gitignore' '.gitattributes' 'CLAUDE.md' 'module.zip'
+
+      - name: Publish release
+        if: ${{ !inputs.dry_run }}
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            module.json
+            module.zip

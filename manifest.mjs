@@ -16,6 +16,7 @@ export const COPY = [
   ".gitattributes",
   ".gitignore",
   ".github/workflows/release.yml",
+  ".github/workflows/toolchain-check.yml",
   ".claude/settings.json",
   "tools/validate.mjs",
 ];

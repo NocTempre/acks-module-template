@@ -66,12 +66,24 @@ acks-<feature>/
   skips empty packs; CI fails on declared-but-missing packs).
 - `languages`: at least `en` → `lang/en.json`.
 
-## 4. Release pipeline (canonical `release.yml`)
+## 4. Release pipeline
+
+The release procedure lives **once**, in this repo:
+`.github/workflows/release-module.yml` (a reusable `workflow_call` workflow).
+Each module carries only a thin synced `release.yml` caller that references it
+`@main` — so procedure changes here propagate to every module automatically,
+with no sync step. (Pin the reference to a tag/SHA only if stability ever
+matters more than propagation.)
 
 Trigger: push tag `v*`. Steps: tag/version match check → `npm ci` →
 `build:packs` → `validate` → `test` (each `--if-present`) → declared-pack
 existence check → **ship-by-default zip** → publish `module.json` + `module.zip`
-to the GitHub release.
+to the GitHub release. A manual "Run workflow" on a module performs a
+**dry run**: full build + validation, no tag check, no publish.
+
+A second synced workflow, `toolchain-check.yml`, runs on every module push/PR:
+it checks out this template and fails CI if any canonical file drifted from
+canon — hand-edits can't survive unnoticed.
 
 The zip includes *everything* except an explicit dev-only denylist (`.git*`,
 `.github`, `.claude`, `CLAUDE.md`, `node_modules`, `tools`, `packs/_source`,
@@ -157,9 +169,18 @@ Prefer fixed timestamps in new pack data; with `Date.now()` data, compare
 diffs excluding `createdTime`/`modifiedTime` before deciding whether to commit
 a rebuild.
 
-## 9. Phase 2 (requires this repo on GitHub)
+## 9. Consistency automation (implemented 2026-07-15)
 
-- Convert `release.yml` to a reusable `workflow_call` hosted here; module
-  workflows shrink to ~10-line callers and can never drift.
-- Publish the harness as a git-dependency npm package (`acks-tools`) with bin
-  entries, replacing vendored `tools/*.mjs`.
+Three layers keep the family consistent, by mechanism rather than discipline:
+
+1. **Reusable release workflow** (`release-module.yml@main`) — CI *logic*
+   propagates to all modules automatically; nothing to sync.
+2. **CI drift check** (`toolchain-check.yml`, synced) — canonical *files*
+   (validators, dotfiles, Claude infra) are enforced: a module push with
+   hand-edited or stale canon fails CI until `sync-toolchain --apply` runs.
+3. **Template CI** (`ci.yml` here) — every template change scaffolds a module
+   from the skeleton and runs the canonical build + validate, so canon itself
+   can't break silently.
+
+Possible later: publish the harness as a git-dependency npm package
+(`acks-tools`) with bin entries, replacing the vendored `tools/*.mjs`.

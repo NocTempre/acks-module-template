@@ -7,6 +7,8 @@
  *   node bin/sync-toolchain.mjs --apply              write canonical files (skips dirty repos)
  *   node bin/sync-toolchain.mjs --apply --force      write even into dirty repos
  *   node bin/sync-toolchain.mjs --repo acks-monsters limit to named repo(s) (repeatable)
+ *   node bin/sync-toolchain.mjs --repo-path <abs>    target an explicit repo path (repeatable;
+ *                                                    used by the CI toolchain-check workflow)
  *   node bin/sync-toolchain.mjs --install-skills     copy .claude/skills/* -> ~/.claude/skills/
  *
  * What syncs is declared in manifest.mjs. After --apply, run
@@ -29,7 +31,11 @@ const APPLY = args.includes("--apply");
 const FORCE = args.includes("--force");
 const INSTALL_SKILLS = args.includes("--install-skills");
 const repoFilter = [];
-for (let i = 0; i < args.length; i++) if (args[i] === "--repo") repoFilter.push(args[i + 1]);
+const repoPaths = [];
+for (let i = 0; i < args.length; i++) {
+  if (args[i] === "--repo") repoFilter.push(args[i + 1]);
+  if (args[i] === "--repo-path") repoPaths.push(args[i + 1]);
+}
 
 const norm = (text) => text.replaceAll("\r\n", "\n");
 const readIf = (file) => (fs.existsSync(file) ? fs.readFileSync(file, "utf8") : null);
@@ -154,9 +160,11 @@ function installSkills() {
 
 if (INSTALL_SKILLS) installSkills();
 
-if (!INSTALL_SKILLS || APPLY || repoFilter.length) {
+if (!INSTALL_SKILLS || APPLY || repoFilter.length || repoPaths.length) {
   const parent = path.dirname(TEMPLATE_ROOT);
-  const targets = (repoFilter.length ? repoFilter : DEFAULT_TARGETS).map((t) => path.resolve(parent, t));
+  const targets = repoPaths.length
+    ? repoPaths.map((p) => path.resolve(p))
+    : (repoFilter.length ? repoFilter : DEFAULT_TARGETS).map((t) => path.resolve(parent, t));
   for (const repoDir of targets) {
     if (!fs.existsSync(repoDir)) {
       console.log(`\n=== ${path.basename(repoDir)} ===\n  skipped: directory not found`);
