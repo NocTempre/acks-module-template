@@ -47,6 +47,10 @@ build/release plumbing.
   `compatibility.minimum` (lib-wrapper for wrapping, socketlib for GM-routed
   writes).
 - Declare a pack in `module.json` only once it has content.
+- Namespacing (validate-enforced): globals/custom hooks/HB helpers start with
+  the camelCased module id; top-level pack `_id`s start with the
+  `flags["{{MODULE_ID}}"].idPrefix` key; lang keys with `{{LANG_PREFIX}}.`;
+  CSS classes with `{{MODULE_ID}}-`.
 - Design doctrine: **reuse → extend → enhance → invent** — reuse core system
   documents; extend only via `flags["{{MODULE_ID}}"]`; enhance with alternate
   sheets/wrappers; invent nothing the system provides (see docs/MODEL.md).

@@ -125,6 +125,40 @@ Release procedure (also encoded in the `acks-release` skill):
 - **Foundry dev install:** junction, not copy:
   `New-Item -ItemType Junction -Path "$env:LOCALAPPDATA\FoundryVTT\Data\modules\<id>" -Target "C:\Proj\<id>"`
 
+## 5b. Module key & namespacing (enforced by validate.mjs §7)
+
+Anything a module puts into a **shared registry** carries its key, so nothing
+collides and any identifier in a bug report greps straight back to its owner.
+One form per registry — no legacy alternatives (the 2026-07-15 migration
+renamed every pre-existing deviation rather than grandfathering it):
+
+- **JS registries** — `globalThis` exposures, custom hook names
+  (`Hooks.call/callAll`), Handlebars helpers — start with the **camelCase
+  namespace**: the module id camelCased (`acks-influence` → `acksInfluence`,
+  hook `acksInfluenceRollComplete`, helper `acksMonstersHas`). Derived from
+  the id, never declared. Hyphens can't appear in JS identifiers, hence
+  camelCase here and kebab elsewhere. Firing another acks-* module's hook is
+  a warning, not a failure — deliberate cross-module calls are legitimate.
+- **CSS classes** (top-level selectors) start with the **module id** as-is
+  (kebab): `.acks-formation-skill-tab`.
+- **lang keys** start with `<ID-UPPERCASED>.`; Foundry-owned roots
+  (`TYPES.*`) are allowlisted in the validator — extend that allowlist in the
+  template only.
+- **Pack document `_id`s** (top-level) start with the **short key** declared
+  in `module.json` → `flags.<id>.idPrefix` — mandatory for any module with
+  packs. It exists only because ids are exactly 16 chars (the camel namespace
+  wouldn't leave room). Keep it short; scaffolding derives a default
+  (`acks` + word initials) overridable with `--key`.
+- Settings, document flags, and socketlib channels are already scoped by the
+  Foundry APIs — no check needed.
+
+Declared short keys (must stay unique across the family): equipment `acksEq`,
+formation `acksfm`, henchmen `acksHm`, influence `acksInfl`, monsters `acksm`.
+
+Consumers of another module's hooks use the literal hook name (grep-ability is
+the point); the firing module also publishes its hook names on its API object
+(e.g. `globalThis.acksInfluence.hooks`).
+
 ## 6. Design doctrine
 
 **Reuse → extend → enhance → invent** (from acks-monsters, adopted family-wide):
@@ -162,12 +196,13 @@ deliberate deviations:
 | acks-formation | `master` branch; pack data inline in a custom 21 KB `build-packs.mjs` | rename branch on GitHub; extract data to `pack-data.mjs`, then sync harness |
 | acks-influence | pack data inline in custom `build-packs.mjs`; `compatibility.minimum` still 13 | extract data; raise minimum when retested on 14 |
 
-Pack-data `_stats` guidance learned during rollout: henchmen uses **fixed**
-timestamps (rebuilds are byte-identical); equipment/formation/influence/
-monsters stamp `Date.now()` at import, so every rebuild churns `packs/_source`.
-Prefer fixed timestamps in new pack data; with `Date.now()` data, compare
-diffs excluding `createdTime`/`modifiedTime` before deciding whether to commit
-a rebuild.
+Pack-data `_stats` guidance learned during rollout: henchmen and equipment use
+**fixed** timestamps (rebuilds are byte-identical); formation/influence/monsters
+still stamp `Date.now()` at import, so every rebuild churns `packs/_source`.
+Prefer fixed timestamps in new pack data — pin the stamp to the value already
+committed and the rebuild is a no-op, so a dirty `packs/_source` then genuinely
+means the content changed. With `Date.now()` data, compare diffs excluding
+`createdTime`/`modifiedTime` before deciding whether to commit a rebuild.
 
 ## 9. Consistency automation (implemented 2026-07-15)
 

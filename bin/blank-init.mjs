@@ -4,7 +4,10 @@
  * because the folder gets copied away before this runs.
  *
  * Usage, after copying blank-template/ to C:\Proj\<your-module-id>:
- *   node INIT.mjs --title "Feature Name" [--desc "One-line description."]
+ *   node INIT.mjs --title "Feature Name" [--desc "One-line description."] [--key acksXy]
+ *
+ * --key sets the short module key prefixing pack document _ids (default:
+ * "acks" + initials of the id words after acks-).
  *
  * Derives the module id from the folder name, renders every {{PLACEHOLDER}},
  * initialises git on branch `main`, makes the first commit, and deletes
@@ -49,6 +52,8 @@ const vars = {
   MODULE_TITLE: title,
   MODULE_DESCRIPTION: desc,
   LANG_PREFIX: id.toUpperCase(),
+  MODULE_KEY: opt("key") ?? "acks" + id.replace(/^acks-?/, "").split("-").map((w) => w[0] ?? "").join(""),
+  MODULE_NAMESPACE: id.replace(/-([a-z0-9])/g, (_, c) => c.toUpperCase()),
 };
 const render = (text) =>
   Object.entries(vars).reduce((out, [key, value]) => out.replaceAll(`{{${key}}}`, value), text);

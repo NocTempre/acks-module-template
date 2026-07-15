@@ -2,7 +2,11 @@
  * Scaffold a new ACKS module repo from skeleton/.
  *
  * Usage:
- *   node bin/new-module.mjs <module-id> --title "Feature Name" --desc "One-line description."
+ *   node bin/new-module.mjs <module-id> --title "Feature Name" --desc "One-line description." [--key acksXy]
+ *
+ * --key sets the short module key that prefixes pack document _ids (default:
+ * "acks" + the initials of the id words after acks-, e.g. acks-equipment ->
+ * "ackse"). Keep it short — it must leave room inside 16-char document ids.
  *
  * Creates C:\Proj\<module-id> (a sibling of this template repo), renders all
  * {{PLACEHOLDER}} values, initialises git on branch `main`, and makes the
@@ -48,6 +52,8 @@ const vars = {
   MODULE_TITLE: title,
   MODULE_DESCRIPTION: desc,
   LANG_PREFIX: id.toUpperCase(),
+  MODULE_KEY: opt("key") ?? "acks" + id.replace(/^acks-?/, "").split("-").map((w) => w[0] ?? "").join(""),
+  MODULE_NAMESPACE: id.replace(/-([a-z0-9])/g, (_, c) => c.toUpperCase()),
 };
 const render = (text) =>
   Object.entries(vars).reduce((out, [key, value]) => out.replaceAll(`{{${key}}}`, value), text);
