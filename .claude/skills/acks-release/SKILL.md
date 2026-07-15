@@ -8,6 +8,12 @@ Release procedure for any NocTempre `acks-*` module (canonical definition:
 repo; confirm with the user which repo and what version bump (patch/minor)
 if not stated.
 
+The CI procedure itself lives in acks-module-template's
+`release-module.yml` (reusable workflow) — module `release.yml` files are thin
+synced callers; never edit either in a module repo. A pre-flight dry run of
+the full pipeline (build + validate, no publish) is available anytime:
+`gh workflow run Release --repo NocTempre/<id> --ref main`
+
 1. Preflight: working tree clean (or only the changes being released);
    `git log origin/<branch>..HEAD` to know what's going out.
 2. Bump `version` in `module.json` (plain semver X.Y.Z). Update `CHANGELOG.md`
