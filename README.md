@@ -20,6 +20,7 @@ release pipeline.
 | `skeleton/` | Complete module skeleton. Placeholder-bearing files (`{{MODULE_ID}}` …) are scaffold-only; the rest are the canonical synced files. |
 | `manifest.mjs` | Declares which skeleton files are SYNCED into existing repos vs scaffold-only. |
 | `bin/new-module.mjs` | Scaffold a new module repo from the skeleton. |
+| `blank-template/` | Copy-me folder for starting a module by hand (copy → rename → `node INIT.mjs --title "..."`). Generated from `skeleton/` by `bin/make-blank.mjs` — never edit in place. |
 | `bin/sync-toolchain.mjs` | Diff/apply canonical files into the existing module repos; installs the shared skills user-level. |
 | `docs/TOOLCHAIN.md` | The canonical conventions — every "answer" the modules previously re-derived. |
 | `.claude/skills/` | Shared skills: `acks-new-module`, `acks-release`, `acks-sync-toolchain`. |
@@ -54,7 +55,7 @@ node bin/sync-toolchain.mjs --install-skills
 ## Changing a canonical file
 
 1. Edit it in `skeleton/` here (never in a module repo — sync will overwrite).
-2. `node bin/sync-toolchain.mjs --apply`
+2. `node bin/sync-toolchain.mjs --apply` and `node bin/make-blank.mjs`
 3. In each module: `npm run build:packs && npm run validate`, then commit.
 
 See [docs/TOOLCHAIN.md](docs/TOOLCHAIN.md) for the full conventions.

@@ -27,4 +27,6 @@ module repo — edit the skeleton in the template, then sync.
    user asks).
 5. If skills changed in the template, refresh the user-level installs:
    `node C:\Proj\acks-module-template\bin\sync-toolchain.mjs --install-skills`
-6. Commit the template repo itself if the skeleton changed.
+6. If the skeleton changed, regenerate the copy-me folder:
+   `node C:\Proj\acks-module-template\bin\make-blank.mjs`
+7. Commit the template repo itself if anything changed.
