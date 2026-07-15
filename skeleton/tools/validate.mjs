@@ -94,9 +94,26 @@ walk(path.join(ROOT, "ruledata"), (full) => {
   }
 });
 
-/* 4. Pack-source document invariants (top-level docs; embedded docs carry
- *    their own _key and are validated by the Foundry CLI at compile time). */
+/* 4. Pack-source document invariants, including embedded documents (items /
+ *    effects / results / pages, recursively — items can nest effects).
+ *    Foundry's DocumentIdField requires exactly 16 alphanumerics everywhere. */
 const ID_RE = /^[A-Za-z0-9]{16}$/;
+const EMBEDDED_COLLECTIONS = ["items", "effects", "results", "pages"];
+function checkDoc(fileRel, doc, ids, context) {
+  if (doc._id !== undefined) {
+    if (!ID_RE.test(doc._id)) fail(fileRel, `${context}_id "${doc._id}" is not 16 alphanumerics`);
+    if (doc._key !== undefined && !String(doc._key).endsWith(doc._id)) fail(fileRel, `${context}_key does not end with _id`);
+    if (ids.has(doc._id)) fail(fileRel, `${context}duplicate _id ${doc._id}`);
+    ids.add(doc._id);
+  }
+  for (const collection of EMBEDDED_COLLECTIONS) {
+    if (!Array.isArray(doc[collection])) continue;
+    const childIds = new Set(); // same child id under different parents is legal
+    for (const child of doc[collection]) {
+      if (child && typeof child === "object") checkDoc(fileRel, child, childIds, `${collection}: `);
+    }
+  }
+}
 const sourceRoot = path.join(ROOT, "packs", "_source");
 if (fs.existsSync(sourceRoot)) {
   for (const packDir of fs.readdirSync(sourceRoot, { withFileTypes: true })) {
@@ -111,11 +128,7 @@ if (fs.existsSync(sourceRoot)) {
         fail(rel(full), err.message);
         return;
       }
-      if (doc._id === undefined) return;
-      if (!ID_RE.test(doc._id)) fail(rel(full), `_id "${doc._id}" is not 16 alphanumerics`);
-      if (!String(doc._key ?? "").endsWith(doc._id)) fail(rel(full), "_key does not end with _id");
-      if (ids.has(doc._id)) fail(rel(full), `duplicate _id ${doc._id} in pack "${packDir.name}"`);
-      ids.add(doc._id);
+      checkDoc(rel(full), doc, ids, "");
     });
   }
 }
