@@ -140,14 +140,22 @@ sessions cite it instead of re-reading PDFs.
 - The core repo keeps its Claude context in an untracked `CLAUDE.md`
   (via `.git/info/exclude`) to avoid polluting the AutarchLLC fork.
 
-## 8. Known deviations (as of 2026-07-15)
+## 8. Known deviations (as of 2026-07-15, post-rollout)
+
+All five modules are on canon (sync `--check` reports zero drift). Remaining
+deliberate deviations:
 
 | Repo | Deviation | Path back to canon |
 | --- | --- | --- |
 | acks-formation | `master` branch; pack data inline in a custom 21 KB `build-packs.mjs` | rename branch on GitHub; extract data to `pack-data.mjs`, then sync harness |
 | acks-influence | pack data inline in custom `build-packs.mjs`; `compatibility.minimum` still 13 | extract data; raise minimum when retested on 14 |
-| acks-equipment | staged in-flight work (equip phases 2–5) | land it, then run sync (its staged `.gitattributes` already matches canon) |
-| acks-monsters / acks-henchmen | on canon via `pack-data.mjs` adapter | — |
+
+Pack-data `_stats` guidance learned during rollout: henchmen uses **fixed**
+timestamps (rebuilds are byte-identical); equipment/formation/influence/
+monsters stamp `Date.now()` at import, so every rebuild churns `packs/_source`.
+Prefer fixed timestamps in new pack data; with `Date.now()` data, compare
+diffs excluding `createdTime`/`modifiedTime` before deciding whether to commit
+a rebuild.
 
 ## 9. Phase 2 (requires this repo on GitHub)
 
