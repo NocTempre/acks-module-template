@@ -21,8 +21,8 @@ acks-<feature>/
     pack-data.mjs          Module-owned document content; exports `packs` map
     validate.mjs           SYNCED validator
     test-logic.mjs         (optional) module-owned pure-logic tests
-  docs/RULES.md            Canonical rules extract — replaces consulting PDFs
   docs/MODEL.md            Design doc (reuse → extend → enhance → invent)
+  (rules extracts are NOT in the repo — see "Rules extracts" below)
   .github/workflows/release.yml   SYNCED release workflow
   .gitignore .gitattributes       SYNCED
   CLAUDE.md                RENDERED from skeleton per repo
@@ -167,8 +167,14 @@ reuse core system documents and fields; extend only with genuinely new data in
 rather than replacements; invent nothing the system already provides.
 `docs/MODEL.md` in each module records how that module applies this.
 
-`docs/RULES.md` is the canonical extract of the relevant ACKS II rules —
-sessions cite it instead of re-reading PDFs.
+**Rules extracts are LOCAL-ONLY.** The canonical extract of the relevant
+ACKS II rules for each module lives at `C:\Proj\acks-rules\<module-id>\`
+(never in a repo — licensed book text; the public repos got indexed online,
+so on 2026-07-16 the extracts were purged from all five modules' git history
+and the repos went private). Sessions cite the local extract instead of
+re-reading PDFs. The canonical `.gitignore` carries armor patterns against
+accidental re-adds; anything shipped in-repo (`ruledata/`, compendium text)
+must stay paraphrase-with-citation, never verbatim book text.
 
 ## 7. Claude infrastructure
 

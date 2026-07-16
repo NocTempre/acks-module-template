@@ -70,6 +70,17 @@ function copyRendered(srcDir, destDir) {
 
 copyRendered(SKELETON, target);
 
+// Seed the LOCAL-ONLY rules-extract folder (licensed book text lives outside
+// every repo — see acks-rules/README.md).
+const rulesDir = path.join(path.dirname(TEMPLATE_ROOT), "acks-rules", id);
+if (!fs.existsSync(path.join(rulesDir, "RULES.md"))) {
+  fs.mkdirSync(rulesDir, { recursive: true });
+  fs.writeFileSync(
+    path.join(rulesDir, "RULES.md"),
+    `# ${title} — Canonical Rules Extract (LOCAL-ONLY, never commit)\n\nCite book, chapter, and section for every rule; record table data in full.\n\n## §1 <first rule area>\n\n*(fill in during design)*\n`,
+  );
+}
+
 const git = (...a) => execFileSync("git", ["-C", target, ...a], { stdio: "inherit" });
 git("init", "-b", "main");
 git("add", "-A");

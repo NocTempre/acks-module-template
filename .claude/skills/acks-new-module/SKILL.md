@@ -15,9 +15,11 @@ before deviating from anything).
    This creates `C:\Proj\<id>`, renders placeholders, `git init -b main`, and
    makes the first commit.
 3. In the new repo: `npm install`, then `npm run validate` — both must pass.
-4. Start the design docs: fill `docs/RULES.md` with the canonical rules extract
-   for the feature (cite book/chapter/section) and `docs/MODEL.md` with the
-   reuse → extend → enhance → invent breakdown, before writing runtime code.
+4. Start the design docs before writing runtime code: fill the canonical
+   rules extract at `C:\Proj\acks-rules\<id>\RULES.md` (**LOCAL-ONLY, never
+   in the repo** — licensed book text; cite book/chapter/section) and the
+   in-repo `docs/MODEL.md` with the reuse → extend → enhance → invent
+   breakdown.
 5. Publishing is a separate, user-confirmed step — ask before running
    `gh repo create NocTempre/<id> --public --source . --push`.
 6. Foundry dev install (junction, not copy):
