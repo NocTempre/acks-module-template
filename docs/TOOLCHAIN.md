@@ -98,9 +98,14 @@ Release procedure (also encoded in the `acks-release` skill):
 2. `npm run build:packs` — commit pack changes only if `_source` changed.
 3. `npm run validate` (and `npm test` where present).
 4. Commit, `git tag v<version>`, push branch + tag.
-5. `gh run watch` the Release workflow.
-6. Verify: `curl -sL https://github.com/NocTempre/<id>/releases/latest/download/module.json`
-   reports the new version.
+5. Confirm publication with BOUNDED checks (never `gh run watch` — it hangs
+   through GitHub API outages, which 2026-07-16 stranded several agents):
+   poll `gh release view v<version> --json assets` ~30s apart, cap ~5 min,
+   in a background/Monitor wait rather than foreground. On API 5xx, stop
+   and report — the pushed tag completes on its own.
+6. Verify: `curl -sm 15 -L https://github.com/NocTempre/<id>/releases/latest/download/module.json`
+   reports the new version (needs the repo public; while private use
+   `gh release view` — unauthenticated manifest fetches 404).
 
 ## 5. Dev harness
 

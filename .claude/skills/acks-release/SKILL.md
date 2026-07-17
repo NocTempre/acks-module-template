@@ -27,11 +27,21 @@ the full pipeline (build + validate, no publish) is available anytime:
 5. Commit, then tag exactly `v<module.json version>` and push branch + tag:
    `git tag v<X.Y.Z> && git push origin <branch> --tags`
    (CI fails the release if tag and manifest version differ.)
-6. Watch the workflow: `gh run watch` (or `gh run list --limit 1` until
-   completed). If it fails, read the log, fix, delete the tag locally+remotely
-   only if the release never published, and retry.
-7. Verify the published manifest resolves with the new version:
-   `curl -sL https://github.com/NocTempre/<id>/releases/latest/download/module.json`
+6. Confirm the release published — **bounded checks only, never
+   `gh run watch`** (it blocks forever through GitHub API outages, which
+   happen; 2026-07-16 stranded several agents this way). Poll with your
+   harness's non-blocking waiting (background until-loop or Monitor with a
+   timeout), checking `gh release view v<X.Y.Z> --json assets` every ~30s
+   for at most ~5 minutes. The workflow itself takes ~30s when healthy.
+   - If the API returns 5xx: GitHub is down, not the release. The tag is
+     pushed; CI fires or finishes on its own. Report "published pending
+     API recovery" and STOP — do not wait out an outage.
+   - If the run genuinely failed: read the log, fix, delete the tag
+     locally+remotely only if the release never published, and retry.
+7. Verify the manifest resolves with the new version (bounded, `-m 15`):
+   `curl -sm 15 -L https://github.com/NocTempre/<id>/releases/latest/download/module.json`
+   While the repos are PRIVATE this 404s unauthenticated by design — use
+   `gh release view` instead and note the limitation in your report.
 8. Report: version, release URL, and anything skipped.
 
 Never force-push tags over a published release; cut a new patch version
