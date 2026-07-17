@@ -129,6 +129,13 @@ Release procedure (also encoded in the `acks-release` skill):
   acks-equipment). Wire as `"test"` in package.json; CI runs it `--if-present`.
 - **Foundry dev install:** junction, not copy:
   `New-Item -ItemType Junction -Path "$env:LOCALAPPDATA\FoundryVTT\Data\modules\<id>" -Target "C:\Proj\<id>"`
+- **Local live testing:** check the local rules reference directory for
+  `C:\Proj\acks-rules\TEST_ENVIRONMENT.md`. If it exists, it defines this
+  machine's Foundry test server (URL, world, users, drive-it-by-API notes) —
+  use it for live verification. If it does not exist, **skip live testing**
+  and rely on `validate` + `build:packs` (+ `test` where present). The file is
+  machine-specific and LOCAL-ONLY: every developer defines their own (or
+  none); never commit ports, world ids, user names, or passwords to any repo.
 
 ## 5b. Module key & namespacing (enforced by validate.mjs §7)
 
