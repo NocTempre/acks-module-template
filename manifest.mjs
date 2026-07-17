@@ -13,6 +13,7 @@
  */
 
 export const COPY = [
+  "LICENSE",
   ".gitattributes",
   ".gitignore",
   ".github/workflows/release.yml",

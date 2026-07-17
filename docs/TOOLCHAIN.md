@@ -25,6 +25,7 @@ acks-<feature>/
   (rules extracts are NOT in the repo — see "Rules extracts" below)
   .github/workflows/release.yml   SYNCED release workflow
   .gitignore .gitattributes       SYNCED
+  LICENSE                  SYNCED proprietary license + disclaimer (see docs/LICENSING.md)
   CLAUDE.md                RENDERED from skeleton per repo
   .claude/settings.json    SYNCED permission allowlist
   package.json             MERGED (scripts/devDeps/engines enforced)
@@ -170,6 +171,18 @@ formation `acksfm`, henchmen `acksHm`, influence `acksInfl`, monsters `acksm`.
 Consumers of another module's hooks use the literal hook name (grep-ability is
 the point); the firing module also publishes its hook names on its API object
 (e.g. `globalThis.acksInfluence.hooks`).
+
+## 5c. Licensing & disclaimers
+
+Every module is an **ACKS II App** under the **ACKS II App License**. Two rules
+are non-negotiable and enforced by canon: (1) the code is proprietary — **no**
+open-source/Open-Game/compatibility license may ever be applied to it (nothing
+that lets others take the registered code); (2) the mandatory disclaimers
+(unofficial, registration number, required books, free, trademark) are stated
+clearly in each README. The canonical **`LICENSE`** (a `COPY` file, CI-enforced)
+carries the code terms; the per-module registration number and required
+publications live in the README "## License" section. Full rules and rationale:
+`docs/LICENSING.md`.
 
 ## 6. Design doctrine
 

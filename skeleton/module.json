@@ -4,6 +4,7 @@
   "description": "{{MODULE_DESCRIPTION}}",
   "version": "0.1.0",
   "authors": [{ "name": "NocTempre" }],
+  "license": "LICENSE",
   "compatibility": {
     "minimum": "14",
     "verified": "14.364"

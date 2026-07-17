@@ -34,5 +34,19 @@ This repo follows the shared ACKS module toolchain — see
 
 ## License
 
-Module code © NocTempre. ACKS II content referenced under Autarch LLC's
-compatibility guidelines — see the ACKS II system repository for license texts.
+**Code:** © NocTempre — proprietary; all rights reserved except as granted to
+Autarch LLC under the **ACKS II App License**. This module is **not** open source
+or Open Game Content, and no license is granted to copy, redistribute, or reuse
+its code. See [`LICENSE`](LICENSE).
+
+**ACKS II content** is used under the **ACKS II App License**. ACKS, ACKS II, and
+Adventurer Conqueror King System are trademarks of **Autarch LLC**.
+
+**Unofficial** — this is an unofficial fan module, not published or endorsed by
+Autarch LLC.
+
+**Registration #:** _[pending registration]_
+
+**Requires:** Adventurer Conqueror King System II (ACKS II) _[name the specific
+publication(s) this module needs]_. You must own them; this module is not a
+substitute for the books and is free to use.
