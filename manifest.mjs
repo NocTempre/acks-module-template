@@ -38,6 +38,7 @@ export const CANONICAL_SCRIPTS = {
 };
 
 export const DEFAULT_TARGETS = [
+  "acks-content",
   "acks-equipment",
   "acks-formation",
   "acks-henchmen",

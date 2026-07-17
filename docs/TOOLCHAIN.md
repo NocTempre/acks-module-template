@@ -128,6 +128,13 @@ Release procedure (also encoded in the `acks-release` skill):
 - Optional `tools/test-logic.mjs` (module-owned): pure-logic regression tests
   that mock minimal Foundry globals and import the real scripts (see
   acks-equipment). Wire as `"test"` in package.json; CI runs it `--if-present`.
+- Optional `tools/validate-extra.mjs` (module-owned): an extra check that must
+  run as PART of validation (not just `npm test`). The canonical `validate.mjs`
+  auto-runs it last if present and fails on its non-zero exit, so
+  `scripts.validate` stays exactly `node tools/validate.mjs` (canon) while the
+  module still gets its own gate. acks-content uses it to run its IP-safety
+  register lint (`tools/lint-register.mjs`) — chaining the lint into
+  `scripts.validate` directly would drift from canon and fail toolchain-check.
 - **Foundry dev install:** junction, not copy:
   `New-Item -ItemType Junction -Path "$env:LOCALAPPDATA\FoundryVTT\Data\modules\<id>" -Target "C:\Proj\<id>"`
 - **Local live testing:** check the local rules reference directory for
