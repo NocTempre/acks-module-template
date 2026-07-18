@@ -21,7 +21,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import url from "node:url";
-import { COPY, COPY_IF_PACK_DATA, RENDER, CANONICAL_DEV_DEPS, CANONICAL_SCRIPTS, DEFAULT_TARGETS } from "../manifest.mjs";
+import { COPY, APPEND_OK, COPY_IF_PACK_DATA, RENDER, CANONICAL_DEV_DEPS, CANONICAL_SCRIPTS, DEFAULT_TARGETS } from "../manifest.mjs";
 
 const TEMPLATE_ROOT = path.dirname(path.dirname(url.fileURLToPath(import.meta.url)));
 const SKELETON = path.join(TEMPLATE_ROOT, "skeleton");
@@ -70,6 +70,38 @@ function syncFile(repoDir, relFile, canonicalText) {
   }
   fs.mkdirSync(path.dirname(dest), { recursive: true });
   fs.writeFileSync(dest, canonicalText);
+  report(repoDir, relFile, current === null ? "created" : "updated");
+}
+
+/**
+ * Ignore-style canon: the canonical lines must all be present, in order, at the
+ * top of the file. Anything the repo adds below them is its own business — an
+ * extra ignore rule can only widen protection, never expose a canonical entry.
+ * Applying never clobbers the repo-local tail; it re-seats canon above it.
+ */
+function syncAppendable(repoDir, relFile, canonicalText) {
+  const dest = path.join(repoDir, relFile);
+  const current = readIf(dest);
+  const canon = norm(canonicalText);
+
+  if (current !== null && norm(current).startsWith(canon)) {
+    const extra = norm(current).slice(canon.length).trim();
+    report(repoDir, relFile, "ok");
+    if (extra) console.log(`${" ".repeat(17)}(+${extra.split("\n").filter((l) => l.trim()).length} repo-local line(s))`);
+    return;
+  }
+  if (!APPLY) {
+    report(repoDir, relFile, current === null ? "missing" : "drift");
+    return;
+  }
+  // Preserve anything the repo added that canon does not already cover.
+  const canonLines = new Set(canon.split("\n").map((l) => l.trim()));
+  const tail = (current === null ? [] : norm(current).split("\n")).filter(
+    (line) => line.trim() && !line.trim().startsWith("#") && !canonLines.has(line.trim()),
+  );
+  const merged = tail.length ? `${canon.replace(/\n*$/u, "\n")}\n${tail.join("\n")}\n` : canon;
+  fs.mkdirSync(path.dirname(dest), { recursive: true });
+  fs.writeFileSync(dest, merged);
   report(repoDir, relFile, current === null ? "created" : "updated");
 }
 
@@ -129,6 +161,9 @@ function syncRepo(repoDir) {
 
   for (const relFile of COPY) {
     syncFile(repoDir, relFile, fs.readFileSync(path.join(SKELETON, relFile), "utf8"));
+  }
+  for (const relFile of APPEND_OK) {
+    syncAppendable(repoDir, relFile, fs.readFileSync(path.join(SKELETON, relFile), "utf8"));
   }
   for (const relFile of COPY_IF_PACK_DATA) {
     if (fs.existsSync(path.join(repoDir, "tools", "pack-data.mjs"))) {

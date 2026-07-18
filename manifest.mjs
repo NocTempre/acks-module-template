@@ -2,6 +2,12 @@
  * Declares how each skeleton file participates in toolchain sharing.
  *
  * COPY            — canonical bytes, synced verbatim into every module repo.
+ * APPEND_OK       — canonical bytes must appear as an exact PREFIX; a repo may
+ *                   append its own lines below them but can never drop or
+ *                   reorder canon. Only for ignore-style files, where the
+ *                   append can only ever ADD protection (a repo-local ignore
+ *                   cannot un-ignore a canonical entry). Keeps repo-specific
+ *                   artifacts out of git without forcing them into canon.
  * COPY_IF_PACK_DATA — synced only into repos that have adopted the
  *                   tools/pack-data.mjs contract (repos with inline pack data
  *                   keep their custom builder until extracted).
@@ -15,12 +21,14 @@
 export const COPY = [
   "LICENSE",
   ".gitattributes",
-  ".gitignore",
   ".github/workflows/release.yml",
   ".github/workflows/toolchain-check.yml",
   ".claude/settings.json",
   "tools/validate.mjs",
+  "tools/ip-scan.mjs",
 ];
+
+export const APPEND_OK = [".gitignore"];
 
 export const COPY_IF_PACK_DATA = ["tools/build-packs.mjs"];
 
