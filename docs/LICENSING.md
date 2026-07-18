@@ -93,17 +93,41 @@ and the scan catches it. The file deliberately contains **no book text**: it
 matches structural signals, never known passages, because storing those here
 would itself be the leak.
 
-### On a leak: quarantine, don't blockade
+### On a leak: quarantine the file, not the work
 
-A tripped gate must never cost you work. The push has already landed and the
-commit is safe on the remote; what gets withheld is **exposure** — the repo
-drops to **private** and no release assets publish. Restore visibility
-deliberately, after the leak is cleared.
+**The gate is local, and it fires at commit time.** That is the only moment it
+can work: once a flagged file is in a commit, ignoring it afterwards does not
+remove it from history, and the repo has to be purged and force-pushed (as
+acks-formation was, 2026-07-17). CI is far too late — by the time it runs, the
+content is already on the remote.
 
-> **Setup required:** this needs a PAT with `admin:repo` in the repo secret
-> **`IP_GATE_TOKEN`**, because `GITHUB_TOKEN` cannot change repo visibility.
-> Until that secret exists the release still **fails loudly** with manual
+`.githooks/pre-commit` runs `tools/ip-quarantine.mjs` over the **staged** set.
+On a flagged file it:
+
+1. **unstages it** — the file stays on disk, nothing you wrote is lost;
+2. **appends it to `.git/info/exclude`**, a local-only ignore that is never
+   committed, so it cannot leak the filename or reach a teammate;
+3. **lets the commit proceed** with everything else.
+
+The commit lands, the push lands, your work is saved, and the licensed material
+never leaves the machine. No repo visibility change is needed. If a flagged
+path is **already in HEAD**, quarantine cannot help — history is contaminated —
+so that is a hard stop with instructions to purge before pushing.
+
+The hook is armed by `npm install` (the canonical `prepare` script sets
+`core.hooksPath=.githooks`). Hooks are not committed, so a fresh clone that has
+never run `npm install` is ungated — this is why CI still backstops.
+
+### CI backstop
+
+CI re-runs the scan and, on a leak, takes the repo **private** rather than
+publishing. This should now never fire; it exists to catch `--no-verify`, an
+unarmed clone, or a scan rule added after something was already committed.
+
+> **Setup required:** the auto-private step needs a PAT with `admin:repo` in the
+> repo secret **`IP_GATE_TOKEN`**, because `GITHUB_TOKEN` cannot change repo
+> visibility. Until that secret exists the release **fails loudly** with manual
 > instructions — it never passes silently — but you must take the repo private
-> by hand.
+> by hand. The local hook is what actually keeps this from mattering.
 
 See `docs/TOOLCHAIN.md` for the wider toolchain conventions.

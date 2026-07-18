@@ -26,6 +26,8 @@ export const COPY = [
   ".claude/settings.json",
   "tools/validate.mjs",
   "tools/ip-scan.mjs",
+  "tools/ip-quarantine.mjs",
+  ".githooks/pre-commit",
 ];
 
 export const APPEND_OK = [".gitignore"];
@@ -43,13 +45,18 @@ export const CANONICAL_DEV_DEPS = {
 export const CANONICAL_SCRIPTS = {
   "build:packs": "node tools/build-packs.mjs",
   "validate": "node tools/validate.mjs",
+  // Arms the pre-commit IP quarantine on every clone. Hooks are not committed,
+  // so without this a fresh clone would commit licensed material ungated.
+  "prepare": "git config core.hooksPath .githooks",
 };
 
 export const DEFAULT_TARGETS = [
+  "acks-abilities",
   "acks-content",
   "acks-equipment",
   "acks-formation",
   "acks-henchmen",
   "acks-influence",
+  "acks-lib",
   "acks-monsters",
 ];
