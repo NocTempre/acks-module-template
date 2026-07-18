@@ -66,4 +66,44 @@ any in-app "about"/credits surface where practical):
   `node bin/sync-toolchain.mjs --apply`; the README section and the `module.json`
   `license` field are updated per repo.
 
+## Rule 3 — every publish passes an IP leak scan
+
+Licensed ACKS II material must never reach a public repo or a release artifact.
+`tools/ip-scan.mjs` is a canonical `COPY` file wired into `tools/validate.mjs`,
+so it gates every `npm run validate` and therefore every release. CI runs it
+**twice**: once against the tree, once against the *unpacked `module.zip`*, so
+what actually ships is what gets checked.
+
+What it flags:
+
+- **Local-only rules extracts** (`RULES.md`, `PROFICIENCIES.md`,
+  `*Reactions-Reference.md`) — these belong in `C:\Proj\acks-rules\<module-id>\`
+  and were purged from every repo history 2026-07-16.
+- **Extraction-pipeline state** (`_proposals/`, `_manifest/`, `_ledger.json`) —
+  holds raw fragments lifted from the user's own PDFs.
+- **Publisher attribution inside data files** — in a pack source or cookbook it
+  means text was copied in wholesale rather than authored.
+- **Warning only:** very long string leaves in data files, so transcribed prose
+  gets a second look. Macro `command` bodies are exempt (authored JS).
+
+It scans **git-tracked files** in a work tree and **everything** elsewhere. An
+ignored, untracked file is not in the repo and never reaches the remote — the
+extraction pipeline depends on that — but force-add one and it becomes tracked,
+and the scan catches it. The file deliberately contains **no book text**: it
+matches structural signals, never known passages, because storing those here
+would itself be the leak.
+
+### On a leak: quarantine, don't blockade
+
+A tripped gate must never cost you work. The push has already landed and the
+commit is safe on the remote; what gets withheld is **exposure** — the repo
+drops to **private** and no release assets publish. Restore visibility
+deliberately, after the leak is cleared.
+
+> **Setup required:** this needs a PAT with `admin:repo` in the repo secret
+> **`IP_GATE_TOKEN`**, because `GITHUB_TOKEN` cannot change repo visibility.
+> Until that secret exists the release still **fails loudly** with manual
+> instructions — it never passes silently — but you must take the repo private
+> by hand.
+
 See `docs/TOOLCHAIN.md` for the wider toolchain conventions.
