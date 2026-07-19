@@ -98,15 +98,64 @@ Release procedure (also encoded in the `acks-release` skill):
 1. Bump `module.json` version (+ changelog if present).
 2. `npm run build:packs` — commit pack changes only if `_source` changed.
 3. `npm run validate` (and `npm test` where present).
-4. Commit, `git tag v<version>`, push branch + tag.
-5. Confirm publication with BOUNDED checks (never `gh run watch` — it hangs
+4. **Live-verify on the local test server — §4a. This is a GO-LIVE GATE, not
+   an optional extra.** Skipping is permitted only when the machine defines no
+   test environment, and must then be stated explicitly in the release report.
+5. Commit, `git tag v<version>`, push branch + tag.
+6. Confirm publication with BOUNDED checks (never `gh run watch` — it hangs
    through GitHub API outages, which 2026-07-16 stranded several agents):
    poll `gh release view v<version> --json assets` ~30s apart, cap ~5 min,
    in a background/Monitor wait rather than foreground. On API 5xx, stop
    and report — the pushed tag completes on its own.
-6. Verify: `curl -sm 15 -L https://github.com/NocTempre/<id>/releases/latest/download/module.json`
+7. Verify: `curl -sm 15 -L https://github.com/NocTempre/<id>/releases/latest/download/module.json`
    reports the new version (needs the repo public; while private use
    `gh release view` — unauthenticated manifest fetches 404).
+
+## 4a. Live verification before go-live
+
+**Why this is a gate.** `validate` and `test-logic` run against mocked Foundry
+globals: they verify the author's assumptions, not Foundry's behaviour. Every
+module-breaking bug in this family's history got through a green offline suite
+and was caught only by a live install — acks-equipment v0.12.1 shipped four
+versions in which the whole module was dead at `init` (`buildApi()` threw a
+ReferenceError) while ~180 checks reported green, because nothing offline ever
+*called* the entry point. Offline checks gate correctness of logic; only a live
+run gates that the module loads and does anything at all.
+
+**Environment.** The machine's test server is defined in
+`C:\Proj\acks-rules\TEST_ENVIRONMENT.md` — server URL, world, users, and the
+API calls that drive it reliably. That file is LOCAL-ONLY and machine-specific
+by design: every developer writes their own, and **no port, world id, user
+name, or password ever goes into a repo, a skill, or a memory.** Read it at the
+start of a release; if it is absent, there is no test server on this machine —
+skip live verification and say so in the report rather than inventing one.
+
+**Procedure.**
+
+1. Confirm the dev install is a junction to the working tree (§5), so what you
+   test is what you are about to tag — not a stale copy.
+2. **Shut down any running world before touching packs.** A running world holds
+   LevelDB locks on module `packs/`, which makes `npm run build:packs`,
+   `git restore packs/`, and `git clean` fail on the LOG files. Order is:
+   shut down → build packs → launch world → test.
+3. Launch the world and enable the module, then verify at minimum:
+   - it reaches `ready` with **no console errors** — check `init`, `setup`, and
+     `ready` specifically, since a throw in one leaves the rest silently dead;
+   - every setting the module registers appears in the settings UI, and each
+     one actually gates something (an inert toggle is a bug — see the three
+     dead overlay switches removed in acks-equipment v0.15.0);
+   - every shipped macro runs without throwing;
+   - each declared compendium opens and its documents load;
+   - **the feature this release changes, exercised end-to-end through the UI** —
+     not its unit test. Sheet/DOM integrations, drag-and-drop, and Active Effect
+     writes are the surfaces mocks cannot reach; verify the write actually
+     landed on the target field rather than that the code ran.
+4. Shut the world down again before committing and tagging: it releases the
+   pack locks, and runtime LOG/MANIFEST churn from a running world must never
+   be committed (`git restore packs/ && git clean -fd packs/`).
+5. **Report what you exercised, and name what you did not.** "Live-verified"
+   with no list is not a result. If a surface could not be reached, say which
+   and why — an honest gap is actionable, an implied all-clear is not.
 
 ## 5. Dev harness
 
@@ -137,13 +186,12 @@ Release procedure (also encoded in the `acks-release` skill):
   `scripts.validate` directly would drift from canon and fail toolchain-check.
 - **Foundry dev install:** junction, not copy:
   `New-Item -ItemType Junction -Path "$env:LOCALAPPDATA\FoundryVTT\Data\modules\<id>" -Target "C:\Proj\<id>"`
-- **Local live testing:** check the local rules reference directory for
-  `C:\Proj\acks-rules\TEST_ENVIRONMENT.md`. If it exists, it defines this
-  machine's Foundry test server (URL, world, users, drive-it-by-API notes) —
-  use it for live verification. If it does not exist, **skip live testing**
-  and rely on `validate` + `build:packs` (+ `test` where present). The file is
-  machine-specific and LOCAL-ONLY: every developer defines their own (or
-  none); never commit ports, world ids, user names, or passwords to any repo.
+- **Local live testing:** `C:\Proj\acks-rules\TEST_ENVIRONMENT.md` defines this
+  machine's Foundry test server (URL, world, users, drive-it-by-API notes). It
+  is machine-specific and LOCAL-ONLY — every developer defines their own, or
+  none; never commit ports, world ids, user names, or passwords to any repo.
+  **The full procedure, and its standing as a release gate, is §4a** — use it
+  during development too, not only at release time.
 
 ## 5b. Module key & namespacing (enforced by validate.mjs §7)
 
