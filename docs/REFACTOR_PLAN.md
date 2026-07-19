@@ -14,7 +14,7 @@ on whatever the repos look like when it actually runs.
 | Phase | Scope | Status |
 | --- | --- | --- |
 | 0 | Hygiene (manifests, timestamps, ruling) | pending |
-| 1 | Build acks-lib v1.0.0 + template enforcement | pending |
+| 1 | Build acks-lib v1.0.0 + template enforcement | partial — repo exists, scoped v0.1 (2026-07-18) |
 | 2 | Hierarchy adoption + data dedupe | pending |
 | 3 | Plumbing adoption | pending |
 | 4 | Data externalization (ruledata rollout) | pending |
@@ -97,6 +97,16 @@ five loads clean, equipment works with socketlib disabled.
 ## Phase 1 — Build acks-lib v1.0.0 + template enforcement
 
 The keystone; the largest phase. Contents are specified in FAMILY.md §3.
+
+> **Scoped early start (2026-07-18):** `C:\Proj\acks-lib` now exists as a
+> scaffolded **v0.1** carrying ONLY the shared effect/ability **vocabulary +
+> LevelValue + DataModel field-builders** (`scripts/vocab.mjs`, `scripts/
+> fields.mjs`; contract in its `docs/API.md`) — created to unblock the
+> acks-abilities program. It is **additive to this plan, not a divergence**:
+> the plumbing/interop/economy/social-proficiency-pack contents below remain
+> unbuilt, `library:true`/`socket:false` are set, and no consumer edges or
+> template enforcement have landed. When the full phase runs it fills the same
+> repo. acks-monsters vocab migration stays deferred (documented mirror).
 
 - Scaffold `C:\Proj\acks-lib` with `/acks-new-module` (short key `acksLib`).
 - Port plumbing: `scripts/tables.mjs` (henchmen's file + priority),
