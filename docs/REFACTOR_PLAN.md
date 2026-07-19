@@ -14,7 +14,7 @@ on whatever the repos look like when it actually runs.
 | Phase | Scope | Status |
 | --- | --- | --- |
 | 0 | Hygiene (manifests, timestamps, ruling) | pending |
-| 1 | Build acks-lib v1.0.0 + template enforcement | partial — repo exists, scoped v0.1 (2026-07-18) |
+| 1 | Build acks-lib v1.0.0 + template enforcement | partial — repo exists, scoped v0.1 (2026-07-18); tables registry + services landed v0.7.0 via CONTENT-EXTRACTION.md (2026-07-19); §3c economy.json superseded (no book values ship) |
 | 2 | Hierarchy adoption + data dedupe | pending |
 | 3 | Plumbing adoption | pending |
 | 4 | Data externalization (ruledata rollout) | pending |

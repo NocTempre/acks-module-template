@@ -98,12 +98,47 @@ each recipe against the reference PDFs and must reproduce those tables.
 
 | # | Deliverable | Status |
 | --- | --- | --- |
-| 1 | Henchmen purge: save-local, untrack + tolerant loading, history rewrite, release/tag cleanup, re-release, repo public | executing 2026-07-19 |
-| 2 | acks-lib: tables registry w/ priorities + `ruledata-import` contract | pending |
-| 3 | acks-location scaffold: schemas, import registration, actor type | pending |
+| 1 | Henchmen purge: save-local, untrack + tolerant loading, history rewrite, release/tag cleanup, re-release | **done 2026-07-19** — v0.11.0 verified 0 ruledata entries; repo-public flip is the owner's click |
+| 2 | acks-lib: tables registry w/ priorities + `ruledata-import` contract | **done 2026-07-19** — v0.7.0 (apiVersion 3) |
+| 3 | acks-location: import provider · table schemas · actor type | provider **v0.1.0 released 2026-07-19**; schemas + actor pending (see worklist) |
 | 4 | `people` cookbook (authoring waves + chef audit per RECIPES.md) | pending |
 | 5 | `hirelings` cookbook | pending |
 | 6 | Henchmen consume release: registry reads, actor handoff, compendium unship | pending |
 
-Standing follow-ups: Autarch **registration numbers** (Rule 2 placeholders
-on every released module), `IP_GATE_TOKEN` secret still unset.
+## 6. Worklist (next sessions)
+
+1. **Live-verify the released pair** (test world, TEST_ENVIRONMENT.md):
+   acks-lib 0.7.0 + acks-location 0.1.0 shipped on the owner's go without an
+   in-Foundry pass this session. Exercise: both reach `ready` clean;
+   `acksLib.services.get("ruledata-import")` non-null; GM
+   `importDoc(doc)` → `acksLib.tables.getDoc` resolves on GM **and** a
+   player client (the onChange mirror); `removeDoc` falls back/clears.
+   Also acks-henchmen 0.11.0: loads clean, one `tablesMissing` notice,
+   no crash when market UI is poked with no tables.
+2. **acks-content table binding** (new code, distinct from authoring):
+   route cookbook **table kinds** → assembled ruledata documents (the nine
+   reference shapes) → `ruledata-import.importDoc` at WORLD priority. The
+   monster/ability imports write Foundry documents; this path writes
+   registry documents. Design the table-entry → doc-fragment assembly
+   (many cookbook entries compose one `people.json`-shaped doc).
+3. **Cookbook authoring** (tasks in RECIPES.md wave discipline):
+   `bta` + `js` fingerprints into `scripts/books.mjs` (page count + title
+   regex read off the PDFs), then `people` (RR 495-503, BTA dwarven,
+   JJ 245-257), then `hirelings` (RR 162-173/334-337/352, JJ 118-119/
+   409-411, MM 351-352, JS-inserts grid). Verification targets:
+   `C:\Proj\acks-rules\acks-henchmen\ruledata-reference\*.json`.
+4. **acks-location build-out**: table schemas (validate imported docs
+   against the nine shapes), missing-tables panel, then the location
+   actor type + LocationData + sheet moved from henchmen (no shims —
+   ruling 2). Design note: henchmen may not name acks-location, so the
+   actor type string (or a `location` service) must be published via
+   acks-lib for consumers.
+5. **Henchmen consume release**: `requires acks-lib`; `rules/tables.mjs`
+   → delegation shim over `acksLib.tables`; drop the setup fetch loop
+   (nothing ships to fetch); read location actors via the lib-published
+   type; delete the location actor/sheet code that moved; THEN unship the
+   `proficiencies-powers` compendium once the abilities import path covers
+   its items (influence precedent), with an optional hygiene purge after.
+6. **Standing**: owner flips acks-henchmen public; Autarch **registration
+   numbers** (Rule 2 placeholders on every released module);
+   `IP_GATE_TOKEN` secret unset.
