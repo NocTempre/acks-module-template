@@ -45,16 +45,24 @@ jobs:
       - name: Build compendium packs
         run: npm run build:packs --if-present
 
-      # IP gate, part 1 of 2 — scans the working tree. continue-on-error so the
-      # quarantine step below always gets to run; a leak must never fall through
-      # to a plain red X that leaves the repo public.
+      # IP gate, part 1 of 2 — scans the working tree. The scan's EXIT CODE is a
+      # three-way verdict (0 clean / 1 leak / 2 tooling error); we capture it and
+      # publish it as `result` rather than relying on continue-on-error+outcome,
+      # which collapses "found book text" and "the scanner crashed" into one
+      # `failure` and would quarantine the repo for a benign Node quirk.
       - name: IP leak scan (tree)
         id: ipscan_tree
-        continue-on-error: true
-        run: node tools/ip-scan.mjs
+        run: |
+          node tools/ip-scan.mjs && code=0 || code=$?
+          case "$code" in
+            0) echo "result=clean" >> "$GITHUB_OUTPUT" ;;
+            1) echo "result=leak"  >> "$GITHUB_OUTPUT" ;;
+            *) echo "result=error" >> "$GITHUB_OUTPUT" ;;
+          esac
+          echo "ip-scan (tree): exit=$code"
 
       - name: Validate scripts, templates, JSON, and packs
-        if: ${{ steps.ipscan_tree.outcome == 'success' }}
+        if: ${{ steps.ipscan_tree.outputs.result == 'clean' }}
         run: npm run validate --if-present
 
       - name: Run logic tests
@@ -88,23 +96,32 @@ jobs:
 
       # IP gate, part 2 of 2 — scans what is actually about to be published,
       # not just what is in the tree. Catches anything the zip step sweeps in.
+      # Same three-way verdict as the tree scan (unzip failures still fail this
+      # step loudly, which is correct — a broken artifact is not a leak).
       - name: IP leak scan (release artifact)
         id: ipscan_zip
-        continue-on-error: true
         run: |
           rm -rf /tmp/ipscan && mkdir -p /tmp/ipscan
           unzip -q module.zip -d /tmp/ipscan
-          node tools/ip-scan.mjs /tmp/ipscan
+          node tools/ip-scan.mjs /tmp/ipscan && code=0 || code=$?
+          case "$code" in
+            0) echo "result=clean" >> "$GITHUB_OUTPUT" ;;
+            1) echo "result=leak"  >> "$GITHUB_OUTPUT" ;;
+            *) echo "result=error" >> "$GITHUB_OUTPUT" ;;
+          esac
+          echo "ip-scan (artifact): exit=$code"
 
       # Quarantine, not blockade: the push already landed and the work is safe
       # on the remote. What we withhold is *exposure* — the repo drops to
       # private and no release assets are published until the leak is cleared.
+      # This fires ONLY on a real leak verdict (exit 1). A scanner crash (exit 2)
+      # is handled by the step below and must never take the repo private.
       - name: Quarantine repository on leak
-        if: ${{ steps.ipscan_tree.outcome == 'failure' || steps.ipscan_zip.outcome == 'failure' }}
+        if: ${{ steps.ipscan_tree.outputs.result == 'leak' || steps.ipscan_zip.outputs.result == 'leak' }}
         env:
           GH_TOKEN: ${{ secrets.IP_GATE_TOKEN }}
         run: |
-          echo "::error::IP leak scan failed — withholding release and taking $GITHUB_REPOSITORY private."
+          echo "::error::IP leak detected — withholding release and taking $GITHUB_REPOSITORY private."
           if [ -z "$GH_TOKEN" ]; then
             echo "::error::Secret IP_GATE_TOKEN is not set, so visibility cannot be changed automatically."
             echo "::error::ACT NOW — take $GITHUB_REPOSITORY private by hand, then clear the leak."
@@ -115,8 +132,22 @@ jobs:
           echo "::warning::$GITHUB_REPOSITORY is now PRIVATE. Clear the leak, then restore visibility deliberately."
           exit 1
 
+      # Fail loud, do NOT quarantine: the scanner errored (exit 2) rather than
+      # finding a leak. The release is still withheld (this step fails the job),
+      # but visibility is left untouched — a tooling failure is not evidence of
+      # exposure, and flipping a public repo private on a Node hiccup is the
+      # footgun this split exists to prevent. Skipped when a real leak already
+      # fired quarantine above.
+      - name: Fail release on scan tooling error
+        if: ${{ (steps.ipscan_tree.outputs.result == 'error' || steps.ipscan_zip.outputs.result == 'error') && steps.ipscan_tree.outputs.result != 'leak' && steps.ipscan_zip.outputs.result != 'leak' }}
+        run: |
+          echo "::error::ip-scan crashed (exit 2) — the release is withheld, but visibility is unchanged."
+          echo "::error::tree=${{ steps.ipscan_tree.outputs.result }} artifact=${{ steps.ipscan_zip.outputs.result }}"
+          echo "::error::Fix the scanner (tools/ip-scan.mjs) and re-run; this is NOT a leak verdict."
+          exit 1
+
       - name: Publish release
-        if: ${{ !inputs.dry_run && steps.ipscan_tree.outcome == 'success' && steps.ipscan_zip.outcome == 'success' }}
+        if: ${{ !inputs.dry_run && steps.ipscan_tree.outputs.result == 'clean' && steps.ipscan_zip.outputs.result == 'clean' }}
         uses: softprops/action-gh-release@v2
         with:
           files: |
