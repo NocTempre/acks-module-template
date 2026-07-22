@@ -72,7 +72,15 @@ acks-<feature>/
 - Every `relationships.requires` entry carries a human `reason` and a
   `compatibility.minimum`. Standard deps when needed: `lib-wrapper` (>=1.12.0)
   for safe method wrapping, `socketlib` (>=1.1.0) for GM-routed writes.
+- A dependency the module can genuinely run without (a native fallback exists
+  and is maintained — e.g. henchmen's `game.socket` path when socketlib is
+  inactive) goes in `recommends` with a reason, not `requires`. Hard-require
+  only what the module cannot degrade around.
+- `url`: `https://github.com/NocTempre/<id>` (the repo), on every module.
 - `manifest`/`download`: `https://github.com/NocTempre/<id>/releases/latest/download/module.json|zip`.
+- Every repo keeps a `CHANGELOG.md` (newest-first `## X.Y.Z` entries; update it
+  as part of every release). Repos whose history predates the file say so in a
+  preamble instead of backfilling.
 - **Declare a pack in `packs` only once it has content** (the build harness
   skips empty packs; CI fails on declared-but-missing packs).
 - `languages`: at least `en` → `lang/en.json`.
