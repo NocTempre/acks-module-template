@@ -58,5 +58,6 @@ export const DEFAULT_TARGETS = [
   "acks-henchmen",
   "acks-influence",
   "acks-lib",
+  "acks-location",
   "acks-monsters",
 ];
