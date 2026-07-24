@@ -267,6 +267,23 @@ reuse core system documents and fields; extend only with genuinely new data in
 rather than replacements; invent nothing the system already provides.
 `docs/MODEL.md` in each module records how that module applies this.
 
+**The system repo is a REFERENCE, not a target.** `C:\Proj\foundryvtt-acks-core`
+(the `acks` system) is read-only to module work: read it to learn what core
+already does, then build on top. No module task edits system source — not to fix
+a bug, not to add a hook, not "just this once". The fork stays clean for
+upstream PRs, and core changes only under an explicitly approved core-side
+program, never as a side effect of module work.
+
+**Overrides and extensions of core logic default to `acks-lib`.** When core
+behavior genuinely must be wrapped, shimmed, or superseded, that lives in
+acks-lib, which is the family's single sanctioned place for it. A module patches
+core directly only when the behavior is unique to that module's domain, and its
+`docs/MODEL.md` says why it did not belong in the lib. One owner per wrapped
+core method: two modules wrapping the same method in different directions is the
+failure this rule exists to prevent. Promoting shared machinery into acks-lib is
+standing permission and needs no fresh go-ahead (see §3 dependency posture —
+consumers add `acks-lib` to `relationships.requires`).
+
 **Rules extracts are LOCAL-ONLY.** The canonical extract of the relevant
 ACKS II rules for each module lives at `C:\Proj\acks-rules\<module-id>\`
 (never in a repo — licensed book text; the public repos got indexed online,
