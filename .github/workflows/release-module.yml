@@ -42,6 +42,23 @@ jobs:
       - name: Install dev dependencies
         run: npm ci
 
+      # A module that imports acks-lib does so by a sibling-relative path
+      # (../../acks-lib/scripts/…) — the same resolution Foundry gives under
+      # /modules/ and the developer gets from the C:\Proj sibling checkout. CI
+      # checks out ONE repo, so those imports 404 the moment an offline test
+      # (validate → test-logic/test-flows) actually executes the module graph.
+      # Clone acks-lib as a sibling so cross-module imports resolve here too.
+      # Guarded: only when this module declares an acks-lib dependency, so
+      # acks-lib's own release (and any module that doesn't use it) skips it.
+      - name: Fetch acks-lib sibling (for cross-module imports)
+        run: |
+          if node -e "const m=require('./module.json');const r=m.relationships||{};process.exit([...(r.requires||[]),...(r.recommends||[])].some(d=>d.id==='acks-lib')?0:1)"; then
+            echo "acks-lib is a declared dependency — cloning as sibling for import resolution"
+            git clone --depth 1 https://github.com/NocTempre/acks-lib.git ../acks-lib
+          else
+            echo "no acks-lib dependency — skipping sibling checkout"
+          fi
+
       - name: Build compendium packs
         run: npm run build:packs --if-present
 
