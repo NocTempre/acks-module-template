@@ -69,9 +69,20 @@ acks-<feature>/
 - `compatibility`: `minimum: "14"`, `verified: "14.364"` (raise `verified` as
   tested; existing modules keep their historical minimums until retested).
 - `relationships.systems`: `acks`, `minimum: "14"`.
-- Every `relationships.requires` entry carries a human `reason` and a
-  `compatibility.minimum`. Standard deps when needed: `lib-wrapper` (>=1.12.0)
-  for safe method wrapping, `socketlib` (>=1.1.0) for GM-routed writes.
+- Every `relationships.requires` entry carries a human `reason`. Standard deps
+  when needed: `lib-wrapper` (>=1.12.0) for safe method wrapping, `socketlib`
+  (>=1.1.0) for GM-routed writes.
+- **INTRA-FAMILY version minimums are development-tracking only, not a contract.**
+  The acks-* modules co-develop as siblings, all at current versions, and these
+  GitHub releases are temporary artifacts for testing on a remote — not
+  distribution to mixed-version worlds. So for a dependency on ANOTHER acks-*
+  module (e.g. `acks-lib`): declare it in `requires` when a hard sibling import
+  needs it, but do NOT compute or bump `compatibility.minimum` — and NEVER
+  cascade-bump every downstream module's minimum because a shared lib gained an
+  export. Let a real incompatibility surface in live testing and roll the floor
+  into that module's own next patch, naturally. (Third-party deps like
+  lib-wrapper/socketlib still carry their real minimums — this waiver is
+  intra-family only.)
 - A dependency the module can genuinely run without (a native fallback exists
   and is maintained — e.g. henchmen's `game.socket` path when socketlib is
   inactive) goes in `recommends` with a reason, not `requires`. Hard-require
