@@ -387,6 +387,27 @@ Three layers keep the family consistent, by mechanism rather than discipline:
    from the skeleton and runs the canonical build + validate, so canon itself
    can't break silently.
 
+**Operating rule: push the template BEFORE syncing it downstream.**
+`sync-toolchain.mjs` renders canon from the template's local **working tree**,
+but layer 2 re-runs that same script in CI against a fresh checkout of
+`acks-module-template` **main on GitHub**. Sync from an unpushed template and
+every module commits content that does not exist upstream yet, so `drift` fires
+on the very commit meant to fix it — on 2026-08-01 this reddened all nine
+modules at once on `CLAUDE.md` (the only `RENDER` entry), from a sync run
+between two template commits. Order: commit + push the template, then
+`--apply` into the modules, then push those. The signature of the race is a
+local `--check` reporting `0 file(s) drifted` while CI is red — nothing is
+actually wrong, so re-run the failed checks rather than re-syncing anything.
+
+**`{{…}}` in `skeleton/` is reserved for scaffolder tokens.** Layer 3 greps the
+scaffolded module for any surviving `{{` and fails the build; that strictness is
+what makes a missed token loud, so nothing else may use the syntax. Human
+fill-in prompts use `_[brackets]_` — the skeleton README's registration and
+required-publications lines are the pattern. The §10f "Getting started" prompts
+shipped as `{{step one: …}}`, which `new-module.mjs` does not render (it knows
+only `MODULE_ID`, `MODULE_TITLE`, `MODULE_DESCRIPTION`, `LANG_PREFIX`,
+`MODULE_KEY`, `MODULE_NAMESPACE`), and broke template CI for three runs.
+
 Possible later: publish the harness as a git-dependency npm package
 (`acks-tools`) with bin entries, replacing the vendored `tools/*.mjs`.
 
