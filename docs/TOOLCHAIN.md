@@ -186,8 +186,26 @@ skip live verification and say so in the report rather than inventing one.
    and the test world will rarely already hold the actors, items, or documents
    a feature touches. "No data existed to exercise it" is not a limitation to
    report; it is test data you are expected to build. Make it, run the feature
-   through it, then delete it and confirm the world is back to its prior state.
-   This needs no permission and no special setup.
+   through it, then delete it. This needs no permission and no special setup.
+
+   **Create-and-destroy, never mutate-and-restore.** Reaching for the world's
+   existing fixtures because they are already there, then rolling back the
+   edits, is the failure this rule exists to prevent — and it recurs. Rollback
+   is a second write with all the failure modes of the first: it can report
+   success and not apply (an ownership rollback did exactly that, and was only
+   caught by re-reading), it cannot restore state you did not think to
+   snapshot, and an exception mid-test leaves the world broken with no record
+   of what changed. A document you created is disposable by construction:
+   deleting it is total, needs no snapshot, and cannot half-succeed. Prefer
+   new users/actors/items over borrowed ones even when the borrowed one is
+   more convenient — especially then.
+
+   Test artifacts are cheap and the seats are already provisioned: the world
+   carries one user of every permission level, so player-facing behaviour is
+   verified by joining as that player. Rendering a template with `isGM: false`
+   proves the template branches; it does not prove the API under it refuses a
+   real player (acks-henchmen v0.29.1: the read-only render was correct and
+   the engine call underneath was not).
 
    Where a release **changes or removes shipped content**, build the
    *pre-upgrade* shape on purpose: recover the removed definitions from git

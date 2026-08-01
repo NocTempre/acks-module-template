@@ -1,8 +1,11 @@
 /**
  * Canonical pre-release validation for ACKS module repos.
  * Synced from acks-module-template — edit there and run bin/sync-toolchain.mjs;
- * do not hand-edit per module. Module-specific checks belong in
- * tools/test-logic.mjs (run via `npm test`), not here.
+ * do not hand-edit per module. Pure-logic module tests belong in
+ * tools/test-logic.mjs (run via `npm test`); a module that needs an extra
+ * check to run as PART of validation (e.g. an IP-safety lint) drops a
+ * tools/validate-extra.mjs — this validator auto-runs it (section 8), so
+ * `npm run validate` stays the single canonical entry point everywhere.
  *
  * Checks (each section skips cleanly when the dir/file doesn't exist):
  *   1. JS syntax (node --check) of every .mjs under scripts/ and tools/.
@@ -24,6 +27,10 @@
  *      (Foundry-owned roots like TYPES.* allowlisted); top-level CSS classes
  *      with the module id; top-level pack _ids with the mandatory
  *      module.json `flags.<id>.idPrefix` short key.
+ *   8. IP leak scan (tools/ip-scan.mjs): local-only rules extracts, extraction
+ *      pipeline state, and publisher attribution inside data files.
+ *   9. Optional module-owned tools/validate-extra.mjs — run last if present;
+ *      a non-zero exit fails validation.
  *
  * Usage:  npm run validate
  */
@@ -274,6 +281,31 @@ if (module_?.id) {
       }
     }
   });
+}
+
+/* 8. IP leak scan — licensed book material must never reach a public repo or a
+ *    release artifact. CI runs this again against the built zip and quarantines
+ *    the repo if it trips; running it here means you find out before the push. */
+const ipScan = path.join(ROOT, "tools", "ip-scan.mjs");
+if (fs.existsSync(ipScan)) {
+  try {
+    execFileSync(process.execPath, [ipScan], { stdio: "inherit" });
+  } catch {
+    failed = true; // its own output already names the offending paths
+  }
+}
+
+/* 9. Optional module-owned extra validation. A repo drops tools/validate-extra.mjs
+ *    for checks specific to it (e.g. an IP-safety lint); the canonical validator
+ *    runs it here so `npm run validate` stays the single entry point. It should
+ *    exit non-zero on failure. Modules without the file skip this cleanly. */
+const extraValidator = path.join(ROOT, "tools", "validate-extra.mjs");
+if (fs.existsSync(extraValidator)) {
+  try {
+    execFileSync(process.execPath, [extraValidator], { stdio: "inherit" });
+  } catch {
+    failed = true; // its own output already explains the failure
+  }
 }
 
 if (failed) process.exit(1);

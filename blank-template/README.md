@@ -18,6 +18,22 @@ https://github.com/NocTempre/{{MODULE_ID}}/releases/latest/download/module.json
 - Foundry VTT v14+
 - ACKS II system (`acks`) v14+
 
+## Getting started (GM workflow)
+
+<!-- TOOLCHAIN.md §10f: this section is REQUIRED before first release.
+     Numbered steps from an empty world to the feature visibly working,
+     naming the exact macros/compendia involved. acks-henchmen's README
+     "Usage" section is the pattern. -->
+
+1. _{{step one: what the GM creates/enables first}}_
+2. _{{step two: the action that makes the module do something visible}}_
+
+## Disabling & uninstalling
+
+<!-- TOOLCHAIN.md §10d: if the module persists flags/Active Effects on world
+     documents, name the strip tool here and note the acks-lib dependency
+     pre-check trap. Delete the section only if the module writes nothing. -->
+
 ## Development
 
 ```

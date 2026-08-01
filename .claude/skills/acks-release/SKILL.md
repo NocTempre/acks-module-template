@@ -24,10 +24,26 @@ the full pipeline (build + validate, no publish) is available anytime:
    - `packs/_source` changed → commit both `_source` and compiled packs.
 4. `npm run validate` and, if a `test` script exists, `npm test`. Both must
    pass — fix, don't skip.
-5. Commit, then tag exactly `v<module.json version>` and push branch + tag:
+5. **Live-verify on the local test server (TOOLCHAIN §4a). This is a GO-LIVE
+   GATE**, not an optional extra — offline checks run against mocked globals
+   and have shipped dead modules green. Skip only when
+   `C:\Proj\acks-rules\TEST_ENVIRONMENT.md` is absent (no test server on this
+   machine), and say so in the report.
+   - **Build the test artifacts the check needs, then delete them.** Missing
+     data is test data you make, not a limitation you report.
+   - **Never mutate the world's pre-existing documents and roll back.** A
+     rollback is a second write that can silently fail, cannot restore what
+     you did not snapshot, and strands the world if the test throws. Create
+     disposable actors/items/users instead — deletion is total and needs no
+     trust.
+   - The world has a seat at every permission level: verify player-facing
+     behaviour by **joining as that player**, not by rendering a template
+     with `isGM: false`. The template branch and the API under it fail
+     independently.
+6. Commit, then tag exactly `v<module.json version>` and push branch + tag:
    `git tag v<X.Y.Z> && git push origin <branch> --tags`
    (CI fails the release if tag and manifest version differ.)
-6. Confirm the release published — **bounded checks only, never
+7. Confirm the release published — **bounded checks only, never
    `gh run watch`** (it blocks forever through GitHub API outages, which
    happen; 2026-07-16 stranded several agents this way). Poll with your
    harness's non-blocking waiting (background until-loop or Monitor with a
@@ -38,11 +54,11 @@ the full pipeline (build + validate, no publish) is available anytime:
      API recovery" and STOP — do not wait out an outage.
    - If the run genuinely failed: read the log, fix, delete the tag
      locally+remotely only if the release never published, and retry.
-7. Verify the manifest resolves with the new version (bounded, `-m 15`):
+8. Verify the manifest resolves with the new version (bounded, `-m 15`):
    `curl -sm 15 -L https://github.com/NocTempre/<id>/releases/latest/download/module.json`
    While the repos are PRIVATE this 404s unauthenticated by design — use
    `gh release view` instead and note the limitation in your report.
-8. Report: version, release URL, and anything skipped.
+9. Report: version, release URL, and anything skipped.
 
 Never force-push tags over a published release; cut a new patch version
 instead.
