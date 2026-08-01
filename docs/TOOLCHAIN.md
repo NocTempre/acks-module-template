@@ -181,12 +181,30 @@ skip live verification and say so in the report rather than inventing one.
      not its unit test. Sheet/DOM integrations, drag-and-drop, and Active Effect
      writes are the surfaces mocks cannot reach; verify the write actually
      landed on the target field rather than that the code ran.
-4. Leave the world running or shut it down as you like — compiled packs are
+4. **Create whatever fixtures the check needs — that is part of the check, not
+   a prerequisite for it.** A live run is only as good as the world it runs in,
+   and the test world will rarely already hold the actors, items, or documents
+   a feature touches. "No data existed to exercise it" is not a limitation to
+   report; it is test data you are expected to build. Make it, run the feature
+   through it, then delete it and confirm the world is back to its prior state.
+   This needs no permission and no special setup.
+
+   Where a release **changes or removes shipped content**, build the
+   *pre-upgrade* shape on purpose: recover the removed definitions from git
+   (`git show <tag>:<path>`) and re-create them as world documents. Every such
+   release claims that existing worlds keep working, and that claim is only
+   testable against a world that actually holds the old data — reasoning from
+   "Foundry does not delete world documents" is a citation, not a verification.
+   (acks-formation v0.27.0: re-creating the four removed pack items proved all
+   three surviving bind routes — `thiefSkill` flag, name match, and the
+   name-matched Alertness bonus — still resolved at the correct targets.)
+5. Leave the world running or shut it down as you like — compiled packs are
    gitignored, so a running world can no longer dirty the repo or leak runtime
    LOG/MANIFEST churn into a commit.
-5. **Report what you exercised, and name what you did not.** "Live-verified"
+6. **Report what you exercised, and name what you did not.** "Live-verified"
    with no list is not a result. If a surface could not be reached, say which
-   and why — an honest gap is actionable, an implied all-clear is not.
+   and why — an honest gap is actionable, an implied all-clear is not. A gap
+   you could have closed by creating fixtures (step 4) is not a gap; close it.
 
 ## 5. Dev harness
 
