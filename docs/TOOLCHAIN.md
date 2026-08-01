@@ -353,3 +353,70 @@ Three layers keep the family consistent, by mechanism rather than discipline:
 
 Possible later: publish the harness as a git-dependency npm package
 (`acks-tools`) with bin entries, replacing the vendored `tools/*.mjs`.
+
+## 10. Failure patterns & standing rules (2026-07-31 playtest batch)
+
+Six GM-reported bugs were fixed and released together on 2026-07-31
+(acks-lib 0.37.0, acks-content 0.62.0, acks-equipment 0.35.0,
+acks-formation 0.26.0, acks-henchmen 0.28.0). Each rule below exists because
+the family shipped the failure beside it. These are canon.
+
+**10a. Consume acks-lib statically — never feature-detect nested API paths
+into silence.** acks-formation gated capability matching on
+`globalThis.acksLib.satisfies`; the function lives at
+`acksLib.vocab.satisfies`, so the probe returned false for weeks and the
+whole matching layer degraded invisibly (every imported skill fell back to
+Adventuring, mislabelled and unbonused). A module that hard-`requires`
+acks-lib imports lib functions **statically**
+(`../../acks-lib/scripts/…`, junction-safe — the pattern long used for
+`slug`): if the surface moves, the module fails at LOAD, loudly. Runtime
+`globalThis` probing is only for OPTIONAL integrations, and the probe must
+log once when the surface is absent so a wrong path cannot impersonate "not
+installed". Corollary: an integration seam counts as verified only against
+the REAL sibling module, live (§4a) — a mocked seam verifies the mock. The
+seam above had a "verified by execution" audit note and had never once fired.
+
+**10b. A missing timestamp means "never enrolled", not "since the epoch".**
+acks-henchmen billed wage months as `now − (lastPaidTime ?? 0)`: a
+pre-existing henchman with no record was invoiced for every month since
+worldTime ZERO (a six-figure demand). Time-anchored automation treats an
+absent anchor as not-in-the-system and ADOPTS explicitly (write anchor =
+now, log the adoption). Every world contains documents older than any
+module.
+
+**10c. Automation never escalates its own failure into a punitive game
+consequence.** The same payday converted "employer cannot afford the
+(buggy) bill" into missed-wage calamities for the whole retinue, silently.
+A failed precondition STOPS the automation and reports; punitive branches
+(calamity, morale drop, item loss…) run only from an explicit GM action.
+This is the GM-prompt-first doctrine applied to failure paths.
+
+**10d. Every module that persists flags/effects ships its uninstall.**
+acks-equipment left a managed Active Effect applying stale AC/attack
+modifiers forever after disable, and nothing said what disabling costs.
+A module whose runtime writes flags/AEs to world documents ships a
+"strip module data" tool (macro + API, run while still enabled) and a README
+**Disabling & uninstalling** section. Modules owning document sub-types
+(acks-lib) are load-bearing: their dependents' READMEs must warn that
+Foundry's dependency dialog pre-checks them for deactivation, which makes
+those documents unavailable — reversibly, no data lost — until re-enabled.
+
+**10e. Cross-repo feature halves land lib-first, in the same motion.**
+acks-abilities 0.10.0 shipped reading `acksLib.vocab.SELECTION_VOCAB`; the
+lib half sat UNCOMMITTED in a working tree for a week (found and shipped in
+0.37.0 during this batch). Before tagging a consumer, the lib symbols it
+reads must exist in acks-lib HEAD **and** its released tag. Guarded reads
+make the gap invisible, not acceptable.
+
+**10f. Every README carries a GM "Getting started / Usage" walkthrough.**
+The playtest report praised the one module that had one (acks-henchmen) and
+filed the missing ones as bugs. Numbered steps from empty world to the
+feature visibly working, naming the exact macros/compendia involved. The
+skeleton README carries the section; a release with the placeholder still
+in it is not ready.
+
+Minor gotcha absorbed with the batch: `foundry.utils.duplicate()` strips
+getters — a duplicated document snapshot has `_id` but **no** `id`. Card
+grids stamping `data-item-id="${h.id}"` rendered `"undefined"` and the click
+handler swallowed it silently (fixed acks-henchmen 0.27.1). Carry `_id`
+through snapshot pipelines, and never let a lookup miss no-op without a log.
