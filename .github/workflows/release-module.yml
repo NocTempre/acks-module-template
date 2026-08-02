@@ -85,15 +85,17 @@ jobs:
 
       - name: Create module.zip
         run: |
-          # Ship-by-default: everything the module needs at runtime is included
-          # automatically (docs/, ruledata/, future dirs). The -x list names
-          # dev-only paths; extend it only for new DEV-ONLY content.
-          # docs/releases/* is the release-snapshot gallery (TOOLCHAIN §4b) —
-          # read on GitHub, never loaded by Foundry, and megabytes of PNG that
-          # would otherwise ride along in every user's download.
+          # The zip carries the FOUNDRY RUNTIME plus the root README/LICENSE that
+          # the package listing consumes — nothing else. Runtime is scripts/,
+          # styles/, templates/, lang/, vendor/, ruledata/, the compiled packs/
+          # and module.json; Foundry never reads a markdown file out of the
+          # module directory, so docs/ in its entirety is repo-only and is read
+          # on GitHub. That also keeps the release-snapshot gallery
+          # (docs/releases/, docs/guides/, docs/GALLERY.md — TOOLCHAIN §4b) and
+          # its megabytes of PNG out of every user's download.
           zip -r module.zip . \
             -x '.git/*' '.github/*' '.claude/*' 'node_modules/*' \
-               'packs/_source/*' 'tools/*' 'register/*' 'docs/releases/*' \
+               'packs/_source/*' 'tools/*' 'register/*' 'docs/*' \
                'package.json' 'package-lock.json' \
                '.gitignore' '.gitattributes' 'CLAUDE.md' 'module.zip'
 

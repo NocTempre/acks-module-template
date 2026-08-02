@@ -115,12 +115,19 @@ A second synced workflow, `toolchain-check.yml`, runs on every module push/PR:
 it checks out this template and fails CI if any canonical file drifted from
 canon — hand-edits can't survive unnoticed.
 
-The zip includes *everything* except an explicit dev-only denylist (`.git*`,
-`.github`, `.claude`, `CLAUDE.md`, `node_modules`, `tools`, `packs/_source`,
-`package*.json`). Rationale: the old allowlist zip silently dropped new
-runtime dirs (henchmen's `ruledata/` had to be patched in by hand). New
-runtime content now ships automatically; add to the denylist only for new
-*dev-only* paths.
+The zip includes *everything* except an explicit denylist (`.git*`, `.github`,
+`.claude`, `CLAUDE.md`, `node_modules`, `tools`, `register`, `packs/_source`,
+`package*.json`, and **all of `docs/`**). Rationale: the old allowlist zip
+silently dropped new runtime dirs (henchmen's `ruledata/` had to be patched in
+by hand), so new runtime content ships automatically; add to the denylist only
+for new *dev-only* paths.
+
+`docs/` is the one non-runtime exception worth stating outright: the artifact
+carries the Foundry runtime plus the root `README.md`/`LICENSE` the package
+listing consumes, and nothing else. **Foundry never reads a markdown file out of
+a module directory** — every in-repo document (MODEL, DECISIONS, ROADMAP,
+guides, the snapshot gallery) is read on GitHub, so shipping it would add weight
+to every user's download for no consumer.
 
 ### Release kinds
 
@@ -269,10 +276,12 @@ and it dates from a build nobody gated.
 - **Hotfix** — none, unless the fix is visible in the UI *and* the user asks.
 
 **Where they live.** `docs/releases/v<X.Y.Z>/<feature-slug>.png`, committed.
-`docs/releases/*` is on the zip denylist (§4), so snapshots stay reviewable in
-git and linkable from release notes without adding weight to the download every
-user pulls. Never regenerate a past release's directory — it is that release's
-record, not a scratch space.
+The whole of `docs/` is on the zip denylist (§4) — the release artifact carries
+the Foundry runtime plus the root README/LICENSE and nothing else, because
+Foundry never reads a markdown file out of a module directory. So snapshots stay
+reviewable in git and linkable from release notes without adding weight to the
+download every user pulls. Never regenerate a past release's directory — it is
+that release's record, not a scratch space.
 
 **`docs/GALLERY.md` is the index and the provenance record.** One row per
 feature area: the feature, a one-line caption, and a link to its current shot.
@@ -290,6 +299,26 @@ so the links survive the next refresh.
 ```
 
 Read that second row as: locations were re-shot for 0.3.0, henchmen were not.
+
+**`docs/guides/<feature-slug>.md` is where a shot is explained.** GALLERY is an
+index; a guide is the how-to the shot illustrates — the task the user is doing,
+the click-path, the frame, what a correct result looks like, and the common
+failure. One guide per feature area in a multi-feature module, one per workflow
+in a single-feature one; none for infrastructure with no user surface.
+
+A guide is the **one referrer that embeds a raw versioned PNG path**, because it
+shows the image inline rather than linking out. That is the exception to the rule
+above, and it carries the cost that rule exists to avoid: **when a feature is
+re-shot, re-point its guide's embeds as well as its GALLERY row.** README and
+release notes still link to `GALLERY.md` and need no edit.
+
+The image is never copied. One PNG has three referrers: the release directory
+stores it, GALLERY indexes it, the guide narrates it. All three live under
+`docs/` and none of them ship (§4).
+
+Guides carry the same IP posture as any other in-repo prose: cite the rules
+extracts, never quote them. That is a stricter bar than the snapshot rule below,
+because `ip-scan.mjs` *does* read markdown.
 
 **Keep the machine out of frame.** World id, user name, server URL and port are
 local-only under the same rule that keeps `TEST_ENVIRONMENT.md` out of every
