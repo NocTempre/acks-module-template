@@ -8,7 +8,7 @@ build/release plumbing.
 ## Layout
 
 - `scripts/` — ESM runtime, entry `scripts/module.mjs`; `templates/` — .hbs;
-  `styles/`; `lang/en.json` — flat i18n keys prefixed `{{LANG_PREFIX}}.`
+  `styles/`; `lang/en.json` — flat i18n keys under root(s) `{{LANG_PREFIX}}`
 - `packs/` — compiled LevelDB compendia. **Build output: gitignored, rebuilt
   by CI, shipped in module.zip.** Never committed, never hand-managed; there
   is no pack churn to discard. Foundry cannot read `packs/_source` at runtime,
@@ -21,7 +21,8 @@ build/release plumbing.
   from acks-module-template — never hand-edit**; change the template, then run
   `/acks-sync-toolchain`. `pack-data.mjs` (and data files it re-exports) are
   module-owned.
-- Canonical ACKS II rules extract: `C:\Proj\acks-rules\{{MODULE_ID}}\RULES.md`
+- Canonical ACKS II rules extracts: `C:\Projcks-rules\<feature>\RULES.md`
+  (one dir per pre-merge feature module; single-feature repos have exactly one)
   — **LOCAL-ONLY, never committed or shipped** (licensed book text; purged
   from repo history 2026-07-16). Cite it instead of re-deriving rules.
   `docs/MODEL.md` — design decisions (original content, stays in-repo).
@@ -35,7 +36,7 @@ build/release plumbing.
   packs are not in git). Commit `packs/_source` when it changes; the compiled
   dirs are ignored, so there is nothing to review or discard.
 - Foundry dev install (junction, not copy):
-  `New-Item -ItemType Junction -Path "$env:LOCALAPPDATA\FoundryVTT\Data\modules\{{MODULE_ID}}" -Target "C:\Proj\{{MODULE_ID}}"`
+  `New-Item -ItemType Junction -Path "$env:LOCALAPPDATA\FoundryVTT\Data\modules\{{MODULE_ID}}" -Target "C:\Proj\{{REPO_DIR}}"`
 ## Live testing
 
 `C:\Proj\acks-rules\TEST_ENVIRONMENT.md` defines this machine's local Foundry
@@ -92,7 +93,7 @@ with no list is not a result. Say what you created and confirm you removed it.
    + tag.
 5. Confirm publication with BOUNDED polls — **never `gh run watch`, it hangs**:
    `gh release view v<version> --json assets` ~30s apart, capped ~5 min. Then
-   verify `https://github.com/NocTempre/{{MODULE_ID}}/releases/latest/download/module.json`
+   verify `https://github.com/NocTempre/{{REPO_DIR}}/releases/latest/download/module.json`
    shows the new version. The `/acks-release` skill walks all of this.
 
 ## Conventions
@@ -105,7 +106,7 @@ with no list is not a result. Say what you created and confirm you removed it.
 - Declare a pack in `module.json` only once it has content.
 - Namespacing (validate-enforced): globals/custom hooks/HB helpers start with
   the camelCased module id; top-level pack `_id`s start with the
-  `flags["{{MODULE_ID}}"].idPrefix` key; lang keys with `{{LANG_PREFIX}}.`;
+  `flags["{{MODULE_ID}}"].idPrefix` key; lang keys under root(s) `{{LANG_PREFIX}}`;
   CSS classes with `{{MODULE_ID}}-`.
 - Design doctrine: **reuse → extend → enhance → invent** — reuse core system
   documents; extend only via `flags["{{MODULE_ID}}"]`; enhance with alternate

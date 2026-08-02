@@ -25,8 +25,8 @@ https://github.com/NocTempre/{{MODULE_ID}}/releases/latest/download/module.json
      naming the exact macros/compendia involved. acks-henchmen's README
      "Usage" section is the pattern. -->
 
-1. _{{step one: what the GM creates/enables first}}_
-2. _{{step two: the action that makes the module do something visible}}_
+1. _[step one: what the GM creates/enables first]_
+2. _[step two: the action that makes the module do something visible]_
 
 ## Disabling & uninstalling
 

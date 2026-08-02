@@ -28,12 +28,32 @@ const STRICT = process.argv.includes("--strict");
 /* Canonical rules extracts are LOCAL-ONLY (C:\Proj\acks-rules\<module-id>\).
  * They were purged from every repo history 2026-07-16 and must never return. */
 const FORBIDDEN_FILES = [/^RULES\.md$/iu, /^PROFICIENCIES\.md$/iu, /Reactions-Reference\.md$/iu];
-/* Extraction-pipeline state: holds raw fragments lifted from the user's PDFs. */
-const FORBIDDEN_PATHS = [/(^|[/\\])_proposals([/\\]|$)/u, /(^|[/\\])_manifest([/\\]|$)/u, /(^|[/\\])_ledger\.json$/u, /(^|[/\\])acks-rules([/\\]|$)/u];
+/* Extraction-pipeline state: holds raw fragments lifted from the user's PDFs.
+ * `ruledata/` earns its place here the hard way: acks-henchmen shipped its book
+ * tables as ruledata/*.json publicly, in every release zip since v0.1.0, until
+ * the 2026-07-19 audit. Nothing loads it any more, no repo tracks it, and the
+ * doctrine is that no book-read value ships in any repo — so a tracked
+ * ruledata/ is a mistake, not a judgement call. Note the value signals there
+ * were table rows and name lists, all individually short: no prose-length rule
+ * would ever have caught them, which is why this is a path ban. */
+const FORBIDDEN_PATHS = [/(^|[/\\])_proposals([/\\]|$)/u, /(^|[/\\])_manifest([/\\]|$)/u, /(^|[/\\])_ledger\.json$/u, /(^|[/\\])acks-rules([/\\]|$)/u, /(^|[/\\])ruledata([/\\]|$)/u];
 /* Publisher attribution has no business inside machine data — in a pack source
  * or cookbook it means text was copied in wholesale rather than authored. */
 const ATTRIBUTION = /all rights reserved|adventurer conqueror king|autarch/iu;
-const DATA_GLOBS = [/packs[/\\]_source[/\\].*\.json$/u, /^cookbook[/\\].*\.json$/u, /^register[/\\].*\.json$/u];
+const DATA_GLOBS = [/packs[/\\]_source[/\\].*\.json$/u, /^cookbook[/\\].*\.json$/u, /^register[/\\].*\.json$/u, /^lang[/\\].*\.json$/u];
+/* Source is not JSON-walkable, but book text hides in it just as well: a
+ * private sibling module keeps ~1,400 words of another publisher's rules in
+ * scripts/rules-data.mjs. Scanned as raw text for the same two signals.
+ *
+ * scripts/ ONLY, deliberately. tools/ is tracked but never ships, and its one
+ * real content surface (pack-data.mjs) is already covered through the
+ * packs/_source it generates — while scanning tools/ would make this file
+ * match its own ATTRIBUTION literal and fail every run. vendor/ is excluded
+ * for the opposite reason: third-party bundles carry their own licence
+ * headers, and a gate that flags those on every run is a gate people mute. */
+const CODE_GLOBS = [/^scripts[/\\].*\.mjs$/u];
+/* Quoted and templated literals, so a long one can be measured without parsing. */
+const STRING_LITERAL = /"(?:[^"\\\n]|\\.)*"|'(?:[^'\\\n]|\\.)*'|`(?:[^`\\]|\\.)*`/gu;
 /* A string leaf this long in a data file is a paragraph, not a label. */
 const PROSE_CHARS = 1500;
 /* ...unless it is source code. Macro bodies are authored JS and legitimately
@@ -90,6 +110,11 @@ function inspect(abs, relPath) {
     errors.push(`${relPath} — extraction-pipeline state must never ship or be committed`);
     return;
   }
+  if (CODE_GLOBS.some((re) => re.test(relPath))) {
+    if (!fs.existsSync(abs)) return; // tracked but deleted in the work tree
+    scanSource(fs.readFileSync(abs, "utf8"), relPath);
+    return;
+  }
   if (!DATA_GLOBS.some((re) => re.test(relPath))) return;
   if (!fs.existsSync(abs)) return; // tracked but deleted in the work tree
 
@@ -100,6 +125,17 @@ function inspect(abs, relPath) {
     return; // tools/validate.mjs already reports malformed JSON
   }
   scanStrings(data, relPath);
+}
+
+function scanSource(text, relPath) {
+  if (ATTRIBUTION.test(text)) {
+    errors.push(`${relPath} — publisher attribution in source; book text belongs in the reader's own PDF, not in a .mjs`);
+  }
+  for (const [lit] of text.matchAll(STRING_LITERAL)) {
+    if (lit.length > PROSE_CHARS) {
+      warnings.push(`${relPath}: a ${lit.length}-char string literal — verify this is authored, not transcribed`);
+    }
+  }
 }
 
 function scanStrings(node, relPath, keyPath = "") {

@@ -50,14 +50,13 @@ export const CANONICAL_SCRIPTS = {
   "prepare": "git config core.hooksPath .githooks",
 };
 
+/**
+ * The LIVE module repos (working-dir names under C:\Proj). The nine pre-merge
+ * feature repos this list used to name are retired read-only archives since
+ * the 0.1.0 merge (acks-extras absorbed eight; acks-content became
+ * acks-importer) — never sync into them.
+ */
 export const DEFAULT_TARGETS = [
-  "acks-abilities",
-  "acks-content",
-  "acks-equipment",
-  "acks-formation",
-  "acks-henchmen",
-  "acks-influence",
-  "acks-lib",
-  "acks-location",
-  "acks-monsters",
+  "foundryvtt-acks-extras",
+  "foundryvtt-acks-importer",
 ];

@@ -46,12 +46,29 @@ const report = (repo, file, status) => {
   console.log(`  ${status.padEnd(14)} ${file}`);
 };
 
-function renderVars(moduleJson) {
+function renderVars(moduleJson, repoDir) {
+  // LANG_PREFIX renders the repo's ACTUAL lang root(s), read from lang/en.json:
+  // the merged repos deliberately keep one root per pre-merge feature, so an
+  // id-derived prefix would name a root no key uses. Fresh scaffolds (no lang
+  // file yet) keep the id-derived default.
+  let langPrefix = (moduleJson.id ?? "").toUpperCase();
+  try {
+    const lang = JSON.parse(fs.readFileSync(path.join(repoDir, "lang", "en.json"), "utf8"));
+    const roots = [...new Set(Object.keys(lang).map((k) => k.split(".")[0]))].filter((r) => r !== "TYPES");
+    if (roots.length) langPrefix = roots.join(", ");
+  } catch {
+    /* keep the default */
+  }
   return {
     MODULE_ID: moduleJson.id,
     MODULE_TITLE: (moduleJson.title ?? moduleJson.id).replace(/^ACKS II\s+—\s+/u, ""),
     MODULE_DESCRIPTION: moduleJson.description ?? "",
-    LANG_PREFIX: (moduleJson.id ?? "").toUpperCase(),
+    LANG_PREFIX: langPrefix,
+    // The working-dir / GitHub repo name. NOT always the module id — the
+    // merged repos are foundryvtt-acks-extras (id acks-extras), the same
+    // split the system repo uses — so junction targets and release URLs
+    // must render from this, never from MODULE_ID.
+    REPO_DIR: path.basename(repoDir),
   };
 }
 const render = (text, vars) =>
@@ -173,7 +190,7 @@ function syncRepo(repoDir) {
     }
   }
   const moduleJson = JSON.parse(fs.readFileSync(path.join(repoDir, "module.json"), "utf8"));
-  const vars = renderVars(moduleJson);
+  const vars = renderVars(moduleJson, repoDir);
   for (const relFile of RENDER) {
     syncFile(repoDir, relFile, render(fs.readFileSync(path.join(SKELETON, relFile), "utf8"), vars));
   }
