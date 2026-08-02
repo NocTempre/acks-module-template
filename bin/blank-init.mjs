@@ -51,6 +51,9 @@ const vars = {
   MODULE_ID: id,
   MODULE_TITLE: title,
   MODULE_DESCRIPTION: desc,
+  // id is derived from this folder's name, so the folder IS the repo dir.
+  // sync-toolchain re-renders CLAUDE.md from the real basename later anyway.
+  REPO_DIR: id,
   LANG_PREFIX: id.toUpperCase(),
   MODULE_KEY: opt("key") ?? "acks" + id.replace(/^acks-?/, "").split("-").map((w) => w[0] ?? "").join(""),
   MODULE_NAMESPACE: id.replace(/-([a-z0-9])/g, (_, c) => c.toUpperCase()),

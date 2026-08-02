@@ -51,6 +51,10 @@ const vars = {
   MODULE_ID: id,
   MODULE_TITLE: title,
   MODULE_DESCRIPTION: desc,
+  // The scaffold directory is `id`. Live repos diverge (id acks-extras lives in
+  // foundryvtt-acks-extras), but sync-toolchain re-renders CLAUDE.md from the
+  // real directory basename on every sync, so this self-corrects after a move.
+  REPO_DIR: id,
   LANG_PREFIX: id.toUpperCase(),
   MODULE_KEY: opt("key") ?? "acks" + id.replace(/^acks-?/, "").split("-").map((w) => w[0] ?? "").join(""),
   MODULE_NAMESPACE: id.replace(/-([a-z0-9])/g, (_, c) => c.toUpperCase()),
