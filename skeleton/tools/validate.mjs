@@ -41,6 +41,23 @@ import url from "node:url";
 import Handlebars from "handlebars";
 
 const ROOT = path.dirname(path.dirname(url.fileURLToPath(import.meta.url)));
+
+/* Namespacing is enforced at the FAMILY level, not the module level (sections
+ * 6, 7a, 7d). The job of these prefixes is to keep the family clear of core
+ * Foundry and of the `acks` system; "acks-" does that completely. Pinning them
+ * to the module id would additionally have prevented one acks-* module from
+ * colliding with another — which stopped being a risk when the family merged
+ * into single modules, and which in exchange would force every folded-in
+ * feature's lang keys and CSS classes to be re-prefixed for no visible gain.
+ * Feature-level roots (ACKS-EQUIPMENT.*, .acks-henchmen-row) stay as authored
+ * and remain collision-proof by construction.
+ *
+ * 7b (pack _id prefix) and 7c (globals/hooks/helpers) are deliberately NOT
+ * relaxed: 7b costs nothing since every existing prefix already starts "acks",
+ * and 7c is what forbids a compat-alias global. */
+const LANG_FAMILY = "ACKS-";
+const CSS_FAMILY = "acks-";
+
 let failed = false;
 const fail = (file, message) => {
   console.error(`FAIL ${file}: ${message}`);
@@ -190,7 +207,15 @@ if (module_?.id && fs.existsSync(path.join(ROOT, "lang", "en.json"))) {
       else langKeys.push(key);
     }
   })(lang, "");
-  const keyRe = new RegExp(`${module_.id.toUpperCase()}\\.[A-Za-z0-9._-]+`, "g");
+  /* Any ACKS-family lang root, not just this module's own. A merged module
+   * carries the roots of everything folded into it (ACKS-EQUIPMENT.*,
+   * ACKS-HENCHMEN.*, ...), and those roots stay put — re-prefixing thousands
+   * of keys to match the new id buys nothing and risks collisions.
+   *
+   * This MUST stay in step with 7a below. Keyed to `module_.id` it would match
+   * none of a merged module's keys, so `referenced` would come back empty and
+   * this section would print OK having checked nothing. */
+  const keyRe = new RegExp(`${LANG_FAMILY}[A-Z0-9]+\\.[A-Za-z0-9._-]+`, "g");
   const referenced = new Set();
   for (const dir of ["scripts", "templates", "ruledata", "tools"]) {
     walk(path.join(ROOT, dir), (full) => {
@@ -214,16 +239,15 @@ if (module_?.id) {
   const idPrefix = module_.flags?.[id]?.idPrefix;
   const warn = (file, message) => console.warn(`WARN ${file}: ${message}`);
 
-  // 7a. lang keys are module-prefixed (Foundry-owned roots allowlisted).
+  // 7a. lang keys carry a family root (Foundry-owned roots allowlisted).
   const FOUNDRY_LANG_ROOTS = ["TYPES"];
   if (fs.existsSync(path.join(ROOT, "lang", "en.json"))) {
-    const upper = id.toUpperCase();
     const lang = readJson("lang/en.json");
     for (const key of Object.keys(lang)) {
       const ok =
-        key === upper || key.startsWith(`${upper}.`) ||
+        key.startsWith(LANG_FAMILY) ||
         FOUNDRY_LANG_ROOTS.some((root) => key === root || key.startsWith(`${root}.`));
-      if (!ok) fail("lang/en.json", `key "${key}" is not prefixed "${upper}." (Foundry-owned roots: ${FOUNDRY_LANG_ROOTS.join(", ")})`);
+      if (!ok) fail("lang/en.json", `key "${key}" is not prefixed "${LANG_FAMILY}" (Foundry-owned roots: ${FOUNDRY_LANG_ROOTS.join(", ")})`);
     }
   }
 
@@ -275,9 +299,9 @@ if (module_?.id) {
       const m = /^\s*\.([a-zA-Z][\w-]*)/.exec(line);
       if (!m) continue;
       const cls = m[1];
-      if (!cls.startsWith(id) && !cssSeen.has(cls)) {
+      if (!cls.startsWith(CSS_FAMILY) && !cssSeen.has(cls)) {
         cssSeen.add(cls);
-        fail(rel(full), `top-level class ".${cls}" must start with "${id}"`);
+        fail(rel(full), `top-level class ".${cls}" must start with "${CSS_FAMILY}"`);
       }
     }
   });
