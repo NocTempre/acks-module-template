@@ -122,22 +122,44 @@ runtime dirs (henchmen's `ruledata/` had to be patched in by hand). New
 runtime content now ships automatically; add to the denylist only for new
 *dev-only* paths.
 
+### Release kinds
+
+Every release is one of three kinds, and the kind is **declared, not derived**.
+It is not read off the version number — this family is pre-1.0, so the semver
+major digit says nothing about how big a release is. Ask which kind is intended
+whenever the user has not said. A **major release is only ever explicit**; it is
+never inferred from the size of a diff.
+
+| Kind | Typical bump | Snapshot obligation (§4b) |
+|---|---|---|
+| **Major** | headline release, declared | **Full gallery refresh** — re-shoot every feature area, changed or not |
+| **Minor** | new features, `0.X.0` | **Changed features only** — one shot per user-visible changelog entry |
+| **Hotfix** | patch, `0.0.X` | **None**, unless the fix is UI-visible *and* the user asks for a shot |
+
+The kind sets the snapshot obligation and nothing else. Every other gate —
+build, validate, test, the §4a live-verification gate, the bounded publication
+checks — is identical for all three. A hotfix is not a shortcut through the
+go-live gate.
+
 Release procedure (also encoded in the `acks-release` skill):
 
-1. Bump `module.json` version (+ changelog if present).
+1. Establish the release kind (above) and bump `module.json` version
+   (+ changelog if present).
 2. `npm run build:packs` — commit `packs/_source` if it changed. The compiled
    dirs are gitignored build output; there is nothing to review or discard.
 3. `npm run validate` (and `npm test` where present).
 4. **Live-verify on the local test server — §4a. This is a GO-LIVE GATE, not
    an optional extra.** Skipping is permitted only when the machine defines no
    test environment, and must then be stated explicitly in the release report.
-5. Commit, `git tag v<version>`, push branch + tag.
-6. Confirm publication with BOUNDED checks (never `gh run watch` — it hangs
+5. **Capture the release snapshots the kind calls for — §4b** — during that
+   same live-verify session, and update `docs/GALLERY.md`.
+6. Commit, `git tag v<version>`, push branch + tag.
+7. Confirm publication with BOUNDED checks (never `gh run watch` — it hangs
    through GitHub API outages, which 2026-07-16 stranded several agents):
    poll `gh release view v<version> --json assets` ~30s apart, cap ~5 min,
    in a background/Monitor wait rather than foreground. On API 5xx, stop
    and report — the pushed tag completes on its own.
-7. Verify: `curl -sm 15 -L https://github.com/NocTempre/<id>/releases/latest/download/module.json`
+8. Verify: `curl -sm 15 -L https://github.com/NocTempre/<id>/releases/latest/download/module.json`
    reports the new version (needs the repo public; while private use
    `gh release view` — unauthenticated manifest fetches 404).
 
@@ -223,6 +245,107 @@ skip live verification and say so in the report rather than inventing one.
    with no list is not a result. If a surface could not be reached, say which
    and why — an honest gap is actionable, an implied all-clear is not. A gap
    you could have closed by creating fixtures (step 4) is not a gap; close it.
+
+## 4b. Release snapshots
+
+A snapshot is a screenshot of a feature working in the live test world, taken
+**during the §4a verification session** — not staged afterwards, not from some
+other world. That single provenance is what lets one artifact do three jobs at
+once: it is evidence the live check actually ran (audit), it is what the release
+notes and README are built from (advertisement), and it is what a user looks at
+to understand what the feature does (guide). A shot taken outside the
+verification run earns none of the three — it proves nothing about this release,
+and it dates from a build nobody gated.
+
+**What to capture** follows from the release kind (§4):
+
+- **Major** — every feature area the module ships, re-shot against the current
+  build. Unchanged areas are included on purpose: a major release republishes
+  the whole gallery, and a shot carried over from three versions ago quietly
+  advertises a UI that has since moved.
+- **Minor** — one shot per Added/Changed changelog entry that has a user-visible
+  surface. An entry with no UI (an API addition, an internal refactor) gets no
+  shot; record that in the report rather than inventing a frame for it.
+- **Hotfix** — none, unless the fix is visible in the UI *and* the user asks.
+
+**Where they live.** `docs/releases/v<X.Y.Z>/<feature-slug>.png`, committed.
+`docs/releases/*` is on the zip denylist (§4), so snapshots stay reviewable in
+git and linkable from release notes without adding weight to the download every
+user pulls. Never regenerate a past release's directory — it is that release's
+record, not a scratch space.
+
+**`docs/GALLERY.md` is the index and the provenance record.** One row per
+feature area: the feature, a one-line caption, and a link to its current shot.
+A major release rewrites every row; a minor release rewrites only the rows it
+re-shot. A row still pointing into an older `v<X.Y.Z>/` directory is therefore a
+truthful statement of how stale that image is — which is the audit, visible at a
+glance. README and release notes link to `GALLERY.md`, never to a raw PNG path,
+so the links survive the next refresh.
+
+```markdown
+| Feature | What it shows | Shot |
+|---|---|---|
+| Locations | A place holding goods, people and nested places | [v0.3.0](releases/v0.3.0/location-sheet.png) |
+| Henchmen | Rolling a recruitment result against a posting | [v0.2.0](releases/v0.2.0/henchmen-recruit-dialog.png) |
+```
+
+Read that second row as: locations were re-shot for 0.3.0, henchmen were not.
+
+**Keep the machine out of frame.** World id, user name, server URL and port are
+local-only under the same rule that keeps `TEST_ENVIRONMENT.md` out of every
+repo — and Foundry puts all of them on screen (players panel, settings tab,
+window title). Clipping to the application window excludes them by
+construction, which is the main reason shots are clipped rather than cropped by
+hand afterwards.
+
+**Book text in frame is not a problem.** A snapshot shows the interface doing
+its job, and a feature that displays book-derived content will incidentally
+show some. Shoot the feature; this needs no designing around. The one thing a
+snapshot is not is a delivery mechanism for the books — don't make a page of
+imported prose the *subject* of a shot when the point is the interface around
+it. Worth knowing rather than worrying about: `ip-scan.mjs` reads file names
+and text and cannot see inside a PNG, so images are the one surface where this
+is judgement rather than a gate.
+
+**Shoot against the fixtures you already built.** §4a step 4 has you create
+disposable documents to exercise the feature and delete them afterwards; those
+are what the camera points at. No separate setup is needed, and a fixture named
+for what it demonstrates ("Waystation Inn") makes a better guide image than
+whatever the world happened to contain.
+
+**Compose the frame before you shoot.** A live world is not a clean studio:
+other modules open onboarding dialogs over your subject, and document writes
+raise notification toasts that bleed into the crop. Both happened on the first
+real capture — an importer dialog covered the entire sheet. Close every
+application except the subject, clear notifications, then shoot; re-sweep after
+creating the fixture, because the create itself pops toasts.
+
+**Format.** PNG, cropped to the relevant window or panel — not the full desktop,
+not the entire browser page. Keep each shot under ~300 KB; a clipped sheet lands
+well inside that. Name by feature slug, matching the lang/CSS naming already in
+use (`henchmen-recruit-dialog.png`), so a reader can tell what a shot is without
+opening it.
+
+**How to capture.** `bin/foundry-capture.mjs` in this repo drives a throwaway
+headless Chromium over the DevTools protocol, joins the running world, composes
+the frame and clips to one element's box. Clipping is what enforces the
+keep-the-machine-out-of-frame rule structurally instead of by remembering to
+crop. The *values* it needs — browser binary, origin, user — are machine-specific
+and live in `TEST_ENVIRONMENT.md` with the other browser-driving recipes; they
+are arguments, never baked into the tool.
+
+Note that screenshotting through an agent's own browser pane does **not** work:
+the pane composites frames only while displayed, so a headless or backgrounded
+session times out with no picture regardless of what the page contains. That is
+the reason this driver exists.
+
+If `TEST_ENVIRONMENT.md` is absent there is no test server — so there is no
+verification session and no snapshots. Say so in the report, exactly as §4a
+already requires.
+
+**Report** which shots you took and which obligations you could not meet. An
+entry with no user-visible surface is a legitimate "no shot"; a feature you
+could not get on screen is a gap, and naming it is the whole point.
 
 ## 5. Dev harness
 

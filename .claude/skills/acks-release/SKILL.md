@@ -1,12 +1,26 @@
 ---
 name: acks-release
-description: Cut a release of an ACKS module repo (version bump, tag, CI watch, manifest verification). Use when the user asks to release/publish/tag an acks-* module.
+description: Cut a major, minor or hotfix release of an ACKS module repo (version bump, live gate, release snapshots, tag, CI watch, manifest verification). Use when the user asks to release/publish/tag an acks-* module, or names a release kind such as "major release".
 ---
 
 Release procedure for any NocTempre `acks-*` module (canonical definition:
 `C:\Proj\acks-module-template\docs\TOOLCHAIN.md` §4). Work inside the module
-repo; confirm with the user which repo and what version bump (patch/minor)
-if not stated.
+repo; confirm with the user which repo if not stated.
+
+**First, establish the release kind — ask if it is not stated.** The kind is
+declared, never derived from the version number, and it decides what you have
+to capture on screen:
+
+| Kind | Snapshot obligation (§4b, step 5a below) |
+|---|---|
+| **Major** | Full gallery refresh — re-shoot **every** feature area, changed or not |
+| **Minor** | Changed features only — one shot per user-visible changelog entry |
+| **Hotfix** | None, unless the fix is UI-visible *and* the user asks |
+
+**A major release is always explicit.** Never infer one from a large diff, a
+long changelog, or a `1.0.0`-looking bump — ask. Everything else in this
+procedure is identical for all three kinds: a hotfix does not skip the live
+gate.
 
 The CI procedure itself lives in acks-module-template's
 `release-module.yml` (reusable workflow) — module `release.yml` files are thin
@@ -40,7 +54,34 @@ the full pipeline (build + validate, no publish) is available anytime:
      behaviour by **joining as that player**, not by rendering a template
      with `isGM: false`. The template branch and the API under it fail
      independently.
-6. Commit, then tag exactly `v<module.json version>` and push branch + tag:
+5a. **Capture the release snapshots the kind calls for (TOOLCHAIN §4b) — in
+   this same live session, before you shut the world down.** A shot staged
+   later proves nothing about the release. Skip only for a hotfix with no
+   requested shot, or where §4a itself was skipped for want of a test server.
+   - Save to `docs/releases/v<X.Y.Z>/<feature-slug>.png` (PNG, cropped to the
+     window, ~300 KB ceiling). Never rewrite a previous release's directory.
+   - Update `docs/GALLERY.md`: rewrite **every** row on a major release, only
+     the re-shot rows on a minor. Rows left pointing at an older version are
+     the staleness record — that is intended, not an oversight to tidy.
+   - Point the camera at the disposable fixtures you built for step 5; a
+     fixture named for what it demonstrates makes the better guide image.
+   - **Clip to the app window.** That keeps world id, user name and server URL
+     out of frame by construction — Foundry paints them into the players
+     panel, settings tab and title bar. Book-derived text showing up
+     incidentally in a feature's UI is fine and needs no working around; just
+     don't make a page of imported prose the subject of a shot.
+   - **Compose the frame**: close every other application and clear
+     notifications before shooting, and again after creating the fixture —
+     other modules' onboarding dialogs open over the subject and document
+     writes raise toasts into the crop.
+   - Capture with `acks-module-template/bin/foundry-capture.mjs` (headless
+     Chromium over CDP, clips to one element's box). Your own browser pane
+     **cannot** screenshot here — it composites frames only while displayed,
+     so it times out in any backgrounded session. Machine-specific values live
+     in `TEST_ENVIRONMENT.md`. If a shot is unreachable, name it in the report
+     rather than skipping it silently.
+6. Commit (snapshots and `docs/GALLERY.md` included), then tag exactly
+   `v<module.json version>` and push branch + tag:
    `git tag v<X.Y.Z> && git push origin <branch> --tags`
    (CI fails the release if tag and manifest version differ.)
 7. Confirm the release published — **bounded checks only, never
@@ -61,7 +102,8 @@ the full pipeline (build + validate, no publish) is available anytime:
    (ids `acks-extras` / `acks-importer`). The repos are public (since
    2026-08); if one has been taken private (e.g. IP quarantine), the URL
    404s unauthenticated — use `gh release view` instead and note it.
-9. Report: version, release URL, and anything skipped.
+9. Report: release kind, version, release URL, the snapshots captured (and any
+   obligation you could not meet, with the reason), and anything skipped.
 
 Never force-push tags over a published release; cut a new patch version
 instead.

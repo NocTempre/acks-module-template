@@ -88,9 +88,12 @@ jobs:
           # Ship-by-default: everything the module needs at runtime is included
           # automatically (docs/, ruledata/, future dirs). The -x list names
           # dev-only paths; extend it only for new DEV-ONLY content.
+          # docs/releases/* is the release-snapshot gallery (TOOLCHAIN §4b) —
+          # read on GitHub, never loaded by Foundry, and megabytes of PNG that
+          # would otherwise ride along in every user's download.
           zip -r module.zip . \
             -x '.git/*' '.github/*' '.claude/*' 'node_modules/*' \
-               'packs/_source/*' 'tools/*' 'register/*' \
+               'packs/_source/*' 'tools/*' 'register/*' 'docs/releases/*' \
                'package.json' 'package-lock.json' \
                '.gitignore' '.gitattributes' 'CLAUDE.md' 'module.zip'
 
