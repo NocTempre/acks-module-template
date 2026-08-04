@@ -1,8 +1,8 @@
 # acks-module-template
 
 Canonical toolchain and scaffold for the NocTempre family of ACKS II Foundry VTT
-modules (`acks-equipment`, `acks-formation`, `acks-henchmen`, `acks-influence`,
-`acks-monsters`, and future siblings).
+modules — today `acks-extras` (merged rules automation) and `acks-importer`
+(book content extraction), plus whatever is scaffolded next.
 
 This repo is the **single source of truth** for everything the modules share:
 the release workflow, the pack build/validate harness, git dotfiles, and the
@@ -22,8 +22,10 @@ release pipeline.
 | `bin/new-module.mjs` | Scaffold a new module repo from the skeleton. |
 | `blank-template/` | Copy-me folder for starting a module by hand (copy → rename → `node INIT.mjs --title "..."`). Generated from `skeleton/` by `bin/make-blank.mjs` — never edit in place. |
 | `bin/sync-toolchain.mjs` | Diff/apply canonical files into the existing module repos; installs the shared skills user-level. |
-| `docs/TOOLCHAIN.md` | The canonical conventions — every "answer" the modules previously re-derived. |
-| `.claude/skills/` | Shared skills: `acks-new-module`, `acks-release`, `acks-sync-toolchain`. |
+| `docs/TOOLCHAIN.md` | The canonical conventions — every "answer" the modules previously re-derived. Start here. |
+| `docs/DECISIONS.md` | Dated family-level rulings: why the conventions are these, what was tried and abandoned. Read before a structural change. |
+| `docs/LICENSING.md` | ACKS II App License obligations and the IP-leak gate. |
+| `.claude/skills/` | Shared skills: `acks-new-module`, `acks-hotfix`, `acks-release`, `acks-sync-toolchain`. |
 
 ## Usage
 

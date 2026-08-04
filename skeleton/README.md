@@ -22,8 +22,8 @@ https://github.com/NocTempre/{{MODULE_ID}}/releases/latest/download/module.json
 
 <!-- TOOLCHAIN.md §10f: this section is REQUIRED before first release.
      Numbered steps from an empty world to the feature visibly working,
-     naming the exact macros/compendia involved. acks-henchmen's README
-     "Usage" section is the pattern. -->
+     naming the exact macros/compendia involved. acks-extras' README is
+     the pattern. -->
 
 1. _[step one: what the GM creates/enables first]_
 2. _[step two: the action that makes the module do something visible]_
@@ -31,16 +31,22 @@ https://github.com/NocTempre/{{MODULE_ID}}/releases/latest/download/module.json
 ## Disabling & uninstalling
 
 <!-- TOOLCHAIN.md §10d: if the module persists flags/Active Effects on world
-     documents, name the strip tool here and note the acks-lib dependency
-     pre-check trap. Delete the section only if the module writes nothing. -->
+     documents, name the strip tool here. If it depends on a module that owns
+     document sub-types (acks-extras does), note that Foundry's dependency
+     dialog pre-checks that module for deactivation, which makes those
+     documents unavailable until re-enabled. Delete the section only if the
+     module writes nothing. -->
 
 ## Development
 
 ```
 npm install
-npm run build:packs   # rebuild compendium packs from packs/_source
-npm run validate      # syntax / templates / JSON / packs / i18n checks
+npm run build:packs   # regenerate packs/_source from tools/pack-data.mjs, then compile
+npm run validate      # syntax / templates / JSON / packs / i18n / IP checks
 ```
+
+Run `build:packs` after cloning or the compendia are empty — the compiled packs
+are gitignored build output, not source.
 
 Releases are cut by pushing a `v<version>` tag matching `module.json`; GitHub
 Actions builds and publishes `module.zip` + `module.json`.

@@ -77,8 +77,12 @@ what actually ships is what gets checked.
 What it flags:
 
 - **Local-only rules extracts** (`RULES.md`, `PROFICIENCIES.md`,
-  `*Reactions-Reference.md`) — these belong in `C:\Proj\acks-rules\<module-id>\`
+  `*Reactions-Reference.md`) — these belong in `C:\Proj\acks-rules\<feature>\`
   and were purged from every repo history 2026-07-16.
+- **`ruledata/`** — a hard path ban, not a judgement call: book tables shipped
+  publicly from that directory until the 2026-07-19 ruling that no value read
+  off a page ships in any repo. The signals were table rows and name lists, all
+  individually short, so no prose-length rule would ever have caught them.
 - **Extraction-pipeline state** (`_proposals/`, `_manifest/`, `_ledger.json`) —
   holds raw fragments lifted from the user's own PDFs.
 - **Publisher attribution inside data files** — in a pack source or cookbook it

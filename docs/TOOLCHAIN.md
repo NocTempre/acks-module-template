@@ -4,6 +4,31 @@ This document records the *decided answers* for the ACKS module family so no
 future session re-derives them differently. When something here changes, change
 it here first, then propagate with `bin/sync-toolchain.mjs`.
 
+**This page is what module development needs.** Why the conventions are what
+they are — the merge that made eight modules one, what shipping is allowed to
+contain, which alternatives were tried and abandoned — is
+[DECISIONS.md](DECISIONS.md). Read that before a structural change, not before
+ordinary work.
+
+## 0. The repos
+
+| Repo | What it is |
+| --- | --- |
+| `foundryvtt-acks-core` | The ACKS II system (AutarchLLC fork). **Read-only reference — a module task never edits it** (§6). |
+| `foundryvtt-acks-extras` | `acks-extras` — the merged rules-automation module. Subsystems under `scripts/`: `lib abilities equipment formation henchmen influence location monsters`. |
+| `foundryvtt-acks-importer` | `acks-importer` — book connection, content and table extraction. `requires acks-extras`. |
+| `acks-module-template` | This repo: canon, scaffold, shared skills. |
+| `acks-rules` | LOCAL-ONLY rules extracts + `TEST_ENVIRONMENT.md`. Never committed, never shipped (§6). |
+
+The two module repos are `manifest.mjs` `DEFAULT_TARGETS` — what
+`sync-toolchain` writes to. `acks-domains` and `acks-divine-conduit` are early
+scaffolds, not yet sync targets; `acks-reference` and `acks-git-backups` are
+local stores, not modules.
+
+`acks-importer → acks-extras` is the only dependency edge inside the family, and
+it is one-directional: extras never names the importer. A world running extras
+alone is the supported configuration.
+
 ## 1. Repo anatomy
 
 ```
@@ -18,13 +43,17 @@ acks-<feature>/
                            never these)
   packs/<pack>/            Compiled LevelDB — BUILD OUTPUT: gitignored,
                            rebuilt by CI, shipped in the zip
-  ruledata/                (optional) runtime-fetched JSON rules — ships in zip
+  (no ruledata/ — `ip-scan.mjs` hard-FAILS on a tracked one; see §6)
   tools/                   Dev harness — NOT shipped
     build-packs.mjs        SYNCED harness (needs tools/pack-data.mjs)
     pack-data.mjs          Module-owned document content; exports `packs` map
     validate.mjs           SYNCED validator
     test-logic.mjs         (optional) module-owned pure-logic tests
-  docs/MODEL.md            Design doc (reuse → extend → enhance → invent)
+  docs/                    Four kinds, one question each — see the repo's own
+    <feature>/MODEL.md       docs/README.md. How it works now (reuse → extend →
+    <feature>/DECISIONS.md   enhance → invent); why, dated and append-only;
+    <feature>/ROADMAP.md     what is not built; and guides/ for the user-facing
+    guides/<feature>.md      how-to that release snapshots illustrate (§4b).
   (rules extracts are NOT in the repo — see "Rules extracts" below)
   .github/workflows/release.yml   SYNCED release workflow
   .gitignore .gitattributes       SYNCED
@@ -37,8 +66,7 @@ acks-<feature>/
 
 ## 2. Git conventions
 
-- **Default branch: `main`.** (`acks-formation` is a legacy `master`; renaming
-  requires a remote default-branch change on GitHub — do it deliberately.)
+- **Default branch: `main`**, on every repo.
 - **Tags: `v<semver>`** and the tag MUST equal `module.json` `version`
   (CI enforces this).
 - **Compiled LevelDB packs are NOT committed** (changed 2026-07-19; they were,
@@ -75,18 +103,16 @@ acks-<feature>/
 - **INTRA-FAMILY version minimums are development-tracking only, not a contract.**
   The acks-* modules co-develop as siblings, all at current versions, and these
   GitHub releases are temporary artifacts for testing on a remote — not
-  distribution to mixed-version worlds. So for a dependency on ANOTHER acks-*
-  module (e.g. `acks-lib`): declare it in `requires` when a hard sibling import
-  needs it, but do NOT compute or bump `compatibility.minimum` — and NEVER
-  cascade-bump every downstream module's minimum because a shared lib gained an
-  export. Let a real incompatibility surface in live testing and roll the floor
-  into that module's own next patch, naturally. (Third-party deps like
-  lib-wrapper/socketlib still carry their real minimums — this waiver is
-  intra-family only.)
+  distribution to mixed-version worlds. So for a dependency on another acks-*
+  module (today exactly one: `acks-importer` → `acks-extras`): declare it in
+  `requires`, but do NOT compute or bump `compatibility.minimum`. Let a real
+  incompatibility surface in live testing and roll the floor into that module's
+  own next patch, naturally. (Third-party deps like lib-wrapper/socketlib still
+  carry their real minimums — this waiver is intra-family only.)
 - A dependency the module can genuinely run without (a native fallback exists
-  and is maintained — e.g. henchmen's `game.socket` path when socketlib is
-  inactive) goes in `recommends` with a reason, not `requires`. Hard-require
-  only what the module cannot degrade around.
+  and is maintained — e.g. the `game.socket` path when socketlib is inactive)
+  goes in `recommends` with a reason, not `requires`. Hard-require only what the
+  module cannot degrade around.
 - `url`: `https://github.com/NocTempre/<id>` (the repo), on every module.
 - `manifest`/`download`: `https://github.com/NocTempre/<id>/releases/latest/download/module.json|zip`.
 - Every repo keeps a `CHANGELOG.md` (newest-first `## X.Y.Z` entries; update it
@@ -118,9 +144,9 @@ canon — hand-edits can't survive unnoticed.
 The zip includes *everything* except an explicit denylist (`.git*`, `.github`,
 `.claude`, `CLAUDE.md`, `node_modules`, `tools`, `register`, `packs/_source`,
 `package*.json`, and **all of `docs/`**). Rationale: the old allowlist zip
-silently dropped new runtime dirs (henchmen's `ruledata/` had to be patched in
-by hand), so new runtime content ships automatically; add to the denylist only
-for new *dev-only* paths.
+silently dropped new runtime dirs — a whole data directory had to be patched in
+by hand once — so new runtime content ships automatically; add to the denylist
+only for new *dev-only* paths.
 
 `docs/` is the one non-runtime exception worth stating outright: the artifact
 carries the Foundry runtime plus the root `README.md`/`LICENSE` the package
@@ -393,15 +419,20 @@ could not get on screen is a gap, and naming it is the whole point.
   pack `_id`/`_key` invariants, `module.json` invariants (semver, paths exist,
   manifest URL shape), and that every i18n key referenced in code exists in
   `lang/en.json` (dynamic-suffix tolerant).
-- Optional `tools/test-logic.mjs` (module-owned): pure-logic regression tests
-  that mock minimal Foundry globals and import the real scripts (see
-  acks-equipment). Wire as `"test"` in package.json; CI runs it `--if-present`.
+- Optional module-owned pure-logic tests: mock minimal Foundry globals and
+  import the real scripts. A single-subject module names the file
+  `tools/test-logic.mjs`; a multi-subsystem one splits per subject and chains
+  them (acks-extras runs four — `test-lib`, `test-equipment`,
+  `test-formation-flows`, `test-influence`). Either way wire them as `"test"` in
+  package.json; CI runs it `--if-present`.
 - Optional `tools/validate-extra.mjs` (module-owned): an extra check that must
   run as PART of validation (not just `npm test`). The canonical `validate.mjs`
   auto-runs it last if present and fails on its non-zero exit, so
   `scripts.validate` stays exactly `node tools/validate.mjs` (canon) while the
-  module still gets its own gate. acks-content uses it to run its IP-safety
-  register lint (`tools/lint-register.mjs`) — chaining the lint into
+  module still gets its own gate. Both module repos use it: acks-importer for
+  its IP-safety register lint (`tools/lint-register.mjs`), acks-extras for the
+  merge guards (no stale family ids, flag scopes resolved, one libWrapper
+  registration per target, template paths present). Chaining a lint into
   `scripts.validate` directly would drift from canon and fail toolchain-check.
 - **Foundry dev install:** junction, not copy:
   `New-Item -ItemType Junction -Path "$env:LOCALAPPDATA\FoundryVTT\Data\modules\<id>" -Target "C:\Proj\<id>"`
@@ -421,13 +452,19 @@ renamed every pre-existing deviation rather than grandfathering it):
 
 - **JS registries** — `globalThis` exposures, custom hook names
   (`Hooks.call/callAll`), Handlebars helpers — start with the **camelCase
-  namespace**: the module id camelCased (`acks-influence` → `acksInfluence`,
-  hook `acksInfluenceRollComplete`, helper `acksMonstersHas`). Derived from
-  the id, never declared. Hyphens can't appear in JS identifiers, hence
-  camelCase here and kebab elsewhere. Firing another acks-* module's hook is
-  a warning, not a failure — deliberate cross-module calls are legitimate.
+  namespace**: the module id camelCased (`acks-extras` → `acksExtras`, hook
+  `acksExtras.lightChanged`, helper `acksExtrasHas`). Derived from the id, never
+  declared. Hyphens can't appear in JS identifiers, hence camelCase here and
+  kebab elsewhere. Firing another acks-* module's hook is a warning, not a
+  failure — deliberate cross-module calls are legitimate.
+  - In a multi-subsystem module the namespace is the **module's**, not the
+    subsystem's: one `globalThis.acksExtras` with a key per feature, which is
+    also what `game.modules.get(id).api` points at. Eight subsystems each
+    assigning their own global would leave only the last one visible.
+    Consequence worth stating: **`module.api` is the namespace, never a
+    feature** — always drill in.
 - **CSS classes** (top-level selectors) start with the **module id** as-is
-  (kebab): `.acks-formation-skill-tab`.
+  (kebab): `.acks-extras-location-sheet`.
 - **lang keys** start with `<ID-UPPERCASED>.`; Foundry-owned roots
   (`TYPES.*`) are allowlisted in the validator — extend that allowlist in the
   template only.
@@ -439,12 +476,13 @@ renamed every pre-existing deviation rather than grandfathering it):
 - Settings, document flags, and socketlib channels are already scoped by the
   Foundry APIs — no check needed.
 
-Declared short keys (must stay unique across the family): equipment `acksEq`,
-formation `acksfm`, henchmen `acksHm`, influence `acksInfl`, monsters `acksm`.
+Declared short keys: extras `acks`, importer `acks`. These were once required to
+be unique family-wide so an id in a bug report grepped back to one owner; the
+merge collapsed nine keys into one and both survivors picked `acks`. Accepted,
+not fixed — a `_id` need only be unique within its pack (DECISIONS, 2026-08-01).
 
 Consumers of another module's hooks use the literal hook name (grep-ability is
-the point); the firing module also publishes its hook names on its API object
-(e.g. `globalThis.acksInfluence.hooks`).
+the point); the firing module also publishes its hook names on its API object.
 
 ## 5c. Licensing & disclaimers
 
@@ -460,7 +498,7 @@ publications live in the README "## License" section. Full rules and rationale:
 
 ## 6. Design doctrine
 
-**Reuse → extend → enhance → invent** (from acks-monsters, adopted family-wide):
+**Reuse → extend → enhance → invent**, family-wide:
 reuse core system documents and fields; extend only with genuinely new data in
 `flags["<module-id>"]`; enhance with alternate sheets/wrappers (libWrapper)
 rather than replacements; invent nothing the system already provides.
@@ -473,24 +511,31 @@ a bug, not to add a hook, not "just this once". The fork stays clean for
 upstream PRs, and core changes only under an explicitly approved core-side
 program, never as a side effect of module work.
 
-**Overrides and extensions of core logic default to `acks-lib`.** When core
-behavior genuinely must be wrapped, shimmed, or superseded, that lives in
-acks-lib, which is the family's single sanctioned place for it. A module patches
-core directly only when the behavior is unique to that module's domain, and its
-`docs/MODEL.md` says why it did not belong in the lib. One owner per wrapped
-core method: two modules wrapping the same method in different directions is the
-failure this rule exists to prevent. Promoting shared machinery into acks-lib is
-standing permission and needs no fresh go-ahead (see §3 dependency posture —
-consumers add `acks-lib` to `relationships.requires`).
+**Overrides and extensions of core logic default to the `lib` subsystem.** When
+core behavior genuinely must be wrapped, shimmed, or superseded, that lives in
+`acks-extras/scripts/lib/` — the family's single sanctioned place for it. A
+feature patches core directly only when the behavior is unique to that feature's
+domain, and its `docs/<feature>/MODEL.md` says why it did not belong in the lib.
+**One owner per wrapped core method**: two callers wrapping the same method in
+different directions is the failure this rule exists to prevent, and
+`tools/validate-extra.mjs` now fails on a second libWrapper registration against
+the same target. Promoting shared machinery into `lib` is standing permission and
+needs no fresh go-ahead.
 
 **Rules extracts are LOCAL-ONLY.** The canonical extract of the relevant
-ACKS II rules for each module lives at `C:\Proj\acks-rules\<module-id>\`
-(never in a repo — licensed book text; the public repos got indexed online,
-so on 2026-07-16 the extracts were purged from all five modules' git history
-and the repos went private). Sessions cite the local extract instead of
-re-reading PDFs. The canonical `.gitignore` carries armor patterns against
-accidental re-adds; anything shipped in-repo (`ruledata/`, compendium text)
-must stay paraphrase-with-citation, never verbatim book text.
+ACKS II rules lives at `C:\Proj\acks-rules\<feature>\RULES.md` — one directory
+per feature, named for the pre-merge module it came from. Never in a repo: it is
+licensed book text, and on 2026-07-16 it was purged from every repo's history
+after the public repos were indexed online. Sessions cite the local extract
+instead of re-reading PDFs. The canonical `.gitignore` carries armor patterns
+against accidental re-adds.
+
+**No value read off a page ships, in any repo.** Stricter than the App License
+requires, and deliberate: book content is expressed as extraction *instructions*
+in acks-importer and materialized into world data by a GM who owns the book —
+never as a shipped table, sample, or fallback. `acks-extras` ships no
+`ruledata/`. Compendium pack items are in-app content and are the exception.
+Full ruling and its corollaries: DECISIONS, 2026-07-19.
 
 ## 7. Claude infrastructure
 
@@ -499,32 +544,33 @@ must stay paraphrase-with-citation, never verbatim book text.
   routine dev loop (npm, node harness, git incl. commit/tag/push, gh run,
   GitHub API reads). `settings.local.json` stays gitignored for personal
   grants.
-- Shared skills live here in `.claude/skills/` and are installed to
+- Shared skills live here in `.claude/skills/` — `acks-new-module`,
+  `acks-hotfix`, `acks-release`, `acks-sync-toolchain` — and are installed to
   `~/.claude/skills/` by `sync-toolchain.mjs --install-skills`, so they work
-  from any working directory (sessions usually run from `foundryvtt-acks-core`
-  with the modules as additional dirs — note that in that setup only the *core*
-  repo's settings govern permissions; the per-module settings.json pays off in
-  standalone sessions).
+  from any working directory. Note that when a session runs from one repo with
+  others as additional dirs, only the *session* repo's settings govern
+  permissions; the per-module settings.json pays off in standalone sessions.
 - The core repo keeps its Claude context in an untracked `CLAUDE.md`
   (via `.git/info/exclude`) to avoid polluting the AutarchLLC fork.
 
-## 8. Known deviations (as of 2026-07-15, post-rollout)
+## 8. Known deviations
 
-All five modules are on canon (sync `--check` reports zero drift). Remaining
-deliberate deviations:
+**None.** Both module repos are on canon — `node bin/sync-toolchain.mjs --check`
+reports zero drift, and the deviations recorded here through 2026-07 (a legacy
+`master` branch, two repos with pack data inline in a custom `build-packs.mjs`,
+a stale `compatibility.minimum`) went away with the repos that carried them. The
+inline pack data was lifted into `tools/pack-data/{feature}.mjs` with `_id`s and
+timestamps preserved during the merge.
 
-| Repo | Deviation | Path back to canon |
-| --- | --- | --- |
-| acks-formation | `master` branch; pack data inline in a custom 21 KB `build-packs.mjs` | rename branch on GitHub; extract data to `pack-data.mjs`, then sync harness |
-| acks-influence | pack data inline in custom `build-packs.mjs`; `compatibility.minimum` still 13 | extract data; raise minimum when retested on 14 |
+Keep this section honest: a deliberate deviation belongs here the day it is
+taken, with its path back to canon. An empty table is a claim, and `--check` is
+what backs it.
 
-Pack-data `_stats` guidance learned during rollout: henchmen and equipment use
-**fixed** timestamps (rebuilds are byte-identical); formation/influence/monsters
-still stamp `Date.now()` at import, so every rebuild churns `packs/_source`.
-Prefer fixed timestamps in new pack data — pin the stamp to the value already
-committed and the rebuild is a no-op, so a dirty `packs/_source` then genuinely
-means the content changed. With `Date.now()` data, compare diffs excluding
-`createdTime`/`modifiedTime` before deciding whether to commit a rebuild.
+**Pack-data `_stats` timestamps are FIXED, never `Date.now()`.** A fixed stamp
+makes every rebuild byte-identical, so a dirty `packs/_source` genuinely means
+the content changed; `Date.now()` churns it on every build and hides real
+diffs. Pin new pack data to a literal and keep it — `tools/pack-data.mjs` and
+each per-feature file in acks-extras carry theirs as a module-level constant.
 
 ## 9. Consistency automation (implemented 2026-07-15)
 
@@ -544,8 +590,8 @@ Three layers keep the family consistent, by mechanism rather than discipline:
 but layer 2 re-runs that same script in CI against a fresh checkout of
 `acks-module-template` **main on GitHub**. Sync from an unpushed template and
 every module commits content that does not exist upstream yet, so `drift` fires
-on the very commit meant to fix it — on 2026-08-01 this reddened all nine
-modules at once on `CLAUDE.md` (the only `RENDER` entry), from a sync run
+on the very commit meant to fix it — on 2026-08-01 this reddened every module
+repo at once on `CLAUDE.md` (the only `RENDER` entry), from a sync run
 between two template commits. Order: commit + push the template, then
 `--apply` into the modules, then push those. The signature of the race is a
 local `--check` reporting `0 file(s) drifted` while CI is red — nothing is
@@ -563,69 +609,56 @@ only `MODULE_ID`, `MODULE_TITLE`, `MODULE_DESCRIPTION`, `LANG_PREFIX`,
 Possible later: publish the harness as a git-dependency npm package
 (`acks-tools`) with bin entries, replacing the vendored `tools/*.mjs`.
 
-## 10. Failure patterns & standing rules (2026-07-31 playtest batch)
+## 10. Standing rules from field failures
 
-Six GM-reported bugs were fixed and released together on 2026-07-31
-(acks-lib 0.37.0, acks-content 0.62.0, acks-equipment 0.35.0,
-acks-formation 0.26.0, acks-henchmen 0.28.0). Each rule below exists because
-the family shipped the failure beside it. These are canon.
+Each rule below is canon because the family shipped the failure that taught it.
+The incidents themselves — which module, which version, what it cost — are
+[DECISIONS.md](DECISIONS.md) (2026-07-31); they are not repeated here, so these
+read as rules rather than as stories.
 
-**10a. Consume acks-lib statically — never feature-detect nested API paths
-into silence.** acks-formation gated capability matching on
-`globalThis.acksLib.satisfies`; the function lives at
-`acksLib.vocab.satisfies`, so the probe returned false for weeks and the
-whole matching layer degraded invisibly (every imported skill fell back to
-Adventuring, mislabelled and unbonused). A module that hard-`requires`
-acks-lib imports lib functions **statically**
-(`../../acks-lib/scripts/…`, junction-safe — the pattern long used for
-`slug`): if the surface moves, the module fails at LOAD, loudly. Runtime
-`globalThis` probing is only for OPTIONAL integrations, and the probe must
-log once when the surface is absent so a wrong path cannot impersonate "not
-installed". Corollary: an integration seam counts as verified only against
-the REAL sibling module, live (§4a) — a mocked seam verifies the mock. The
-seam above had a "verified by execution" audit note and had never once fired.
+**10a. Import a shared surface statically — never feature-detect a nested API
+path into silence.** A probe for `globalThis.<ns>.satisfies` when the function
+lives at `<ns>.vocab.satisfies` returns false forever, and the layer behind it
+degrades invisibly. Code that depends on a shared surface **imports it
+statically** — a relative path inside the repo, or a junction-safe
+`../../<repo>/scripts/…` across the one family edge — so a moved surface fails at
+LOAD, loudly. Runtime `globalThis` probing is only for OPTIONAL integrations,
+and the probe must log once when the surface is absent, so a wrong path cannot
+impersonate "not installed". Corollary: a cross-module seam counts as verified
+only against the real other module, live (§4a) — a mocked seam verifies the mock.
 
 **10b. A missing timestamp means "never enrolled", not "since the epoch".**
-acks-henchmen billed wage months as `now − (lastPaidTime ?? 0)`: a
-pre-existing henchman with no record was invoiced for every month since
-worldTime ZERO (a six-figure demand). Time-anchored automation treats an
-absent anchor as not-in-the-system and ADOPTS explicitly (write anchor =
-now, log the adoption). Every world contains documents older than any
-module.
+Time-anchored automation that computes `now − (anchor ?? 0)` bills from
+worldTime zero. An absent anchor means not-in-the-system: ADOPT explicitly
+(write anchor = now, log the adoption). Every world contains documents older
+than any module.
 
 **10c. Automation never escalates its own failure into a punitive game
-consequence.** The same payday converted "employer cannot afford the
-(buggy) bill" into missed-wage calamities for the whole retinue, silently.
-A failed precondition STOPS the automation and reports; punitive branches
-(calamity, morale drop, item loss…) run only from an explicit GM action.
-This is the GM-prompt-first doctrine applied to failure paths.
+consequence.** A failed precondition STOPS the automation and reports. Punitive
+branches — calamity, morale drop, item loss — run only from an explicit GM
+action. This is the GM-prompt-first doctrine applied to failure paths, and it is
+what keeps a bug in the arithmetic from becoming a bug in the campaign.
 
-**10d. Every module that persists flags/effects ships its uninstall.**
-acks-equipment left a managed Active Effect applying stale AC/attack
-modifiers forever after disable, and nothing said what disabling costs.
-A module whose runtime writes flags/AEs to world documents ships a
-"strip module data" tool (macro + API, run while still enabled) and a README
-**Disabling & uninstalling** section. Modules owning document sub-types
-(acks-lib) are load-bearing: their dependents' READMEs must warn that
-Foundry's dependency dialog pre-checks them for deactivation, which makes
+**10d. Every module that persists flags/effects ships its uninstall.** A module
+whose runtime writes flags or Active Effects to world documents ships a "strip
+module data" tool (macro + API, run while still enabled) and a README
+**Disabling & uninstalling** section. A module owning document sub-types is
+load-bearing: `acks-extras` owns several, so `acks-importer`'s README must warn
+that Foundry's dependency dialog pre-checks extras for deactivation, which makes
 those documents unavailable — reversibly, no data lost — until re-enabled.
 
-**10e. Cross-repo feature halves land lib-first, in the same motion.**
-acks-abilities 0.10.0 shipped reading `acksLib.vocab.SELECTION_VOCAB`; the
-lib half sat UNCOMMITTED in a working tree for a week (found and shipped in
-0.37.0 during this batch). Before tagging a consumer, the lib symbols it
-reads must exist in acks-lib HEAD **and** its released tag. Guarded reads
-make the gap invisible, not acceptable.
+**10e. Cross-repo feature halves land dependency-first, in the same motion.**
+Before tagging `acks-importer` against a symbol in `acks-extras`, that symbol
+must exist in extras HEAD **and** in its released tag. Guarded reads make the
+gap invisible, not acceptable. (Inside `acks-extras` the merge removed this
+failure mode: both halves are one commit.)
 
 **10f. Every README carries a GM "Getting started / Usage" walkthrough.**
-The playtest report praised the one module that had one (acks-henchmen) and
-filed the missing ones as bugs. Numbered steps from empty world to the
-feature visibly working, naming the exact macros/compendia involved. The
-skeleton README carries the section; a release with the placeholder still
-in it is not ready.
+Numbered steps from empty world to the feature visibly working, naming the exact
+macros and compendia involved. The skeleton README carries the section; a
+release with the placeholder still in it is not ready.
 
-Minor gotcha absorbed with the batch: `foundry.utils.duplicate()` strips
-getters — a duplicated document snapshot has `_id` but **no** `id`. Card
-grids stamping `data-item-id="${h.id}"` rendered `"undefined"` and the click
-handler swallowed it silently (fixed acks-henchmen 0.27.1). Carry `_id`
-through snapshot pipelines, and never let a lookup miss no-op without a log.
+**10g. `foundry.utils.duplicate()` strips getters** — a duplicated document
+snapshot has `_id` but **no** `id`. A grid stamping `data-item-id="${h.id}"`
+renders `"undefined"` and the click handler swallows it. Carry `_id` through
+snapshot pipelines, and never let a lookup miss no-op without a log.
