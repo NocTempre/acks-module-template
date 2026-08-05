@@ -551,7 +551,8 @@ Full ruling and its corollaries: DECISIONS, 2026-07-19.
   GitHub API reads). `settings.local.json` stays gitignored for personal
   grants.
 - Shared skills live here in `.claude/skills/` — `acks-new-module`,
-  `acks-hotfix`, `acks-release`, `acks-sync-toolchain` — and are installed to
+  `acks-hotfix` (patch scoping), `acks-minor` (minor scoping), `acks-release`
+  (mechanics for all three kinds), `acks-sync-toolchain` — and are installed to
   `~/.claude/skills/` by `sync-toolchain.mjs --install-skills`, so they work
   from any working directory. Note that when a session runs from one repo with
   others as additional dirs, only the *session* repo's settings govern

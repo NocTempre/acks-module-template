@@ -147,6 +147,8 @@ Recurring causes in this family, worth checking by name:
 A **hotfix** restores intended behaviour. It carries no data migration, no new
 setting, and no new user-facing surface. Anything that needs one of those is a
 minor — split it out and say so rather than smuggling a feature into a patch.
+What you split out is `acks-minor`'s subject; hand the deferred bullets over
+with the tripwire that forced each one recorded alongside.
 
 Two judgements this family has already made:
 
