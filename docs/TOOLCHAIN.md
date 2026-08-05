@@ -418,7 +418,13 @@ could not get on screen is a gap, and naming it is the whole point.
   `package.json` / `lang/*.json` / `ruledata/**` / `packs/_source/**`,
   pack `_id`/`_key` invariants, `module.json` invariants (semver, paths exist,
   manifest URL shape), and that every i18n key referenced in code exists in
-  `lang/en.json` (dynamic-suffix tolerant).
+  `lang/en.json` (dynamic-suffix tolerant). The i18n pass reads keys through the
+  two indirections the family actually writes — a root interpolated from a
+  string constant (`` `${LANG_PREFIX}.ui.x` ``, followed across named imports)
+  and a prefix-bound localizer (`const loc = makeLoc(LANG_PREFIX)`, then
+  `loc("ui.x")`). A root it cannot resolve fails rather than being skipped, and
+  the number of keys checked is printed on every run — a green i18n line that
+  checked nothing is the failure it is built to prevent (DECISIONS 2026-08-04).
 - Optional module-owned pure-logic tests: mock minimal Foundry globals and
   import the real scripts. A single-subject module names the file
   `tools/test-logic.mjs`; a multi-subsystem one splits per subject and chains

@@ -15,6 +15,44 @@ abandoned is the point. Decisions internal to one repo live in that repo's own
 
 ---
 
+## 2026-08-04 — A shared check must report what it checked — IN FORCE
+
+`acks-importer` shipped `ACKS-IMPORTER.ui.connectNoBook` referenced in code and
+absent from `lang/en.json`, past a `npm run validate` that exited 0. The check
+was not broken for that key; it was inert for that repo. It matched quoted
+literals only, and the repo names its root through a constant —
+`` game.i18n.localize(`${LANG_PREFIX}.ui.connectNoBook`) `` — the shape the
+skeleton itself seeds. Zero keys were found, so zero keys were missing, and the
+run was green. `acks-extras` was in the same state for its `lib` and `location`
+subsystems without anyone noticing, because its other subsystems write literals
+and kept the section looking busy.
+
+**Ruled.** The i18n pass resolves the roots the family actually writes:
+constants followed across named imports, roots chained off other constants, and
+prefix-bound localizers. A root it cannot resolve is a `FAIL`, not a skip.
+
+**And the general rule behind it:** a shared check states its coverage. This one
+prints the number of keys it checked on every run, pass or fail. The defect was
+never a wrong answer — it was an answer of "nothing to report" that read as
+"nothing is wrong", and no amount of care in the matching would have surfaced
+that. Any check added here that can be silently inert owes the same line.
+
+**Rejected — a repo-wide `IDENT → value` map.** Simpler, and wrong for merged
+modules: `acks-extras` declares three different `LANG_PREFIX` constants
+(`ACKS-LIB`, `ACKS-LOCATION`, `ACKS-ABILITIES`). Flattening them attributes keys
+to whichever file was walked last. Resolution is per file, or it is misleading.
+
+**Cost.** Section 6 grew from ~35 lines to ~130 and now carries a resolver with
+a fixed-point pass. It is regex over sources, not a parser, so it reads the
+idioms in use and no others: a root arriving as a function parameter, through
+`import * as ns`, or assembled at runtime stays out of reach. The first two are
+detected and fail; nothing silently returns to inertness.
+
+**Found on landing.** Two live defects, both rendering as raw key text in the
+UI: `ACKS-IMPORTER.ui.connectUnfilled` (`scripts/module.mjs`, a `notifications.
+warn`) and `ACKS-LOCATION.sheet.location` (`scripts/location/apps/
+location-sheet.mjs`, the Location sheet's name in sheet config).
+
 ## 2026-08-01 — Eight modules become one — IN FORCE
 
 The five feature modules and the three that had grown alongside them
