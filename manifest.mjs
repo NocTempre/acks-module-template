@@ -24,6 +24,7 @@ export const COPY = [
   ".github/workflows/release.yml",
   ".github/workflows/toolchain-check.yml",
   ".claude/settings.json",
+  ".claude/hooks/single-branch-guard.mjs",
   "tools/validate.mjs",
   "tools/ip-scan.mjs",
   "tools/ip-quarantine.mjs",

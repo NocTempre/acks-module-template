@@ -12,9 +12,9 @@
  *   node bin/sync-toolchain.mjs --install-skills     copy .claude/skills/* -> ~/.claude/skills/
  *
  * What syncs is declared in manifest.mjs. After --apply, run
- * `npm run build:packs && npm run validate` in each repo, discard LevelDB
- * timestamp churn (`git restore packs/ && git clean -fd packs/` when _source is
- * unchanged), and commit.
+ * `npm run build:packs && npm run validate` in each repo and commit
+ * (compiled packs are gitignored build output — only `packs/_source` can
+ * show a diff, and only when content really changed).
  */
 import { execFileSync } from "node:child_process";
 import fs from "node:fs";
@@ -59,16 +59,21 @@ function renderVars(moduleJson, repoDir) {
   } catch {
     /* keep the default */
   }
+  // The working-dir / GitHub repo name. NOT always the module id — the
+  // merged repos are foundryvtt-acks-extras (id acks-extras), the same
+  // split the system repo uses — so junction targets and release URLs
+  // must render from this, never from MODULE_ID. Read it from module.json's
+  // `url` (canon: https://github.com/NocTempre/<repo>), never from the
+  // directory being synced: a git worktree names itself after nothing, and a
+  // basename-of-cwd render once rewrote a repo's own name to its worktree
+  // directory in the committed CLAUDE.md.
+  const repoFromUrl = (moduleJson.url ?? "").match(/github\.com\/[^/]+\/([^/]+?)(?:\.git)?\/?$/u)?.[1];
   return {
     MODULE_ID: moduleJson.id,
     MODULE_TITLE: (moduleJson.title ?? moduleJson.id).replace(/^ACKS II\s+—\s+/u, ""),
     MODULE_DESCRIPTION: moduleJson.description ?? "",
     LANG_PREFIX: langPrefix,
-    // The working-dir / GitHub repo name. NOT always the module id — the
-    // merged repos are foundryvtt-acks-extras (id acks-extras), the same
-    // split the system repo uses — so junction targets and release URLs
-    // must render from this, never from MODULE_ID.
-    REPO_DIR: path.basename(repoDir),
+    REPO_DIR: repoFromUrl ?? path.basename(repoDir),
   };
 }
 const render = (text, vars) =>

@@ -32,10 +32,9 @@ the full pipeline (build + validate, no publish) is available anytime:
    `git log origin/<branch>..HEAD` to know what's going out.
 2. Bump `version` in `module.json` (plain semver X.Y.Z). Update `CHANGELOG.md`
    if the repo has one.
-3. `npm run build:packs`. Then check `git status packs/`:
-   - `packs/_source` unchanged → the LevelDB diff is timestamp churn:
-     `git restore packs/ && git clean -fd packs/`.
-   - `packs/_source` changed → commit both `_source` and compiled packs.
+3. `npm run build:packs`. Compiled packs are gitignored build output — commit
+   `packs/_source` if it changed; there is no timestamp churn to discard
+   (pack `_stats` stamps are fixed, so a diff means content really changed).
 4. `npm run validate` and, if a `test` script exists, `npm test`. Both must
    pass — fix, don't skip.
 5. **Live-verify on the local test server (TOOLCHAIN §4a). This is a GO-LIVE

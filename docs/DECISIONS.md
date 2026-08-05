@@ -256,6 +256,39 @@ from. Renaming one would rewrite every shipped `_id` and orphan every world
 document referencing them — a migration whose cost is real and whose benefit is
 a search convenience.
 
+## 2026-08-05 — The worktree that renamed a repo, and the sync that ran ahead of the push — IN FORCE
+
+Two flaws with one root — rules keyed on transient local state — kept module CI
+red and sent live-testing sessions chasing a directory that does not exist.
+
+First: `sync-toolchain.mjs` rendered `{{REPO_DIR}}` as `path.basename()` of the
+directory being synced. A session running inside a Claude worktree
+(`.claude/worktrees/gallant-leavitt-73353f`) committed a CLAUDE.md whose Foundry
+junction target and release-manifest URL both named the worktree instead of
+`foundryvtt-acks-extras` — so the dev-install instruction pointed at a
+nonexistent path and the release-verification URL could only ever 404. The
+extras repo answered with its single-branch guard (its DECISIONS §12) but the
+poisoned render itself stayed committed. **Ruling:** `REPO_DIR` renders from
+`module.json`'s `url` (canon pins it to `https://github.com/NocTempre/<repo>`),
+falling back to the directory name only when `url` is absent. Nothing rendered
+into a repo may derive from the syncing session's cwd.
+
+Second: the `acks-sync-toolchain` skill ordered work as sync → commit modules →
+commit template last, "do not push unless asked" — the exact inversion of the §9
+operating rule written after 2026-08-01, and it reproduced that failure: modules
+synced from an unpushed template commit fail `toolchain-check` on every push
+(local `--check` green, CI red) until the template reaches GitHub. **Ruling:**
+the skill now pushes the template before applying downstream, and pushes each
+synced module. A skill that encodes a procedure owns the procedure's ordering
+rules; §9 stated the rule, but the skill was what sessions executed.
+
+Same sweep: the extras single-branch guard (hook + settings + conventions text)
+is promoted to canon — it answers a family-wide failure mode, and as a repo-local
+customization of two COPY/RENDER files it made extras drift permanently red,
+training sessions to ignore the drift check. The stale `git restore packs/ &&
+git clean -fd packs/` guidance (superseded 2026-07-19 when compiled packs left
+git) is deleted from the two skills and the sync header that still carried it.
+
 ## Upstreaming into the core system — OPEN
 
 The `lib` subsystem was conceived as a staging ground for the core engine: its
