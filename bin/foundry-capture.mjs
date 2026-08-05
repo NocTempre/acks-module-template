@@ -185,13 +185,21 @@ export async function connect({ browser, origin, user, port = 9333, width = 1600
       close: cleanup,
     };
 
-    const uid = await api.eval(`(() => {
+    // The join form is rendered by the page's own scripts, so the user list does
+    // not exist in the served HTML — it appears whenever that render completes.
+    // Poll for it rather than reading once: a fixed wait before the scrape races
+    // the render, and losing that race is indistinguishable from no world
+    // running, which sends the reader looking for a server that is in fact up.
+    const uid = await api.eval(`new Promise(res => { let n = 0; const t = setInterval(() => {
       const s = document.querySelector('select[name="userid"]');
-      if (!s) return null;
-      const o = [...s.options].find(o => o.text === ${JSON.stringify(user)});
-      return o ? o.value : null;
-    })()`);
-    if (!uid) throw new Error(`foundry-capture: user "${user}" not on the join page — is a world running?`);
+      const o = s && [...s.options].find(o => o.text === ${JSON.stringify(user)});
+      if (o?.value) { clearInterval(t); res(o.value); }
+      else if (++n > 30) { clearInterval(t); res(null); }
+    }, 500); })`);
+    if (!uid)
+      throw new Error(
+        `foundry-capture: user "${user}" not on the join page after 15s — is a world running, and is that the user's exact name?`,
+      );
 
     await api.eval(`fetch("/join", { method: "POST", headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ action: "join", userid: ${JSON.stringify(uid)}, password: "" }) }).then(r => r.text())`);
