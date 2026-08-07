@@ -39,6 +39,11 @@ for (let i = 0; i < args.length; i++) {
 
 const norm = (text) => text.replaceAll("\r\n", "\n");
 const readIf = (file) => (fs.existsSync(file) ? fs.readFileSync(file, "utf8") : null);
+// Repo JSON can arrive BOM'd (Windows PowerShell's `utf8` writes one) and
+// JSON.parse rejects the BOM — a parse crash here would abort the whole run
+// and mask every check after it, so all repo JSON goes through these.
+const stripBom = (text) => (text.charCodeAt(0) === 0xfeff ? text.slice(1) : text);
+const readJson = (file) => JSON.parse(stripBom(fs.readFileSync(file, "utf8")));
 
 let drift = 0;
 const report = (repo, file, status) => {
@@ -53,7 +58,7 @@ function renderVars(moduleJson, repoDir) {
   // file yet) keep the id-derived default.
   let langPrefix = (moduleJson.id ?? "").toUpperCase();
   try {
-    const lang = JSON.parse(fs.readFileSync(path.join(repoDir, "lang", "en.json"), "utf8"));
+    const lang = readJson(path.join(repoDir, "lang", "en.json"));
     const roots = [...new Set(Object.keys(lang).map((k) => k.split(".")[0]))].filter((r) => r !== "TYPES");
     if (roots.length) langPrefix = roots.join(", ");
   } catch {
@@ -134,7 +139,7 @@ function mergePackageJson(repoDir) {
     report(repoDir, "package.json", "missing");
     return;
   }
-  const pkg = JSON.parse(current);
+  const pkg = JSON.parse(stripBom(current));
   const changes = [];
   pkg.scripts ??= {};
   for (const [name, cmd] of Object.entries(CANONICAL_SCRIPTS)) {
@@ -194,7 +199,7 @@ function syncRepo(repoDir) {
       console.log(`  custom         ${relFile} (no tools/pack-data.mjs — module keeps its own builder)`);
     }
   }
-  const moduleJson = JSON.parse(fs.readFileSync(path.join(repoDir, "module.json"), "utf8"));
+  const moduleJson = readJson(path.join(repoDir, "module.json"));
   const vars = renderVars(moduleJson, repoDir);
   for (const relFile of RENDER) {
     syncFile(repoDir, relFile, render(fs.readFileSync(path.join(SKELETON, relFile), "utf8"), vars));
