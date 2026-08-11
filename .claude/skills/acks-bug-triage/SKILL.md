@@ -110,6 +110,20 @@ Mechanics are `acks-hotfix` §1–§3, used as written: the two orientation read
 split, and the parallel Workflow fan-out with one investigator per symptom
 plus the cross-check. Nothing there is repeated here.
 
+**When to fan out** is decided by what survives §3, not by the batch's size
+on arrival. Only rows that are unclaimed, non-duplicate, and carry *your*
+claim get an investigator — a `duplicate` or in-flight row never earns one
+"just to confirm". One or two surviving rows are diagnosed in-session (or by
+a single agent) with the same prompt discipline and structured verdict; the
+Workflow fan-out earns its overhead from about three symptoms up. The
+**cross-check always runs**, whatever the count — shared causes and
+other-instances-of-the-pattern are this pipeline's best output, and a
+two-row batch can still share one cause with last week's fix. Division of
+labour is fixed: investigators diagnose and edit nothing; intake, ledger
+writes, `gh` calls, dedupe and the release stay in the main session — a
+workflow script has no filesystem access, and the ledger has exactly one
+writer at a time by design.
+
 One extension: each investigator's verdict must support the **four-way
 disposition**, not just confirmed/not-found. So beyond the hotfix schema,
 require: `works_as_coded` verdicts to say whether the behaviour is also
