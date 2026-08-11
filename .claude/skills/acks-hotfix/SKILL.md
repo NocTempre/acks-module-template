@@ -1,12 +1,19 @@
 ---
 name: acks-hotfix
-description: Triage a field bug report against the ACKS module family and cut the resulting hotfix — route each symptom to the owning repo, diagnose symptoms in parallel, split patch from minor. Use when the user pastes player-reported bugs, says "bug report to hotfix", or reports symptoms seen in a live game.
+description: Triage a field bug report against the ACKS module family and cut the resulting hotfix — route each symptom to the owning repo, diagnose symptoms in parallel, split patch from minor. Use when the user designates a hotfix — "bug report to hotfix", "ship this as a hotfix" — for symptoms already in hand. Batch intake, GitHub-issue pulls, and reports whose disposition is still open (may be a false report or a docs gap) enter through acks-bug-triage instead.
 ---
 
 Turning a player's bug list into a shipped patch. The release mechanics are
 **not** here — they are `acks-release` (kind = hotfix) and TOOLCHAIN §4. This
 skill covers only what comes before that: orientation, routing, diagnosis and
 scoping.
+
+Reports that arrive as a batch, from the GitHub issue queues, or without a
+release-kind designation go through `acks-bug-triage` first — it owns the
+intake ledger (`C:\Proj\acks-rules\bug-intake\ledger.csv`) and calls back into
+this skill's routing and diagnosis. A standalone run of this skill still
+records each bullet's outcome as a ledger row when the ledger exists, so the
+next batch can dedupe against what already shipped.
 
 ## 1. Orient before reading any module source
 
@@ -144,11 +151,25 @@ Recurring causes in this family, worth checking by name:
 
 ## 4. Scope: patch or minor
 
-A **hotfix** restores intended behaviour. It carries no data migration, no new
-setting, and no new user-facing surface. Anything that needs one of those is a
-minor — split it out and say so rather than smuggling a feature into a patch.
-What you split out is `acks-minor`'s subject; hand the deferred bullets over
-with the tripwire that forced each one recorded alongside.
+**The release kind is the user's designation, not yours to derive.** Invoking
+this skill *is* the declaration that this ships as a hotfix — it is how the user
+says how much release pipeline they want to spend, and the module's `CLAUDE.md`
+says the same thing ("declared by the user, never derived"). Recommend freely
+and say why; then do what they chose. Do not reclassify the work as a minor, do
+not stop short of shipping to wait for a decision that has already been made,
+and do not route to `acks-minor` unless the user asks for that.
+
+The shape below is a **recommendation heuristic**, and the reason to voice it is
+that a bigger release kind buys more gates. A **hotfix** classically restores
+intended behaviour and carries no data migration, no new setting, and no new
+user-facing surface. When the work in hand needs one of those, say so in one
+line — "this adds a setting, which usually wants a minor; shipping as the hotfix
+you asked for" — and carry on. The one thing to raise louder than a line is a
+**data migration**, because that is the case where the kind changes what a world
+has to survive, not merely how much ceremony surrounds it.
+
+If the user does want it split, `acks-minor` is the subject; hand the deferred
+bullets over with the tripwire that forced each one recorded alongside.
 
 Two judgements this family has already made:
 
