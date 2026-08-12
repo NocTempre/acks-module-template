@@ -289,6 +289,42 @@ training sessions to ignore the drift check. The stale `git restore packs/ &&
 git clean -fd packs/` guidance (superseded 2026-07-19 when compiled packs left
 git) is deleted from the two skills and the sync header that still carried it.
 
+## 2026-08-12 — The hygiene-sweep batch: incidents behind §10h/§10i and the §10a rewrite
+
+The 2026-08-07 hygiene sweep (36 findings across extras and importer) promoted
+three lessons into TOOLCHAIN §10 and rewrote one clause that was wrong. As with
+the playtest batch, the rules are stated there; what they cost is recorded here.
+
+- **A recipe fix that never took effect.** `acks-importer`'s cookbook wrote
+  conditionally-built objects back via `Document#update()`; Foundry deep-merges,
+  so a recipe that narrowed or removed a field never retracted it from
+  previously-imported documents — no matter how many times Refill/Update re-ran.
+  Paid for twice in the same file; the team's own explicit-write fix for the
+  `unaudited` flag was never generalized to the other seven conditional keys.
+  Shipped as importer 2.4.5 ("an update takes back what the page no longer
+  says"). → TOOLCHAIN §10h.
+- **Two false Criticals from a plausible mechanism.** The sweep rated two
+  per-render `DragDrop` re-instantiations Critical on an accumulation theory —
+  duplicate drops, duplicated party members. Verified against v14 build 365:
+  `DragDrop#bind` assigns by IDL property (`element.ondrop = …`), so re-binds
+  overwrite and can never stack. The findings were refuted, the sweep's context
+  text corrected, and the lifecycle written into canon as convention rather
+  than corruption guard. → TOOLCHAIN §10i.
+- **The one sanctioned edge was told to do what is forbidden everywhere else.**
+  §10a prescribed a junction-safe relative import for the importer→extras edge;
+  the family's own cross-package-coupling doctrine calls exactly that shape a
+  bug, and zero code ever did it — practice uses `globalThis.acksExtras`, but
+  with silent per-call-site fallbacks §10a exists to prevent. Canon was
+  corrected to match the working mechanism and demand the missing discipline:
+  resolve once at ready, absence is a load-time failure. → TOOLCHAIN §10a
+  (amended).
+
+Absorbed with the batch: the "one libWrapper registration per target" gate is a
+literal-text regex that a raw prototype monkeypatch is structurally invisible
+to, and §3's `relationships.requires` reason rule had zero corresponding code in
+validate — both instances of the 2026-08-04 ruling not yet generalized beyond
+the i18n pass. The ruling's scope is now stated as general in TOOLCHAIN §5.
+
 ## Upstreaming into the core system — OPEN
 
 The `lib` subsystem was conceived as a staging ground for the core engine: its

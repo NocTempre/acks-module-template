@@ -425,6 +425,12 @@ could not get on screen is a gap, and naming it is the whole point.
   `loc("ui.x")`). A root it cannot resolve fails rather than being skipped, and
   the number of keys checked is printed on every run — a green i18n line that
   checked nothing is the failure it is built to prevent (DECISIONS 2026-08-04).
+  **That ruling is general, not i18n-specific:** every check in `validate.mjs` /
+  `validate-extra.mjs` prints what it actually checked (a count), pass or fail,
+  and a check implemented as a source-text match (a regex over literal code, not
+  a parse) says so wherever it is documented — a literal-text gate is invisible
+  to the pattern it guards written any other way, and pretending otherwise is
+  how a canon-stated rule ends up with zero corresponding code.
 - Optional module-owned pure-logic tests: mock minimal Foundry globals and
   import the real scripts. A single-subject module names the file
   `tools/test-logic.mjs`; a multi-subsystem one splits per subject and chains
@@ -626,12 +632,20 @@ read as rules rather than as stories.
 **10a. Import a shared surface statically — never feature-detect a nested API
 path into silence.** A probe for `globalThis.<ns>.satisfies` when the function
 lives at `<ns>.vocab.satisfies` returns false forever, and the layer behind it
-degrades invisibly. Code that depends on a shared surface **imports it
-statically** — a relative path inside the repo, or a junction-safe
-`../../<repo>/scripts/…` across the one family edge — so a moved surface fails at
-LOAD, loudly. Runtime `globalThis` probing is only for OPTIONAL integrations,
-and the probe must log once when the surface is absent, so a wrong path cannot
-impersonate "not installed". Corollary: a cross-module seam counts as verified
+degrades invisibly. Code that depends on a shared surface inside its own repo
+**imports it statically** — a relative path — so a moved surface fails at LOAD,
+loudly. **Across repos there is no relative import, ever**: the one family edge
+(importer → extras) is consumed through the published surface —
+`globalThis.acksExtras` / `game.modules.get("acks-extras").api` — resolved
+ONCE at `ready`, with absence treated as a load-time failure, never a
+silently-defaulted per-call-site probe. Reaching into another repo's internal
+tree (a relative ESM path, a private flag scope, an internal template path) is
+the same bug in three costumes. Runtime `globalThis` probing is only for
+OPTIONAL integrations, and the probe must log once when the surface is absent,
+so a wrong path cannot impersonate "not installed". A base class resolved from
+a multi-entry registry that falls back to array order (no entry flagged
+`default`) logs a warning naming the class chosen — every time, not only when
+the registry is empty. Corollary: a cross-module seam counts as verified
 only against the real other module, live (§4a) — a mocked seam verifies the mock.
 
 **10b. A missing timestamp means "never enrolled", not "since the epoch".**
@@ -669,3 +683,25 @@ release with the placeholder still in it is not ready.
 snapshot has `_id` but **no** `id`. A grid stamping `data-item-id="${h.id}"`
 renders `"undefined"` and the click handler swallows it. Carry `_id` through
 snapshot pipelines, and never let a lookup miss no-op without a log.
+
+**10h. `Document#update()` and `#setFlag()` deep-merge nested objects — a
+smaller object never clears a key a prior write set.** Writing `{a: 1}` over a
+stored `{a: 1, b: 2}` leaves `b` alive indefinitely, surviving every re-run of
+the write. Anything conditionally present in a written object must be
+retracted explicitly when the condition fails: `-=key` deletion syntax /
+`unsetFlag` for the dropped keys, or `{diff: false, recursive: false}` to
+replace the object whole. And any `getFlag`/`setFlag` against a FOREIGN scope
+is guarded by `game.modules.get(scope)?.active` first — an unregistered scope
+throws, so the unguarded read works on every world that has the other module
+and dies on the supported configuration that does not.
+
+**10i. AppV2 drag-and-drop and re-rendering follow the framework's lifecycle.**
+An app or sheet accepting drops declares it in `static DEFAULT_OPTIONS.dragDrop`
+(or constructs its `DragDrop` instances once, in the constructor) and only
+`.bind(this.element)` the cached instances in `_onRender`; drop payloads are
+read with `TextEditor.implementation.getDragEventData`, not hand-parsed
+`JSON.parse`. This is convention, not a corruption guard: v14's `DragDrop#bind`
+assigns handlers by IDL property (`element.ondrop = …`), so per-render
+re-instantiation overwrites rather than stacks — it is wasteful and
+off-lifecycle, not duplicating. A single-field or single-row change re-renders
+via `this.render({parts: […]})`, never a bare `this.render()`.
