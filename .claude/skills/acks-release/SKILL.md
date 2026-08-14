@@ -94,6 +94,21 @@ the full pipeline (build + validate, no publish) is available anytime:
      API recovery" and STOP — do not wait out an outage.
    - If the run genuinely failed: read the log, fix, delete the tag
      locally+remotely only if the release never published, and retry.
+7a. **Check EVERY workflow the push triggered, not only Release.** A release
+   push also fires the repo's companion workflows (Toolchain check, Docs
+   site, …), and "assets published" says nothing about them — a red
+   companion on the release commit is a red release to anyone looking at
+   the repo, and it stays red on every later push until someone acts
+   (2026-08-14: the extras Docs site failed on every push for a day because
+   a new guide was never added to the site sidebar, and no release session
+   looked). One bounded call:
+   `gh run list --repo NocTempre/<repo> --commit $(git rev-parse HEAD)`
+   Every run must end `success`. A failure is YOURS to resolve in this
+   session: read its log (`gh run view <id> --log-failed`), fix the cause,
+   push the fix, and re-check — or, if the check itself is wrong, fix the
+   check in its canonical home (template workflows sync from
+   acks-module-template). Never report the release done over a red run
+   without saying exactly which run is red and why.
 8. Verify the manifest resolves with the new version (bounded, `-m 15`):
    `curl -sm 15 -L https://github.com/NocTempre/<repo>/releases/latest/download/module.json`
    `<repo>` is the GitHub repo name, which is NOT always the module id — the
@@ -101,8 +116,9 @@ the full pipeline (build + validate, no publish) is available anytime:
    (ids `acks-extras` / `acks-importer`). The repos are public (since
    2026-08); if one has been taken private (e.g. IP quarantine), the URL
    404s unauthenticated — use `gh release view` instead and note it.
-9. Report: release kind, version, release URL, the snapshots captured (and any
-   obligation you could not meet, with the reason), and anything skipped.
+9. Report: release kind, version, release URL, the status of every triggered
+   workflow, the snapshots captured (and any obligation you could not meet,
+   with the reason), and anything skipped.
 
 Never force-push tags over a published release; cut a new patch version
 instead.
