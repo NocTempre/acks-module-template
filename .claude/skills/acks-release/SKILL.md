@@ -30,6 +30,18 @@ the full pipeline (build + validate, no publish) is available anytime:
 
 1. Preflight: working tree clean (or only the changes being released);
    `git log origin/<branch>..HEAD` to know what's going out.
+   **Run every push-triggered workflow's gate locally NOW, before anything
+   is tagged** — discovering a red companion after publishing means doing
+   the fix anyway, plus a wasted CI round-trip and a permanently red release
+   commit. `ls .github/workflows` says what will fire; the local equivalents:
+   - Toolchain check → `node C:\Proj\acks-module-template\bin\sync-toolchain.mjs --check`
+     (zero drift, with the template's `main` already pushed — TOOLCHAIN §9).
+   - Docs site (repos that have `docs/site/`) → the staging gate is
+     `node docs/site/tools/sync.mjs`; repos wire it into `npm run validate`
+     (validate-extra), so a green validate already covers it.
+   - Release → steps 3–4 below are its build+validate, run locally.
+   A gate that genuinely cannot run locally is what step 7a is for; 7a
+   firing on anything runnable here means this step was skipped.
 2. Bump `version` in `module.json` (plain semver X.Y.Z). Update `CHANGELOG.md`
    if the repo has one.
 3. `npm run build:packs`. Compiled packs are gitignored build output — commit
@@ -94,9 +106,10 @@ the full pipeline (build + validate, no publish) is available anytime:
      API recovery" and STOP — do not wait out an outage.
    - If the run genuinely failed: read the log, fix, delete the tag
      locally+remotely only if the release never published, and retry.
-7a. **Check EVERY workflow the push triggered, not only Release.** A release
-   push also fires the repo's companion workflows (Toolchain check, Docs
-   site, …), and "assets published" says nothing about them — a red
+7a. **Check EVERY workflow the push triggered, not only Release — as the
+   BACKSTOP to preflight step 1, which already ran these gates locally.** A
+   release push also fires the repo's companion workflows (Toolchain check,
+   Docs site, …), and "assets published" says nothing about them — a red
    companion on the release commit is a red release to anyone looking at
    the repo, and it stays red on every later push until someone acts
    (2026-08-14: the extras Docs site failed on every push for a day because
