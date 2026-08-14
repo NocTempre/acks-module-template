@@ -352,3 +352,11 @@ The need it addressed is met differently — `acks-importer` materializes tables
 into world data at import time, from the GM's own books. A commercial content
 companion remains possible and is not planned. Distribution and licensing of
 such content was never in scope here.
+
+## 2026-08-14 — Release snapshots are documentation, not immutable records
+
+**Ruled:** a past release's `docs/releases/v*/` directory may be rewritten
+where the surface it shows has changed. The owner rejected the previous
+"never rewrite a past release's directory" clause; the only snapshot economy
+rule is the kind table — a minor release never has to re-capture surfaces its
+changes did not touch. §4b and the acks-release skill amended to match.

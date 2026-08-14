@@ -70,7 +70,9 @@ the full pipeline (build + validate, no publish) is available anytime:
    later proves nothing about the release. Skip only for a hotfix with no
    requested shot, or where §4a itself was skipped for want of a test server.
    - Save to `docs/releases/v<X.Y.Z>/<feature-slug>.png` (PNG, cropped to the
-     window, ~300 KB ceiling). Never rewrite a previous release's directory.
+     window, ~300 KB ceiling). A previous release's directory may be rewritten
+     where its surface changed; a minor never re-captures surfaces its
+     changes did not touch.
    - Update `docs/GALLERY.md`: rewrite **every** row on a major release, only
      the re-shot rows on a minor. Rows left pointing at an older version are
      the staleness record — that is intended, not an oversight to tidy.

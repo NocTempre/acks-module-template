@@ -46,8 +46,22 @@
  *       return game.actors.get("${id}") ? "STILL PRESENT" : "deleted";
  *     })()`));
  *   } finally { api.close(); }
+ *
+ * SHOOTING A CHAT CARD takes two extra moves, and skipping either one fails in
+ * a way that reads as "the message was never posted":
+ *
+ *   - **Re-render the Hotbar before any ChatLog render.** `compose()` closes
+ *     every application, and `ChatLog#_onRender` reaches into the hotbar
+ *     (`_toggleNotifications` → `#offsetHotbar`), so the render throws on a
+ *     null element and no log appears. `await ui.hotbar.render(true)` first.
+ *   - **Use the POPOUT log, not the docked sidebar.** The sidebar is anchored
+ *     to the right edge and sits past the headless viewport, so clipping to a
+ *     message in it captures a ~14px sliver. `renderPopout()` gives an ordinary
+ *     floating window; `setPosition` it somewhere on screen and clip to the
+ *     card's own root — which also keeps the message header, and with it the
+ *     seat's user name, out of frame.
  */
-import { spawn } from "node:child_process";
+import { spawn, execFileSync } from "node:child_process";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -99,8 +113,36 @@ export async function connect({ browser, origin, user, port = 9333, width = 1600
     "--disable-features=Translate,AcceptCHFrame", "about:blank",
   ], { stdio: ["ignore", "pipe", "pipe"] });
   proc.stderr.on("data", () => {});
+  /**
+   * Tear the session down completely. Two things beyond `proc.kill()`, and both
+   * are load-bearing:
+   *
+   *  - **Kill by PROFILE, not by pid.** A browser is a launcher plus renderer,
+   *    GPU, network and crashpad children, and `proc.kill()` signals only the
+   *    launcher — which on Windows has usually already exited and left its
+   *    children re-parented, so killing the pid (or even its tree) reaps
+   *    nothing. The throwaway `--user-data-dir` is unique to this session and
+   *    every child carries it on its command line, so it is the one handle that
+   *    finds all of them. Without this a session that shoots a dozen frames
+   *    leaves dozens of orphans, and once enough pile up the next `connect()`
+   *    starves and the capture "just stops working".
+   *  - **Close the CDP socket.** An open WebSocket holds node's event loop, so
+   *    a script that finished its work never exits and looks hung.
+   *
+   * Callers do not have to know any of this: `close()` leaves nothing running.
+   */
+  let cdpSocket = null;
   const cleanup = () => {
+    try { cdpSocket?.close(); } catch {}
     try { proc.kill(); } catch {}
+    if (process.platform === "win32") {
+      // -Filter cannot match on CommandLine, so the profile test is a Where-Object.
+      const script =
+        `Get-CimInstance Win32_Process -Filter "Name='${path.basename(browser).replace(/'/g, "''")}'" | ` +
+        `Where-Object { $_.CommandLine -like '*${profile.replace(/\\/g, "\\").replace(/'/g, "''")}*' } | ` +
+        `ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue }`;
+      try { execFileSync("powershell", ["-NoProfile", "-NonInteractive", "-Command", script], { stdio: "ignore" }); } catch {}
+    }
     try { fs.rmSync(profile, { recursive: true, force: true }); } catch {}
   };
 
@@ -115,7 +157,9 @@ export async function connect({ browser, origin, user, port = 9333, width = 1600
     }
     if (!wsUrl) throw new Error("devtools endpoint never came up");
 
-    const cdp = new Cdp(await openWs(wsUrl));
+    const ws = await openWs(wsUrl);
+    cdpSocket = ws;
+    const cdp = new Cdp(ws);
     const { targetId } = await cdp.send("Target.createTarget", { url: `${origin}/join` });
     const { sessionId } = await cdp.send("Target.attachToTarget", { targetId, flatten: true });
     await cdp.send("Page.enable", {}, sessionId);

@@ -306,8 +306,11 @@ The whole of `docs/` is on the zip denylist (§4) — the release artifact carri
 the Foundry runtime plus the root README/LICENSE and nothing else, because
 Foundry never reads a markdown file out of a module directory. So snapshots stay
 reviewable in git and linkable from release notes without adding weight to the
-download every user pulls. Never regenerate a past release's directory — it is
-that release's record, not a scratch space.
+download every user pulls. A past release's directory MAY be rewritten where
+the surface it shows has changed — a shot is documentation of the feature, not
+an immutable record of the day it shipped. The only snapshot economy rule is
+the kind table above: a minor never needs to RE-capture surfaces its changes
+did not touch.
 
 **`docs/GALLERY.md` is the index and the provenance record.** One row per
 feature area: the feature, a one-line caption, and a link to its current shot.
