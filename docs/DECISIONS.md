@@ -363,6 +363,17 @@ changes did not touch. §4b and the acks-release skill amended to match.
 
 ## 2026-08-15 — Math may ship; the book's words may not
 
+**Why this is stricter than it has to be.** These modules are licensed, and
+nothing here is a compliance minimum. The owner is deliberately prototyping a
+doctrine that would satisfy an ANTAGONISTIC rights holder — one reading every
+string looking for a reason — rather than the one actually granting the licence.
+Read the rules below in that light: they are an experiment in how far a
+third-party module can be pushed toward holding no book content at all, and the
+cost of a false positive here is a thinner tooltip, not a lost right. Do not
+relax them because a particular case looks legally safe. It almost certainly is.
+That is not the bar being aimed at.
+
+
 The "no value read off a page" rule sat next to the `ruledata/` prohibition and
 was read as being about pack data and tracked data directories. It never reached
 `lang/` strings or frozen tables in a `config.mjs`, so both accumulated —
