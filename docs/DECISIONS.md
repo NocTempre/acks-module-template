@@ -360,3 +360,52 @@ where the surface it shows has changed. The owner rejected the previous
 "never rewrite a past release's directory" clause; the only snapshot economy
 rule is the kind table — a minor release never has to re-capture surfaces its
 changes did not touch. §4b and the acks-release skill amended to match.
+
+## 2026-08-15 — Math may ship; the book's words may not
+
+The "no value read off a page" rule sat next to the `ruledata/` prohibition and
+was read as being about pack data and tracked data directories. It never reached
+`lang/` strings or frozen tables in a `config.mjs`, so both accumulated —
+`acks-extras` shipped a five-row masterwork price table, a shield-variant table,
+a silver multiplier, and hint strings that paraphrased rules and cited page
+numbers. The 4.9.0 trap work added more of the same before anyone noticed the
+pattern. Owner ruling, 2026-08-15: this is a minor IP leak, and the rule needs
+to say so out loud.
+
+**The test, in three questions, applied in order.**
+
+1. **Is it a sentence about the rule?** Then it does not ship. A hint, a label,
+   a tooltip or a chat line that states, explains or paraphrases what the book
+   says is the book's expression, and so is any page citation. Say what the
+   FIELD does instead — "In feet." rather than "A pit deals 1d6 per 10 feet
+   fallen" — or get the words from the importer.
+2. **Is it a table of options a reader picks from?** Then it is content
+   whatever it is made of, and it is registered from `acks-importer` rather than
+   shipped. Tiers, variants, qualities, ladders, price rows. `lib/tables.mjs`
+   has said "no book values, no fallback samples" since the extraction program;
+   a frozen table in a `config.mjs` is that ruling broken somewhere the gate was
+   not looking.
+3. **Otherwise it is math, and math ships** — in the function that performs the
+   rule, with no citation in any string. A modifier, a band, a rate, a formula.
+
+**This resolves a tension that was being re-litigated case by case.** The door
+helper codes ±4 per point of Strength, +2 for a crowbar, ±8 per size step; the
+obstacle helper codes its botch rows; the trap rule codes 1d6 per 10 feet and
+the crude trap's +4/−2/+2. All of those are question 3 and all of them stay. The
+thief ladders and the Spelunking rows left, and masterwork and shield variants
+are leaving, because they are question 2. What made the difference was never how
+many numbers there were — it is whether the thing is a rule being *performed* or
+a catalogue being *consulted*.
+
+**Enforcement.** `ip-scan.mjs` gains a citation signal: a book sigil next to a
+page or chapter reference, inside shipped text (`lang/`, templates, pack
+sources), is a hard failure. Code comments and `docs/` are exempt and stay
+exempt — a comment citing RR p. 159 is attribution, and the comment doctrine
+asks for it. This catches question 1 mechanically; question 2 still needs a
+reviewer, which is why it is written down here.
+
+**What it costs.** Moving an options table to the importer means the picker it
+feeds offers nothing until the GM has imported from their own book. That is the
+right failure — it is the same bargain the ladders made — but it means the
+importer half must land FIRST, in a released tag (§10e), or a world upgrades
+into an empty dropdown.
