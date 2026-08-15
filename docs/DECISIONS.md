@@ -409,3 +409,34 @@ feeds offers nothing until the GM has imported from their own book. That is the
 right failure — it is the same bargain the ladders made — but it means the
 importer half must land FIRST, in a released tag (§10e), or a world upgrades
 into an empty dropdown.
+
+## 2026-08-15 — Lesson: build the replacement before retiring what it replaces
+
+Recorded as a standing lesson for design work, not as a ruling to apply once.
+
+The math-vs-words pass above stripped rules prose out of ~80 shipped strings in
+one sweep, and did it BEFORE `acks-importer` had any way to supply the words it
+removed. The doctrine says the book's sentences reach a world through the
+importer; until that channel exists, "through the importer" means "not at all",
+and a Judge upgrading gets a thinner hint with nothing on the other side of the
+trade. The strings were the legacy implementation of an explanation, and they
+were retired before the new one was ready.
+
+Owner ruling: do not oscillate — the strip stands, the words come later. But the
+sequencing was the wrong way round, and it is the same order this family already
+writes down in two other places: TOOLCHAIN §10e (the dependency half lands
+first, in a *released* tag) and the ruling on the masterwork table below (the
+importer recipe first, or a world upgrades into an empty dropdown). Both were
+about SYMBOLS and DATA. This is the same rule about PROSE, and nothing had said
+so.
+
+**The rule, generally: a replacement that does not exist yet is not a
+replacement.** When a change removes something a user can see — a value, a
+control, an explanation — the thing that supersedes it ships first, or the
+removal waits. "It will come from the importer" is a plan, not a channel. Check
+that the receiving end is released, not merely designed, before deleting the
+sending end.
+
+Applied to the work in flight: masterwork tiers, shield variants and silver are
+NOT to be pulled out of `config.mjs` until `acks-importer` has released recipes
+for them, however clearly the doctrine says they do not belong there.
