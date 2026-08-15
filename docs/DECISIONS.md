@@ -379,23 +379,41 @@ to say so out loud.
    says is the book's expression, and so is any page citation. Say what the
    FIELD does instead — "In feet." rather than "A pit deals 1d6 per 10 feet
    fallen" — or get the words from the importer.
-2. **Is it a table of options a reader picks from?** Then it is content
-   whatever it is made of, and it is registered from `acks-importer` rather than
-   shipped. Tiers, variants, qualities, ladders, price rows. `lib/tables.mjs`
-   has said "no book values, no fallback samples" since the extraction program;
-   a frozen table in a `config.mjs` is that ruling broken somewhere the gate was
-   not looking.
-3. **Otherwise it is math, and math ships** — in the function that performs the
-   rule, with no citation in any string. A modifier, a band, a rate, a formula.
+2. **Is it a value read off a page?** Then it does not ship either. A modifier's
+   size, a botch band's edge, a rate, a price, a ladder rung, a table of options
+   a reader picks from. However small, however alone: +2 for a crowbar is as
+   much a printed number as a fifty-row price list. These arrive through
+   `acks-importer` from the GM's own copy and are PASSED IN.
+3. **Otherwise it is the procedure, and the procedure ships** — in the function
+   that performs it. Which modifiers exist, when each applies, how they combine,
+   what a failure costs, what resolves in what order.
 
-**This resolves a tension that was being re-litigated case by case.** The door
-helper codes ±4 per point of Strength, +2 for a crowbar, ±8 per size step; the
-obstacle helper codes its botch rows; the trap rule codes 1d6 per 10 feet and
-the crude trap's +4/−2/+2. All of those are question 3 and all of them stay. The
-thief ladders and the Spelunking rows left, and masterwork and shield variants
-are leaving, because they are question 2. What made the difference was never how
-many numbers there were — it is whether the thing is a rule being *performed* or
-a catalogue being *consulted*.
+**The pattern to copy is `formation/jumping.mjs`.** It knows that a proficiency
+raises the score a jump is figured from, that a cap exists, and that the landing
+is a Paralysis save — all structure. It takes `dexCap` and `saveBonus` as
+arguments, and `NO_ACROBATICS` is what an unimported proficiency contributes:
+nothing, rather than a guess. That is question 2 and question 3 living together
+correctly in one file.
+
+**This resolves a tension that was being re-litigated case by case, and it cuts
+deeper than the first draft of this entry claimed.** That draft said any number
+the code computes with may live in the function performing the rule, and used
+the door helper as the example of something safely baked. Owner correction, same
+day: **band edges and modifier values are content and need importing; what bakes
+is the arithmetic of applying them and the conditions under which they apply.**
+
+So the door helper's ±4 per point of Strength, +2 for a crowbar and ±8 per size
+step are question 2, not question 3. So are the obstacle botch rows, the trap
+rule's 1d6 per 10 feet, and the crude trap's +4/−2/+2. What stays baked is that
+Strength moves the throw, that a crowbar helps, that a pair heaves with the
+stronger adjustment, that spikes make it harder, that an unmodified low roll
+botches — the shape of the throw, with the numbers handed to it.
+
+That is a much larger program than the string pass, and it is why this is
+written as a test rather than a list of sites. The thief ladders and the
+Spelunking rows already left this way, and `jumping.mjs` was already built this
+way. What made the difference was never how many numbers there were — it is
+whether the thing is a rule being *performed* or a value being *read*.
 
 **Enforcement.** `ip-scan.mjs` gains a citation signal: a book sigil next to a
 page or chapter reference, inside shipped text (`lang/`, templates, pack
