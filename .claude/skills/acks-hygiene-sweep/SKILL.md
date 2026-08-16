@@ -213,6 +213,11 @@ false positive.
   patterns; a finding against core itself is out of scope.
 - **Not audited:** the importer's `register/`/`cookbook/` JSON (data, not code)
   and vendored pdf.js.
-- **Rules vocabulary** comes from `C:\Proj\acks-reference\WIKI-SNAPSHOT\*/md/`.
-  Naming individual rule terms, enum values and chapter citations in findings is
-  fine; verbatim extended prose or a whole arranged stat block is not.
+- **Rules vocabulary** comes from `C:\Proj\acks-reference\WIKI-SNAPSHOT\*/md/` —
+  all three core books (`rules/` = **RR**, `judges/` = **JJ**, `monsters/` =
+  **MM**) as greppable markdown that keeps the table cells, row boundaries and
+  paragraph breaks PDF extraction collapses into run-ons. That structure is why
+  the snapshot is the sweep's **validation oracle** for closed sets and table
+  shapes, and why no step here opens a PDF. Naming individual rule terms, enum
+  values and chapter citations in findings is fine; verbatim extended prose or a
+  whole arranged stat block is not.

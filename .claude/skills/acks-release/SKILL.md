@@ -22,6 +22,17 @@ long changelog, or a `1.0.0`-looking bump — ask. Everything else in this
 procedure is identical for all three kinds: a hotfix does not skip the live
 gate.
 
+**A release states rules too** — step 2's changelog entries and step 5's
+capture captions both assert what the book says. Verify before asserting, in
+`acks-hotfix` §1's order: grep `C:\Proj\acks-reference\WIKI-SNAPSHOT\` first
+(`rules/` = RR, `judges/` = JJ, `monsters/` = MM — greppable markdown that
+preserves the table cells, row boundaries and paragraph breaks PDF extraction
+destroys, which is what makes it a **validation oracle** rather than just a
+faster read), then `C:\Proj\acks-rules\` and the feature's `DECISIONS.md`, and
+open a PDF only for a gap or an explicit double-check. Cite
+book/chapter/section; the snapshot is LOCAL-ONLY and its paths never appear in
+a changelog, a commit message or a tag.
+
 The CI procedure itself lives in acks-module-template's
 `release-module.yml` (reusable workflow) — module `release.yml` files are thin
 synced callers; never edit either in a module repo. A pre-flight dry run of
