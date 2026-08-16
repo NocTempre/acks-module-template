@@ -65,6 +65,16 @@ build/release plumbing, and its `docs/DECISIONS.md` before a structural change
   dirs are ignored, so there is nothing to review or discard.
 - Foundry dev install (junction, not copy):
   `New-Item -ItemType Junction -Path "$env:LOCALAPPDATA\FoundryVTT\Data\modules\{{MODULE_ID}}" -Target "C:\Proj\{{REPO_DIR}}"`
+- **Never put a Windows path inside a Bash heredoc.** Even a quoted `<<'PY'`
+  loses a backslash level before the interpreter sees it: `C:\Proj\acks-rules`
+  arrives as `C:\Projacks-rules` with a BEL where `\a` was, and
+  `...\Application\msedge.exe` arrives with its separators gone. Nothing errors
+  — the file is written and looks right in most viewers, the command runs
+  against a path that does not exist, and a control character can ride into a
+  doc and propagate through `sync-toolchain`. Write files with the Write/Edit
+  tools and pass paths as arguments or env vars. If a heredoc script truly must
+  contain one, build it from `chr(92)`.
+
 ## Live testing
 
 `C:\Proj\acks-rules\TEST_ENVIRONMENT.md` defines this machine's local Foundry
