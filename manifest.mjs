@@ -24,7 +24,6 @@ export const COPY = [
   ".github/workflows/release.yml",
   ".github/workflows/toolchain-check.yml",
   ".claude/settings.json",
-  ".claude/hooks/single-branch-guard.mjs",
   "tools/validate.mjs",
   "tools/ip-scan.mjs",
   "tools/ip-quarantine.mjs",
@@ -39,9 +38,10 @@ export const APPEND_OK = [".gitignore"];
  * it is also the live copy a session working in the template repo loads.
  * Every file under each dir is canon; a file in a target that canon does not
  * name is drift, and --apply deletes it (removals must propagate, or a
- * renamed skill lives on in every repo it ever reached).
+ * renamed skill lives on in every repo it ever reached). new-module.mjs
+ * copies these trees into fresh scaffolds verbatim.
  */
-export const COPY_DIRS = [".claude/skills"];
+export const COPY_DIRS = [".claude/skills", ".claude/rules", ".claude/hooks"];
 
 export const COPY_IF_PACK_DATA = ["tools/build-packs.mjs"];
 

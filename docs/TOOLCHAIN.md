@@ -15,15 +15,17 @@ ordinary work.
 | Repo | What it is |
 | --- | --- |
 | `foundryvtt-acks-core` | The ACKS II system (AutarchLLC fork). **Read-only reference — a module task never edits it** (§6). |
-| `foundryvtt-acks-extras` | `acks-extras` — the merged rules-automation module. Subsystems under `scripts/`: `lib abilities equipment formation henchmen influence location monsters`. |
+| `foundryvtt-acks-extras` | `acks-extras` — the merged rules-automation module. Subsystems under `scripts/`: `lib abilities classes equipment formation henchmen influence location markets monsters vehicles`. |
 | `foundryvtt-acks-importer` | `acks-importer` — book connection, content and table extraction. `requires acks-extras`. |
-| `acks-module-template` | This repo: canon, scaffold, shared skills. |
-| `acks-rules` | LOCAL-ONLY rules extracts + `TEST_ENVIRONMENT.md`. Never committed, never shipped (§6). |
+| `acks-module-template` | This repo: canon, scaffold, shared skills/rules/hooks. |
+| `acks-rules` | LOCAL-ONLY rules extracts, `TEST_ENVIRONMENT.md`, the bug-intake ledger and the hygiene audit. Never committed, never shipped (§6). |
+| `acks-reference` | LOCAL-ONLY reference library — book scans/extracts and the `WIKI-SNAPSHOT` validation oracle (lookup order: the synced `.claude/rules/rules-lookup.md`). |
 
 The two module repos are `manifest.mjs` `DEFAULT_TARGETS` — what
-`sync-toolchain` writes to. `acks-domains` and `acks-divine-conduit` are early
-scaffolds, not yet sync targets; `acks-reference` and `acks-git-backups` are
-local stores, not modules.
+`sync-toolchain` writes to. `acks-domains` is **not part of this project**;
+`acks-divine-conduit` is an isolated one-off outside family tooling —
+neither is a sync target, and neither joins this table.
+`acks-git-backups` is a local store, not a module.
 
 `acks-importer → acks-extras` is the only dependency edge inside the family, and
 it is one-directional: extras never names the importer. A world running extras
@@ -198,86 +200,19 @@ Release procedure (also encoded in the `acks-release` skill):
 
 ## 4a. Live verification before go-live
 
-**Why this is a gate.** `validate` and `test-logic` run against mocked Foundry
-globals: they verify the author's assumptions, not Foundry's behaviour. Every
-module-breaking bug in this family's history got through a green offline suite
-and was caught only by a live install — acks-equipment v0.12.1 shipped four
-versions in which the whole module was dead at `init` (`buildApi()` threw a
-ReferenceError) while ~180 checks reported green, because nothing offline ever
-*called* the entry point. Offline checks gate correctness of logic; only a live
-run gates that the module loads and does anything at all.
+Live verification is a **go-live gate** for every release kind: offline
+checks run against mocked Foundry globals, and every module-breaking bug in
+this family's history passed a green offline suite (the incidents are in
+DECISIONS.md — acks-equipment v0.12.1's dead-at-`init` releases,
+acks-henchmen v0.29.1's template-vs-API split, acks-formation v0.27.0's
+pre-upgrade fixtures).
 
-**Environment.** The machine's test server is defined in
-`C:\Proj\acks-rules\TEST_ENVIRONMENT.md` — server URL, world, users, and the
-API calls that drive it reliably. That file is LOCAL-ONLY and machine-specific
-by design: every developer writes their own, and **no port, world id, user
-name, or password ever goes into a repo, a skill, or a memory.** Read it at the
-start of a release; if it is absent, there is no test server on this machine —
-skip live verification and say so in the report rather than inventing one.
-
-**Procedure.**
-
-1. Confirm the dev install is a junction to the working tree (§5), so what you
-   test is what you are about to tag — not a stale copy.
-2. **Shut down any running world before rebuilding packs.** A running world
-   holds LevelDB locks on module `packs/`, so `npm run build:packs` fails on
-   the LOG files. Order is: shut down → build packs → launch world → test.
-   (The locks no longer make the repo dirty — compiled packs are gitignored —
-   but the build still needs them released.)
-3. Launch the world and enable the module, then verify at minimum:
-   - it reaches `ready` with **no console errors** — check `init`, `setup`, and
-     `ready` specifically, since a throw in one leaves the rest silently dead;
-   - every setting the module registers appears in the settings UI, and each
-     one actually gates something (an inert toggle is a bug — see the three
-     dead overlay switches removed in acks-equipment v0.15.0);
-   - every shipped macro runs without throwing;
-   - each declared compendium opens and its documents load;
-   - **the feature this release changes, exercised end-to-end through the UI** —
-     not its unit test. Sheet/DOM integrations, drag-and-drop, and Active Effect
-     writes are the surfaces mocks cannot reach; verify the write actually
-     landed on the target field rather than that the code ran.
-4. **Create whatever fixtures the check needs — that is part of the check, not
-   a prerequisite for it.** A live run is only as good as the world it runs in,
-   and the test world will rarely already hold the actors, items, or documents
-   a feature touches. "No data existed to exercise it" is not a limitation to
-   report; it is test data you are expected to build. Make it, run the feature
-   through it, then delete it. This needs no permission and no special setup.
-
-   **Create-and-destroy, never mutate-and-restore.** Reaching for the world's
-   existing fixtures because they are already there, then rolling back the
-   edits, is the failure this rule exists to prevent — and it recurs. Rollback
-   is a second write with all the failure modes of the first: it can report
-   success and not apply (an ownership rollback did exactly that, and was only
-   caught by re-reading), it cannot restore state you did not think to
-   snapshot, and an exception mid-test leaves the world broken with no record
-   of what changed. A document you created is disposable by construction:
-   deleting it is total, needs no snapshot, and cannot half-succeed. Prefer
-   new users/actors/items over borrowed ones even when the borrowed one is
-   more convenient — especially then.
-
-   Test artifacts are cheap and the seats are already provisioned: the world
-   carries one user of every permission level, so player-facing behaviour is
-   verified by joining as that player. Rendering a template with `isGM: false`
-   proves the template branches; it does not prove the API under it refuses a
-   real player (acks-henchmen v0.29.1: the read-only render was correct and
-   the engine call underneath was not).
-
-   Where a release **changes or removes shipped content**, build the
-   *pre-upgrade* shape on purpose: recover the removed definitions from git
-   (`git show <tag>:<path>`) and re-create them as world documents. Every such
-   release claims that existing worlds keep working, and that claim is only
-   testable against a world that actually holds the old data — reasoning from
-   "Foundry does not delete world documents" is a citation, not a verification.
-   (acks-formation v0.27.0: re-creating the four removed pack items proved all
-   three surviving bind routes — `thiefSkill` flag, name match, and the
-   name-matched Alertness bonus — still resolved at the correct targets.)
-5. Leave the world running or shut it down as you like — compiled packs are
-   gitignored, so a running world can no longer dirty the repo or leak runtime
-   LOG/MANIFEST churn into a commit.
-6. **Report what you exercised, and name what you did not.** "Live-verified"
-   with no list is not a result. If a surface could not be reached, say which
-   and why — an honest gap is actionable, an implied all-clear is not. A gap
-   you could have closed by creating fixtures (step 4) is not a gap; close it.
+The canonical procedure — environment, fixtures you create and destroy, real
+player seats, pre-upgrade shapes, what to report — is the synced
+**`.claude/rules/live-testing.md`**, loaded in every repo. This section
+states only the policy: the gate is skipped exactly when
+`C:\Proj\acks-rules\TEST_ENVIRONMENT.md` is absent (no test server on that
+machine), and the skip is stated in the release report.
 
 ## 4b. Release snapshots
 
@@ -559,20 +494,28 @@ Full ruling and its corollaries: DECISIONS, 2026-07-19.
   routine dev loop (npm, node harness, git incl. commit/tag/push, gh run,
   GitHub API reads). `settings.local.json` stays gitignored for personal
   grants.
-- The family skills are **canonical here in `.claude/skills/`** and sync
-  recursively into each module repo's own `.claude/skills/` via the manifest's
-  `COPY_DIRS` — project-scoped, committed, and drift-gated by
-  `toolchain-check.yml` like every other canonical file. The roster:
-  `acks-bug-triage` (intake ledger + dispositions), `acks-hotfix` (patch
-  scoping), `acks-minor` (minor scoping), `acks-release` (mechanics for all
-  three kinds), `acks-hygiene-sweep` (standing audit + its tooling),
-  `acks-new-module` and `acks-sync-toolchain` (run from this repo). There is
-  **no user-level install**: a `~/.claude/skills/acks-*` copy sits outside
-  every drift gate and once silently clobbered newer text — delete any found.
+- The family's agent assets are **canonical here at the template root** and
+  sync recursively into each module repo via the manifest's `COPY_DIRS` —
+  project-scoped, committed, and drift-gated by `toolchain-check.yml` like
+  every other canonical file:
+  - `.claude/skills/` — the roster: `acks-bug-triage` (intake ledger +
+    dispositions), `acks-hotfix` (patch scoping), `acks-minor` (minor
+    scoping), `acks-release` (mechanics for all three kinds),
+    `acks-hygiene-sweep` (standing audit + its tooling), `acks-new-module`
+    and `acks-sync-toolchain` (run from this repo). There is **no user-level
+    install**: a `~/.claude/skills/acks-*` copy sits outside every drift gate
+    and once silently clobbered newer text — delete any found.
+  - `.claude/rules/` — always-true doctrine loaded on demand:
+    `live-testing.md`, `ip-doctrine.md`, `docs-doctrine.md`,
+    `rules-lookup.md`. Each is the canonical statement of its subject; every
+    other file points at it.
+  - `.claude/hooks/` — `single-branch-guard.mjs` (single-branch convention)
+    and `no-windows-path-heredoc.mjs` (Windows paths never enter Bash
+    heredocs), wired in the synced `.claude/settings.json`.
 - The template repo protects itself with the same `.claude/settings.json`
-  hook set (single-branch-guard, `bgIsolation: none`) as its children, and
-  carries its own `CLAUDE.md` — it is the highest-blast-radius repo in the
-  family and gets no less guidance than the repos it governs.
+  hook set (single-branch-guard, heredoc guard, `bgIsolation: none`) as its
+  children, and carries its own `CLAUDE.md` — it is the highest-blast-radius
+  repo in the family and gets no less guidance than the repos it governs.
 - Note that when a session runs from one repo with others as additional dirs,
   only the *session* repo's settings govern permissions; the per-module
   settings.json pays off in standalone sessions.

@@ -18,6 +18,7 @@ import { execFileSync } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
 import url from "node:url";
+import { COPY_DIRS } from "../manifest.mjs";
 
 const TEMPLATE_ROOT = path.dirname(path.dirname(url.fileURLToPath(import.meta.url)));
 const SKELETON = path.join(TEMPLATE_ROOT, "skeleton");
@@ -73,6 +74,21 @@ function copyRendered(srcDir, destDir) {
 }
 
 copyRendered(SKELETON, target);
+
+// COPY_DIRS trees (skills, rules, hooks) are canon at the template root, not
+// in skeleton/ — copy them verbatim, no placeholder rendering.
+function copyVerbatim(srcDir, destDir) {
+  fs.mkdirSync(destDir, { recursive: true });
+  for (const entry of fs.readdirSync(srcDir, { withFileTypes: true })) {
+    const src = path.join(srcDir, entry.name);
+    const dest = path.join(destDir, entry.name);
+    if (entry.isDirectory()) copyVerbatim(src, dest);
+    else fs.copyFileSync(src, dest);
+  }
+}
+for (const relDir of COPY_DIRS) {
+  copyVerbatim(path.join(TEMPLATE_ROOT, relDir), path.join(target, relDir));
+}
 
 // Seed the LOCAL-ONLY rules-extract folder (licensed book text lives outside
 // every repo — see acks-rules/README.md).
