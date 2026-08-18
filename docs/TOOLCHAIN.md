@@ -179,7 +179,13 @@ go-live gate.
 Release procedure (also encoded in the `acks-release` skill):
 
 1. Establish the release kind (above) and bump `module.json` version
-   (+ changelog if present).
+   (+ changelog if present). **Then run `node tools/release-preflight.mjs`**
+   (synced gate — it reads the bumped version): it refuses a tag that
+   already exists — **a published version is never retagged**; a version
+   that needs fixing gets a new patch number — and requires a
+   `docs/<feature>/TESTING.md` live-test recipe for every `scripts/` surface
+   changed since the last tag. The live-verify session (step 4) walks
+   exactly those recipes.
 2. `npm run build:packs` — commit `packs/_source` if it changed. The compiled
    dirs are gitignored build output; there is nothing to review or discard.
 3. `npm run validate` (and `npm test` where present).
@@ -197,6 +203,24 @@ Release procedure (also encoded in the `acks-release` skill):
 8. Verify: `curl -sm 15 -L https://github.com/NocTempre/<id>/releases/latest/download/module.json`
    reports the new version (needs the repo public; while private use
    `gh release view` — unauthenticated manifest fetches 404).
+
+### Soak rules
+
+The pattern behind this family's worst days is a release followed within
+hours by a chain of hotfixes in the surface it just shipped — the surface was
+being debugged in production. Three standing rules:
+
+- **A new surface's `docs/<feature>/TESTING.md` is written during the build,
+  before its first release** — not after the first field report. The recipe
+  is the definition of "works"; a surface that ships without one shipped
+  untested by construction.
+- **A minor or major soaks 24 hours** before any further release from that
+  repo, except a hotfix for something the release itself broke.
+- **A second hotfix on the same surface within 24 hours stops the line.**
+  The third change to that surface ships only after its full TESTING.md
+  recipe has been walked live in one session. Two rapid patches mean the
+  surface's failure mode is not understood; the recipe walk is how it
+  becomes understood.
 
 ## 4a. Live verification before go-live
 

@@ -27,6 +27,7 @@ export const COPY = [
   "tools/validate.mjs",
   "tools/ip-scan.mjs",
   "tools/ip-quarantine.mjs",
+  "tools/release-preflight.mjs",
   ".githooks/pre-commit",
 ];
 
