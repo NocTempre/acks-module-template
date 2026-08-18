@@ -1,6 +1,8 @@
 ---
 name: acks-new-module
 description: Scaffold a new ACKS II Foundry module repo from acks-module-template. Use when the user wants to start a new acks-* module.
+model: sonnet
+effort: medium
 ---
 
 Scaffold a new module in the NocTempre ACKS family. The canonical toolchain and

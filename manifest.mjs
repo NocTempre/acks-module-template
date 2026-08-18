@@ -41,7 +41,7 @@ export const APPEND_OK = [".gitignore"];
  * renamed skill lives on in every repo it ever reached). new-module.mjs
  * copies these trees into fresh scaffolds verbatim.
  */
-export const COPY_DIRS = [".claude/skills", ".claude/rules", ".claude/hooks"];
+export const COPY_DIRS = [".claude/skills", ".claude/rules", ".claude/hooks", ".claude/agents"];
 
 export const COPY_IF_PACK_DATA = ["tools/build-packs.mjs"];
 

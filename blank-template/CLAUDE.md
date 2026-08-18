@@ -23,15 +23,23 @@ Never state it in a second place — write a pointer. Promoting a lesson means
 
 ## Sizing the task
 
+Five synced agents (`.claude/agents/`) carry the model/effort routing —
+`scout` (haiku: search/inventory), `implementer` (sonnet: scoped changes),
+`architect` (opus: design/diagnosis, read-only), `live-tester` (sonnet:
+drives the test world), `doc-scribe` (haiku: docs chores).
+
 - Typo, doc line, pointer fix → do it inline; no plan, no subagent.
-- Lookup or inventory ("where is X", "list all Y") → delegate to a cheap
-  search agent; never spend a frontier model on grep.
-- Mechanical multi-file change → enumerate sites first, then apply; the
-  enumeration is the review.
+- Lookup or inventory ("where is X", "list all Y") → `scout`; never spend a
+  frontier model on grep.
+- Docs-tree chores (gallery rows, changelog drafts, index fixes) →
+  `doc-scribe`.
+- Mechanical multi-file change → `scout` enumerates, `implementer` applies;
+  the enumeration is the review.
 - Runtime-surface change → implement, then walk the feature's
-  `docs/<feature>/TESTING.md` recipe live before it ships.
-- Architecture, cross-feature design, reversing a documented decision → plan
-  mode or a read-only design agent first; the write comes after the ruling.
+  `docs/<feature>/TESTING.md` recipe live (`live-tester`) before it ships.
+- Architecture, cross-feature design, reversing a documented decision, or a
+  bug that resists first diagnosis → `architect` or plan mode first; the
+  write comes after the ruling.
 
 ## Layout
 

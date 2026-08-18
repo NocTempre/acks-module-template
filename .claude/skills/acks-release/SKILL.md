@@ -1,6 +1,8 @@
 ---
 name: acks-release
 description: Cut a major, minor or hotfix release of an ACKS module repo (version bump, live gate, release snapshots, tag, CI watch, manifest verification). Use when the user asks to release/publish/tag an acks-* module, or names a release kind such as "major release".
+model: sonnet
+effort: high
 ---
 
 Release procedure for any NocTempre `acks-*` module (canonical definition:
