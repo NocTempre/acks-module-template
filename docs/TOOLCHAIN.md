@@ -69,6 +69,10 @@ acks-<feature>/
 ## 2. Git conventions
 
 - **Default branch: `main`**, on every repo.
+- **Push what you commit**, in the same motion, unless told otherwise or a
+  concern is flagged first. Exceptions that wait for an explicit go-ahead:
+  force-pushes, anything that could carry licensed text, publishing a
+  previously-private repo, and genuine doubt about scope.
 - **Tags: `v<semver>`** and the tag MUST equal `module.json` `version`
   (CI enforces this).
 - **Compiled LevelDB packs are NOT committed** (changed 2026-07-19; they were,
@@ -221,6 +225,15 @@ being debugged in production. Three standing rules:
   recipe has been walked live in one session. Two rapid patches mean the
   surface's failure mode is not understood; the recipe walk is how it
   becomes understood.
+- **A runtime or manifest change and its release travel together.** After
+  landing one, run the test pass and cut the release in the same motion — a
+  commit pushed after a release is silent drift between what users install
+  and what the repo says they have.
+- **Module schema bumps carry no migrations of their own.** Pre-1.0 dev
+  churn is not migrated; worlds track HEAD. The one exception is ingesting
+  base-engine objects (system or Foundry documents) into module structures —
+  those arrive from data the module does not control and get the full
+  `migrateData` treatment (`acks-minor` §3a).
 
 ## 4a. Live verification before go-live
 
@@ -692,3 +705,39 @@ assigns handlers by IDL property (`element.ondrop = …`), so per-render
 re-instantiation overwrites rather than stacks — it is wasteful and
 off-lifecycle, not duplicating. A single-field or single-row change re-renders
 via `this.render({parts: […]})`, never a bare `this.render()`.
+
+**10j. A config property nobody consumes is implemented or explained, never
+left.** Finding a declared-but-unread entry mid-task is not out of scope — it
+is the moment the gap is cheapest to close. Either wire it to the behavior
+its name promises, or write the reason it stays inert in a comment beside the
+declaration. A knob that does nothing is indistinguishable from a bug to
+every user who turns it.
+
+**10k. A `library: true` module registers document sub-type dataModels in
+`Hooks.once("setup")`, never `init`.** A library module's `init` runs before
+Foundry finalizes `CONFIG.Actor.dataModels`; a model registered there is
+silently absent at world load and every document of that type comes up
+invalid.
+
+**10l. Deferred work you discovered is yours to finish, not to hand back.**
+A migration or merge caught mid-task but blocked on something else is
+completed by the session that gets unblocked — not re-raised as a question.
+Likewise a shared-layer change that breaks a consumer: the breakage belongs
+to the change, and the change's author runs it down.
+
+**10m. A flat lang key is never both a value and a prefix.** Foundry expands
+`lang/en.json` with `expandObject`; a key that is both a leaf and the prefix
+of other keys either silently discards every child (branch defined first) or
+throws and drops the module's ENTIRE translation file (leaf first — the
+symptom is no module key resolving anywhere while core's still do). Suffix
+the label (`nounLabel`, `methods.<key>`). `validate.mjs` gates this.
+
+**10n. `module.json` (and any repo JSON) is written by the Edit tool or
+node — never PowerShell redirection or `Set-Content`.** Windows PowerShell
+5.1's `utf8` writes a BOM (which crashes CI's JSON gate and masks every check
+behind it) and its default read is cp1252 (a repair pass once double-encoded
+every em dash and SHIPPED mojibake titles, undetectable to validate because
+the corruption is valid UTF-8 and valid JSON). `validate.mjs` gates both
+signatures by byte; detect by bytes (`c3 a2 e2 82 ac`), never by eye. A
+CLAUDE.md heading rendering unstripped is a manifest-encoding smell — the
+title-strip regex no-ops on a mojibake dash.
