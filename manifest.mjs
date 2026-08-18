@@ -33,6 +33,16 @@ export const COPY = [
 
 export const APPEND_OK = [".gitignore"];
 
+/**
+ * Directories synced recursively, verbatim, from the TEMPLATE REPO ROOT (not
+ * skeleton/) into every module repo. The template's own copy is canonical —
+ * it is also the live copy a session working in the template repo loads.
+ * Every file under each dir is canon; a file in a target that canon does not
+ * name is drift, and --apply deletes it (removals must propagate, or a
+ * renamed skill lives on in every repo it ever reached).
+ */
+export const COPY_DIRS = [".claude/skills"];
+
 export const COPY_IF_PACK_DATA = ["tools/build-packs.mjs"];
 
 export const RENDER = ["CLAUDE.md"];

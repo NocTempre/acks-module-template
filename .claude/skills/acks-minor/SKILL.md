@@ -17,19 +17,35 @@ all three.
 
 ## 1. Confirm it is actually a minor
 
-A hotfix restores intended behaviour and nothing else. Exactly three things push
-a release over that line — name which one, out loud, before starting:
+**The user declares the kind, and their declaration is final.** CLAUDE.md is
+explicit — a release is a major, minor or hotfix "declared by the user, never
+derived". If they said hotfix, it is a hotfix; ship it as one. Say once, in a
+clause, that it carries a migration or a surface, then do as they asked and do
+not raise it again. Re-deriving the kind from the diff after the user has named
+it is the single most annoying failure mode of these three skills: it reads as
+arguing, it costs a round trip every time, and it is wrong — the tripwires below
+are how to CLASSIFY a release nobody has classified yet, not a veto over someone
+who has.
 
-| Tripwire | Why it cannot be a patch |
+The same goes for the obligations. A minor's snapshots and the go-live gate are
+this repo's standing rules and worth naming when they have not been met — once,
+factually, in the report. They are not grounds for refusing to cut what was
+asked for.
+
+When the user has NOT named a kind, a hotfix restores intended behaviour and
+nothing else, and exactly three things push a release over that line — name
+which one, out loud, before starting:
+
+| Tripwire | Why it would not otherwise be a patch |
 | --- | --- |
 | **Data migration** | A world's stored documents change shape. A patch that rewrites user data is not a repair. |
 | **New setting** | The module gains a knob it did not have; worlds upgrade into a choice. |
 | **New user-facing surface** | A button, dialog, tab or column that was not there. It needs a shot and a guide. |
 
-If none of the three applies, this is a hotfix — stop and use `acks-hotfix`. A
-release does not become a minor because there are *many* fixes, or because the
-diff is large. The size of the diff never sets the kind (TOOLCHAIN §4); one
-crossed tripwire does.
+If none of the three applies and nobody has said otherwise, this is a hotfix —
+stop and use `acks-hotfix`. A release does not become a minor because there are
+*many* fixes, or because the diff is large. The size of the diff never sets the
+kind (TOOLCHAIN §4); one crossed tripwire does, absent a declaration.
 
 **A major is still only ever explicit.** Nothing here promotes itself.
 

@@ -559,15 +559,27 @@ Full ruling and its corollaries: DECISIONS, 2026-07-19.
   routine dev loop (npm, node harness, git incl. commit/tag/push, gh run,
   GitHub API reads). `settings.local.json` stays gitignored for personal
   grants.
-- Shared skills live here in `.claude/skills/` — `acks-new-module`,
-  `acks-hotfix` (patch scoping), `acks-minor` (minor scoping), `acks-release`
-  (mechanics for all three kinds), `acks-sync-toolchain` — and are installed to
-  `~/.claude/skills/` by `sync-toolchain.mjs --install-skills`, so they work
-  from any working directory. Note that when a session runs from one repo with
-  others as additional dirs, only the *session* repo's settings govern
-  permissions; the per-module settings.json pays off in standalone sessions.
+- The family skills are **canonical here in `.claude/skills/`** and sync
+  recursively into each module repo's own `.claude/skills/` via the manifest's
+  `COPY_DIRS` — project-scoped, committed, and drift-gated by
+  `toolchain-check.yml` like every other canonical file. The roster:
+  `acks-bug-triage` (intake ledger + dispositions), `acks-hotfix` (patch
+  scoping), `acks-minor` (minor scoping), `acks-release` (mechanics for all
+  three kinds), `acks-hygiene-sweep` (standing audit + its tooling),
+  `acks-new-module` and `acks-sync-toolchain` (run from this repo). There is
+  **no user-level install**: a `~/.claude/skills/acks-*` copy sits outside
+  every drift gate and once silently clobbered newer text — delete any found.
+- The template repo protects itself with the same `.claude/settings.json`
+  hook set (single-branch-guard, `bgIsolation: none`) as its children, and
+  carries its own `CLAUDE.md` — it is the highest-blast-radius repo in the
+  family and gets no less guidance than the repos it governs.
+- Note that when a session runs from one repo with others as additional dirs,
+  only the *session* repo's settings govern permissions; the per-module
+  settings.json pays off in standalone sessions.
 - The core repo keeps its Claude context in an untracked `CLAUDE.md`
-  (via `.git/info/exclude`) to avoid polluting the AutarchLLC fork.
+  (via `.git/info/exclude`) to avoid polluting the AutarchLLC fork — being
+  untracked, it sits outside `--check` and drifts silently; treat its claims
+  as unverified and re-date it whenever the family's shape changes.
 
 ## 8. Known deviations
 

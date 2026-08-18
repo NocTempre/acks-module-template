@@ -32,5 +32,7 @@ module repo — edit the skeleton in the template, then sync.
 6. Commit in each changed repo
    (`chore: sync toolchain from acks-module-template`) and push — an unpushed
    sync leaves the repo's next CI run red against the already-pushed template.
-7. If skills changed in the template, refresh the user-level installs:
-   `node C:\Proj\acks-module-template\bin\sync-toolchain.mjs --install-skills`
+7. Skills sync with everything else (`COPY_DIRS` in the manifest) — there is
+   no separate install step. If a stale `~/.claude/skills/acks-*` copy exists
+   on this machine, delete it: user-level copies sit outside every drift gate
+   and once silently clobbered newer text.

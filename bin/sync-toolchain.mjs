@@ -1,6 +1,5 @@
 /**
- * Sync the canonical toolchain files into the existing ACKS module repos, and
- * install the shared Claude skills user-level.
+ * Sync the canonical toolchain files into the existing ACKS module repos.
  *
  * Usage:
  *   node bin/sync-toolchain.mjs [--check]            report drift (default; exit 1 if any)
@@ -9,19 +8,22 @@
  *   node bin/sync-toolchain.mjs --repo acks-monsters limit to named repo(s) (repeatable)
  *   node bin/sync-toolchain.mjs --repo-path <abs>    target an explicit repo path (repeatable;
  *                                                    used by the CI toolchain-check workflow)
- *   node bin/sync-toolchain.mjs --install-skills     copy .claude/skills/* -> ~/.claude/skills/
  *
- * What syncs is declared in manifest.mjs. After --apply, run
- * `npm run build:packs && npm run validate` in each repo and commit
- * (compiled packs are gitignored build output — only `packs/_source` can
- * show a diff, and only when content really changed).
+ * What syncs is declared in manifest.mjs. Skills (and any other COPY_DIRS
+ * tree) sync from the template repo root into each module repo's own
+ * `.claude/` — project-scoped, committed, CI-gated. There is no user-level
+ * install: a `~/.claude/skills/acks-*` copy is a drift hazard that once
+ * silently clobbered newer text, and any found should be deleted.
+ *
+ * After --apply, run `npm run build:packs && npm run validate` in each repo
+ * and commit (compiled packs are gitignored build output — only
+ * `packs/_source` can show a diff, and only when content really changed).
  */
 import { execFileSync } from "node:child_process";
 import fs from "node:fs";
-import os from "node:os";
 import path from "node:path";
 import url from "node:url";
-import { COPY, APPEND_OK, COPY_IF_PACK_DATA, RENDER, CANONICAL_DEV_DEPS, CANONICAL_SCRIPTS, DEFAULT_TARGETS } from "../manifest.mjs";
+import { COPY, COPY_DIRS, APPEND_OK, COPY_IF_PACK_DATA, RENDER, CANONICAL_DEV_DEPS, CANONICAL_SCRIPTS, DEFAULT_TARGETS } from "../manifest.mjs";
 
 const TEMPLATE_ROOT = path.dirname(path.dirname(url.fileURLToPath(import.meta.url)));
 const SKELETON = path.join(TEMPLATE_ROOT, "skeleton");
@@ -29,7 +31,6 @@ const SKELETON = path.join(TEMPLATE_ROOT, "skeleton");
 const args = process.argv.slice(2);
 const APPLY = args.includes("--apply");
 const FORCE = args.includes("--force");
-const INSTALL_SKILLS = args.includes("--install-skills");
 const repoFilter = [];
 const repoPaths = [];
 for (let i = 0; i < args.length; i++) {
@@ -132,6 +133,44 @@ function syncAppendable(repoDir, relFile, canonicalText) {
   report(repoDir, relFile, current === null ? "created" : "updated");
 }
 
+/** Every file under a directory, as forward-slash paths relative to it. */
+const walkFiles = (dir, base = dir) => {
+  const out = [];
+  for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+    const full = path.join(dir, entry.name);
+    if (entry.isDirectory()) out.push(...walkFiles(full, base));
+    else out.push(path.relative(base, full).replaceAll("\\", "/"));
+  }
+  return out;
+};
+
+/**
+ * Recursive verbatim sync of a COPY_DIRS tree. Source is the TEMPLATE ROOT,
+ * not skeleton/ — the template's own copy is the canonical, live one. A file
+ * in the target that canon does not name is drift ("extra") and --apply
+ * removes it: removals must propagate, or a renamed skill lives on in every
+ * repo it ever reached.
+ */
+function syncDir(repoDir, relDir) {
+  const srcDir = path.join(TEMPLATE_ROOT, relDir);
+  const canonFiles = walkFiles(srcDir);
+  for (const rel of canonFiles) {
+    syncFile(repoDir, `${relDir}/${rel}`, fs.readFileSync(path.join(srcDir, rel), "utf8"));
+  }
+  const destDir = path.join(repoDir, relDir);
+  if (!fs.existsSync(destDir)) return;
+  const canonSet = new Set(canonFiles);
+  for (const rel of walkFiles(destDir)) {
+    if (canonSet.has(rel)) continue;
+    if (!APPLY) {
+      report(repoDir, `${relDir}/${rel}`, "extra");
+      continue;
+    }
+    fs.rmSync(path.join(destDir, rel));
+    report(repoDir, `${relDir}/${rel}`, "removed");
+  }
+}
+
 function mergePackageJson(repoDir) {
   const file = path.join(repoDir, "package.json");
   const current = readIf(file);
@@ -189,6 +228,9 @@ function syncRepo(repoDir) {
   for (const relFile of COPY) {
     syncFile(repoDir, relFile, fs.readFileSync(path.join(SKELETON, relFile), "utf8"));
   }
+  for (const relDir of COPY_DIRS) {
+    syncDir(repoDir, relDir);
+  }
   for (const relFile of APPEND_OK) {
     syncAppendable(repoDir, relFile, fs.readFileSync(path.join(SKELETON, relFile), "utf8"));
   }
@@ -207,33 +249,16 @@ function syncRepo(repoDir) {
   mergePackageJson(repoDir);
 }
 
-function installSkills() {
-  const src = path.join(TEMPLATE_ROOT, ".claude", "skills");
-  const dest = path.join(os.homedir(), ".claude", "skills");
-  for (const entry of fs.readdirSync(src, { withFileTypes: true })) {
-    if (!entry.isDirectory()) continue;
-    const from = path.join(src, entry.name);
-    const to = path.join(dest, entry.name);
-    fs.mkdirSync(to, { recursive: true });
-    for (const f of fs.readdirSync(from)) fs.copyFileSync(path.join(from, f), path.join(to, f));
-    console.log(`installed skill ${entry.name} -> ${to}`);
+const parent = path.dirname(TEMPLATE_ROOT);
+const targets = repoPaths.length
+  ? repoPaths.map((p) => path.resolve(p))
+  : (repoFilter.length ? repoFilter : DEFAULT_TARGETS).map((t) => path.resolve(parent, t));
+for (const repoDir of targets) {
+  if (!fs.existsSync(repoDir)) {
+    console.log(`\n=== ${path.basename(repoDir)} ===\n  skipped: directory not found`);
+    continue;
   }
+  syncRepo(repoDir);
 }
-
-if (INSTALL_SKILLS) installSkills();
-
-if (!INSTALL_SKILLS || APPLY || repoFilter.length || repoPaths.length) {
-  const parent = path.dirname(TEMPLATE_ROOT);
-  const targets = repoPaths.length
-    ? repoPaths.map((p) => path.resolve(p))
-    : (repoFilter.length ? repoFilter : DEFAULT_TARGETS).map((t) => path.resolve(parent, t));
-  for (const repoDir of targets) {
-    if (!fs.existsSync(repoDir)) {
-      console.log(`\n=== ${path.basename(repoDir)} ===\n  skipped: directory not found`);
-      continue;
-    }
-    syncRepo(repoDir);
-  }
-  console.log(APPLY ? `\ndone: ${drift} file(s) written/skipped-dirty` : `\ndone: ${drift} file(s) drifted from canon`);
-  if (!APPLY && drift) process.exit(1);
-}
+console.log(APPLY ? `\ndone: ${drift} file(s) written/skipped-dirty` : `\ndone: ${drift} file(s) drifted from canon`);
+if (!APPLY && drift) process.exit(1);
