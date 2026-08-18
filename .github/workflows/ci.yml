@@ -40,5 +40,8 @@ jobs:
           npm install --no-audit --no-fund
           npm run build:packs
           npm run validate
-          grep -rn "{{" --include="*.json" --include="*.md" --include="*.mjs" . --exclude-dir=node_modules --exclude-dir=.git \
+          # .claude trees are verbatim COPY_DIRS canon (skills quote Handlebars
+          # syntax in prose) — they are never rendered, so they cannot hold an
+          # unrendered placeholder.
+          grep -rn "{{" --include="*.json" --include="*.md" --include="*.mjs" . --exclude-dir=node_modules --exclude-dir=.git --exclude-dir=.claude \
             | grep -v "pack-data.mjs" && { echo "::error::unrendered placeholders"; exit 1; } || echo "placeholders fully rendered"
