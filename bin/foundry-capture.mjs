@@ -229,15 +229,18 @@ export async function connect({ browser, origin, user, port = 9333, width = 1600
       close: cleanup,
     };
 
-    // The join form is rendered by the page's own scripts, so the user list does
-    // not exist in the served HTML — it appears whenever that render completes.
-    // Poll for it rather than reading once: a fixed wait before the scrape races
-    // the render, and losing that race is indistinguishable from no world
-    // running, which sends the reader looking for a server that is in fact up.
+    // The seat's id comes from the join page's own `game.users`, not from the
+    // form. Foundry served a `<select name="userid">` of every user until v14
+    // build 367, which replaced it with a free-text username box — scraping the
+    // form now finds nothing, and that reads as "no world running". The page's
+    // user data is there either way, so it is the stable place to look.
+    //
+    // Polled rather than read once: the join page is rendered by its own
+    // scripts, and a fixed wait before the scrape races that render.
     const uid = await api.eval(`new Promise(res => { let n = 0; const t = setInterval(() => {
-      const s = document.querySelector('select[name="userid"]');
-      const o = s && [...s.options].find(o => o.text === ${JSON.stringify(user)});
-      if (o?.value) { clearInterval(t); res(o.value); }
+      const list = globalThis.game?.users ? [...game.users] : [];
+      const u = list.find(u => u.name === ${JSON.stringify(user)});
+      if (u?.id) { clearInterval(t); res(u.id); }
       else if (++n > 30) { clearInterval(t); res(null); }
     }, 500); })`);
     if (!uid)
@@ -245,8 +248,12 @@ export async function connect({ browser, origin, user, port = 9333, width = 1600
         `foundry-capture: user "${user}" not on the join page after 15s — is a world running, and is that the user's exact name?`,
       );
 
+    // `userId`, camelCase: the server reads `req.body.userId`. It was `userid`
+    // before v14 build 367, and the old key authenticates as nobody — a 401
+    // whose body is "JOIN.ErrorUserDoesNotExist", which reads as a wrong NAME
+    // rather than a wrong key.
     await api.eval(`fetch("/join", { method: "POST", headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ action: "join", userid: ${JSON.stringify(uid)}, password: "" }) }).then(r => r.text())`);
+      body: JSON.stringify({ action: "join", userId: ${JSON.stringify(uid)}, password: "" }) }).then(r => r.text())`);
     await cdp.send("Page.navigate", { url: `${origin}/game` }, sessionId);
     await sleep(3000);
 
