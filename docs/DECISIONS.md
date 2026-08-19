@@ -484,3 +484,21 @@ family that ships the moment its gates pass loses nothing to speed;
 withholding a passing release only batches unrelated changes. REJECTED: any
 release-cadence rule. TOOLCHAIN §4's "Soak rules" section is renamed
 "Release discipline" and keeps only the non-cadence rules.
+
+### A control byte in source is a rule that is dead and looks alive (2026-08-19)
+
+**Ruled: `validate` fails on any C0 control character other than tab, newline
+and carriage return, anywhere in `scripts/ tools/ templates/ styles/ lang/`.**
+
+A tool writing a file through a shell-quoted string can land a real control
+character where an escape was meant. `"\b"` inside a JavaScript string literal
+is BACKSPACE, so a word-boundary regex written that way compiles to `/…\x08/`
+and matches nothing, ever. The byte is invisible in the editor, invisible in
+`git diff`, the file parses, the suite passes — and the rule it was guarding is
+simply gone. It cost a full re-harvest of eleven books to notice, and only
+because `file(1)` mentioned "overstriking".
+
+This is a byte gate beside the BOM and cp1252 checks, and for the same reason:
+these corruptions are all valid text to every reader except the one that
+matters. Verified by probe — a file carrying one byte fails the gate by name and
+line.
