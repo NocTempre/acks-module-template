@@ -208,23 +208,15 @@ Release procedure (also encoded in the `acks-release` skill):
    reports the new version (needs the repo public; while private use
    `gh release view` — unauthenticated manifest fetches 404).
 
-### Soak rules
-
-The pattern behind this family's worst days is a release followed within
-hours by a chain of hotfixes in the surface it just shipped — the surface was
-being debugged in production. Three standing rules:
+### Release discipline
 
 - **A new surface's `docs/<feature>/TESTING.md` is written during the build,
   before its first release** — not after the first field report. The recipe
   is the definition of "works"; a surface that ships without one shipped
-  untested by construction.
-- **A minor or major soaks 24 hours** before any further release from that
-  repo, except a hotfix for something the release itself broke.
-- **A second hotfix on the same surface within 24 hours stops the line.**
-  The third change to that surface ships only after its full TESTING.md
-  recipe has been walked live in one session. Two rapid patches mean the
-  surface's failure mode is not understood; the recipe walk is how it
-  becomes understood.
+  untested by construction. (This, plus the preflight gate walking the recipe
+  for every changed surface, is the whole defense against shipping a surface
+  that then needs a hotfix chain — there is no release-cadence rule; ship as
+  often as the gates pass. Ruling: DECISIONS.md, 2026-08-19.)
 - **A runtime or manifest change and its release travel together.** After
   landing one, run the test pass and cut the release in the same motion — a
   commit pushed after a release is silent drift between what users install

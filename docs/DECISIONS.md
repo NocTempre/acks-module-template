@@ -469,3 +469,18 @@ sending end.
 Applied to the work in flight: masterwork tiers, shield variants and silver are
 NOT to be pulled out of `config.mjs` until `acks-importer` has released recipes
 for them, however clearly the doctrine says they do not belong there.
+
+## 2026-08-19 — The soak rules are removed; the recipe walk is the whole gate — IN FORCE
+
+Supersedes the 24-hour soak and second-hotfix circuit breaker adopted
+2026-08-18 (within the 7-day window, so the new evidence is named): **the
+owner ruled the diagnosis wrong.** The hotfix clusters in the git history
+were driven by agent decision-churn — implementation wobble, decisions
+reversed mid-build — not by release cadence, and a time gate does not touch
+that cause. What does touch it shipped alongside and STAYS: TESTING.md
+recipes written during the build, the preflight gate walking the recipe for
+every changed surface, and the DECISIONS reversal-evidence rule. A solo-dev
+family that ships the moment its gates pass loses nothing to speed;
+withholding a passing release only batches unrelated changes. REJECTED: any
+release-cadence rule. TOOLCHAIN §4's "Soak rules" section is renamed
+"Release discipline" and keeps only the non-cadence rules.
