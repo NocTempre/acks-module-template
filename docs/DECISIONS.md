@@ -502,3 +502,23 @@ This is a byte gate beside the BOM and cp1252 checks, and for the same reason:
 these corruptions are all valid text to every reader except the one that
 matters. Verified by probe — a file carrying one byte fails the gate by name and
 line.
+
+## 2026-08-20 — The preflight gate reads the working tree, not the commit log
+
+**Ruled:** `release-preflight.mjs` computes changed surfaces with a
+two-argument `git diff <lastTag>` plus untracked `scripts/` files, instead of
+`git diff <lastTag>..HEAD`.
+
+A release is prepared uncommitted — bump, changelog, snapshots, and the
+feature itself all sit in the working tree while the gates run, and the commit
+comes after. `..HEAD` sees none of that, so the recipe check reported "no
+scripts/ surfaces changed since the last tag" and waived itself for exactly
+the run it exists to check. Untracked files matter for the same reason a
+diff alone is not enough: a brand-new feature directory is invisible to
+`git diff` until someone adds it, and a new surface is precisely the case
+where a missing TESTING.md must block.
+
+Found during acks-extras v4.14.0, which passed the gate while carrying four
+changed features and one entirely new one. The release was verified anyway —
+by a live session scoped from the changelog rather than from the gate — which
+is the failure mode worth naming: a silent waiver looks exactly like a pass.

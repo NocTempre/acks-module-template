@@ -188,8 +188,9 @@ Release procedure (also encoded in the `acks-release` skill):
    already exists — **a published version is never retagged**; a version
    that needs fixing gets a new patch number — and requires a
    `docs/<feature>/TESTING.md` live-test recipe for every `scripts/` surface
-   changed since the last tag. The live-verify session (step 4) walks
-   exactly those recipes.
+   changed since the last tag — **changed in the working tree, committed or
+   not, tracked or not**, because a release is normally prepared uncommitted.
+   The live-verify session (step 4) walks exactly those recipes.
 2. `npm run build:packs` — commit `packs/_source` if it changed. The compiled
    dirs are gitignored build output; there is nothing to review or discard.
 3. `npm run validate` (and `npm test` where present).
