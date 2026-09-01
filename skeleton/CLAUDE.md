@@ -63,7 +63,8 @@ drives the test world), `doc-scribe` (haiku: docs chores).
   instead of re-deriving rules; lookup order: `.claude/rules/rules-lookup.md`.
 - **No `ruledata/`, no rules WORDS, no page VALUES.** The procedure ships;
   every number read off a page, every table of options, and every sentence of
-  the book's prose arrives through `acks-importer` from the GM's own copy.
+  the book's prose arrives through the importer (acks-extras'
+  `scripts/importer/`) from the GM's own copy.
   `ip-scan.mjs` gates the mechanical cases; the value rule needs a reviewer.
   The full line — it is finer than it looks — is
   `.claude/rules/ip-doctrine.md`; read it before shipping any constant,

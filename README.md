@@ -1,8 +1,8 @@
 # acks-module-template
 
 Canonical toolchain and scaffold for the NocTempre family of ACKS II Foundry VTT
-modules — today `acks-extras` (merged rules automation) and `acks-importer`
-(book content extraction), plus whatever is scaffolded next.
+modules — today `acks-extras` (merged rules automation, the book-content
+importer included), plus whatever is scaffolded next.
 
 This repo is the **single source of truth** for everything the modules share:
 the release workflow, the pack build/validate harness, git dotfiles, and the

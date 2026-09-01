@@ -95,6 +95,7 @@ imports book content into documents and tables that extras owns and renders.
 The dependency is one-directional and declared. Extras must never name the
 importer — a world with extras alone is the supported configuration, and the
 importer is how content gets in, not a condition of anything working.
+*(Superseded 2026-09-01 — "Two modules become one", below: the edge closed.)*
 
 ## 2026-07-15 — Strict hierarchy over a standalone `acks-lib` — SUPERSEDED (2026-08-01)
 
@@ -324,6 +325,47 @@ literal-text regex that a raw prototype monkeypatch is structurally invisible
 to, and §3's `relationships.requires` reason rule had zero corresponding code in
 validate — both instances of the 2026-08-04 ruling not yet generalized beyond
 the i18n pass. The ruling's scope is now stated as general in TOOLCHAIN §5.
+
+## 2026-09-01 — Two modules become one — IN FORCE
+
+`acks-importer` became the `scripts/importer/` subsystem of `acks-extras`
+(its cookbook at `cookbook/`, its authoring register at `register/`, its
+tooling at `tools/importer/`, its docs at `docs/importer/`). The repo
+`foundryvtt-acks-importer` is a read-only archive of the pre-merge history and
+releases; `DEFAULT_TARGETS` names one repo.
+
+**Why.** The 2026-08-01 ruling kept the importer separate on the argument that
+extras alone was the supported configuration and the importer merely how
+content got in. A month of releases showed the line did not hold: every extras
+feature that reads a printed value declares a table the importer must fill,
+every class, race, trap, variation and vehicle the importer writes is a
+sub-type extras owns, and both repos had to release in step for either to work
+(§10e was the standing cost). Two version numbers described one product; the
+"extras alone" world was one with no book content in it. Same shape as the
+five-way split the first merge dissolved: a boundary nobody wanted, paid for
+in coordination.
+
+**What dissolved.** The last family edge; the tag-first rule as a live
+obligation; every `globalThis.acksExtras?.…` probe in the importer (now static
+relative imports); the two flag scopes an imported document carried; the
+`acks-importer` settings namespace; the second macro compendium; the twinned
+issue forms; two changelogs, two galleries, two live-test suites.
+
+**What it cost.** A world that imported under the separate module holds
+thousands of documents stamped in a scope no module owns — the identity every
+class ref, dedup check and library read depends on. Unlike the first merge,
+this could not be a clean break: the stamps ARE the library. Ruled: a one-shot
+migration on the primary GM (documents at every embedded depth, the three
+world settings, the two client settings per seat, world macros addressing the
+retired global), recorded in a world setting, with the merged importer YIELDING
+entirely while the old module is still active so two importers never write one
+library. The importer's `generated` flag key was renamed `minted` on the way,
+because extras already used `generated`. The extras repo's own
+`docs/DECISIONS.md` carries the mechanics and the rejected alternatives.
+
+**What this does not change.** Structure ships, content is imported
+(2026-07-19) — the cookbook is instructions, the values still arrive from the
+GM's own copy. The IP gates run unchanged over the same files at new paths.
 
 ## Upstreaming into the core system — OPEN
 

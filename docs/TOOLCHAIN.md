@@ -15,21 +15,23 @@ ordinary work.
 | Repo | What it is |
 | --- | --- |
 | `foundryvtt-acks-core` | The ACKS II system (AutarchLLC fork). **Read-only reference — a module task never edits it** (§6). |
-| `foundryvtt-acks-extras` | `acks-extras` — the merged rules-automation module. Subsystems under `scripts/`: `lib abilities classes equipment formation henchmen influence location markets monsters vehicles`. |
-| `foundryvtt-acks-importer` | `acks-importer` — book connection, content and table extraction. `requires acks-extras`. |
+| `foundryvtt-acks-extras` | `acks-extras` — the merged module. Subsystems under `scripts/`: `lib abilities classes equipment formation henchmen influence location markets monsters vehicles importer` — the last is book connection, content and table extraction (its cookbook at `cookbook/`, its authoring register at `register/`, its tooling at `tools/importer/`). |
+| `foundryvtt-acks-importer` | Retired 2026-09-01 — a read-only archive of the importer's pre-merge history and releases. Never sync into it. |
 | `acks-module-template` | This repo: canon, scaffold, shared skills/rules/hooks. |
 | `acks-rules` | LOCAL-ONLY rules extracts, `TEST_ENVIRONMENT.md`, the bug-intake ledger and the hygiene audit. Never committed, never shipped (§6). |
 | `acks-reference` | LOCAL-ONLY reference library — book scans/extracts and the `WIKI-SNAPSHOT` validation oracle (lookup order: the synced `.claude/rules/rules-lookup.md`). |
 
-The two module repos are `manifest.mjs` `DEFAULT_TARGETS` — what
+The one live module repo is `manifest.mjs` `DEFAULT_TARGETS` — what
 `sync-toolchain` writes to. `acks-domains` is **not part of this project**;
 `acks-divine-conduit` is an isolated one-off outside family tooling —
 neither is a sync target, and neither joins this table.
 `acks-git-backups` is a local store, not a module.
 
-`acks-importer → acks-extras` is the only dependency edge inside the family, and
-it is one-directional: extras never names the importer. A world running extras
-alone is the supported configuration.
+There is no dependency edge inside the family: the last one
+(`acks-importer → acks-extras`) closed when the importer became a subsystem
+(DECISIONS, 2026-09-01). The rules written for that edge (§3's intra-family
+waiver, §10a's published-surface rule, §10e) stay in force for the next module
+that grows one.
 
 ## 1. Repo anatomy
 
@@ -110,8 +112,8 @@ acks-<feature>/
   The acks-* modules co-develop as siblings, all at current versions, and these
   GitHub releases are temporary artifacts for testing on a remote — not
   distribution to mixed-version worlds. So for a dependency on another acks-*
-  module (today exactly one: `acks-importer` → `acks-extras`): declare it in
-  `requires`, but do NOT compute or bump `compatibility.minimum`. Let a real
+  module (none today — the importer → extras edge closed 2026-09-01): declare
+  it in `requires`, but do NOT compute or bump `compatibility.minimum`. Let a real
   incompatibility surface in live testing and roll the floor into that module's
   own next patch, naturally. (Third-party deps like lib-wrapper/socketlib still
   carry their real minimums — this waiver is intra-family only.)
@@ -409,10 +411,11 @@ could not get on screen is a gap, and naming it is the whole point.
   run as PART of validation (not just `npm test`). The canonical `validate.mjs`
   auto-runs it last if present and fails on its non-zero exit, so
   `scripts.validate` stays exactly `node tools/validate.mjs` (canon) while the
-  module still gets its own gate. Both module repos use it: acks-importer for
-  its IP-safety register lint (`tools/lint-register.mjs`), acks-extras for the
-  merge guards (no stale family ids, flag scopes resolved, one libWrapper
-  registration per target, template paths present). Chaining a lint into
+  module still gets its own gate. acks-extras uses it for the merge guards
+  (no stale family ids, flag scopes resolved, one libWrapper registration per
+  target, template paths present) and chains the importer subsystem's own
+  gate from it (`tools/importer/validate-extra.mjs`: the IP-safety register
+  lint, the icon ledger, the OSE suites, cookbook drift). Chaining a lint into
   `scripts.validate` directly would drift from canon and fail toolchain-check.
 - **Foundry dev install:** junction, not copy:
   `New-Item -ItemType Junction -Path "$env:LOCALAPPDATA\FoundryVTT\Data\modules\<id>" -Target "C:\Proj\<id>"`
@@ -456,10 +459,11 @@ renamed every pre-existing deviation rather than grandfathering it):
 - Settings, document flags, and socketlib channels are already scoped by the
   Foundry APIs — no check needed.
 
-Declared short keys: extras `acks`, importer `acks`. These were once required to
-be unique family-wide so an id in a bug report grepped back to one owner; the
-merge collapsed nine keys into one and both survivors picked `acks`. Accepted,
-not fixed — a `_id` need only be unique within its pack (DECISIONS, 2026-08-01).
+Declared short key: `acks` (the importer's macros keep their `acksc…` ids under
+it — an id is identity). Keys were once required to be unique family-wide so an
+id in a bug report grepped back to one owner; the merges collapsed every key
+into one repo. Accepted, not fixed — a `_id` need only be unique within its
+pack (DECISIONS, 2026-08-01).
 
 Consumers of another module's hooks use the literal hook name (grep-ability is
 the point); the firing module also publishes its hook names on its API object.
@@ -512,8 +516,9 @@ against accidental re-adds.
 
 **No value read off a page ships, in any repo.** Stricter than the App License
 requires, and deliberate: book content is expressed as extraction *instructions*
-in acks-importer and materialized into world data by a GM who owns the book —
-never as a shipped table, sample, or fallback. `acks-extras` ships no
+in the importer subsystem (`scripts/importer/`, `cookbook/`) and materialized
+into world data by a GM who owns the book — never as a shipped table, sample,
+or fallback. `acks-extras` ships no
 `ruledata/`. Compendium pack items are in-app content and are the exception.
 Full ruling and its corollaries: DECISIONS, 2026-07-19.
 
@@ -627,11 +632,11 @@ path into silence.** A probe for `globalThis.<ns>.satisfies` when the function
 lives at `<ns>.vocab.satisfies` returns false forever, and the layer behind it
 degrades invisibly. Code that depends on a shared surface inside its own repo
 **imports it statically** — a relative path — so a moved surface fails at LOAD,
-loudly. **Across repos there is no relative import, ever**: the one family edge
-(importer → extras) is consumed through the published surface —
-`globalThis.acksExtras` / `game.modules.get("acks-extras").api` — resolved
-ONCE at `ready`, with absence treated as a load-time failure, never a
-silently-defaulted per-call-site probe. Reaching into another repo's internal
+loudly. **Across repos there is no relative import, ever**: a family edge (the
+importer → extras edge, until the importer became a subsystem) is consumed
+through the published surface — `globalThis.acksExtras` /
+`game.modules.get("acks-extras").api` — resolved ONCE at `ready`, with absence
+treated as a load-time failure, never a silently-defaulted per-call-site probe. Reaching into another repo's internal
 tree (a relative ESM path, a private flag scope, an internal template path) is
 the same bug in three costumes. Runtime `globalThis` probing is only for
 OPTIONAL integrations, and the probe must log once when the surface is absent,
@@ -657,15 +662,17 @@ what keeps a bug in the arithmetic from becoming a bug in the campaign.
 whose runtime writes flags or Active Effects to world documents ships a "strip
 module data" tool (macro + API, run while still enabled) and a README
 **Disabling & uninstalling** section. A module owning document sub-types is
-load-bearing: `acks-extras` owns several, so `acks-importer`'s README must warn
-that Foundry's dependency dialog pre-checks extras for deactivation, which makes
-those documents unavailable — reversibly, no data lost — until re-enabled.
+load-bearing: `acks-extras` owns several, so any module that `requires` it must
+warn in its README that Foundry's dependency dialog pre-checks extras for
+deactivation, which makes those documents unavailable — reversibly, no data
+lost — until re-enabled.
 
 **10e. Cross-repo feature halves land dependency-first, in the same motion.**
-Before tagging `acks-importer` against a symbol in `acks-extras`, that symbol
-must exist in extras HEAD **and** in its released tag. Guarded reads make the
-gap invisible, not acceptable. (Inside `acks-extras` the merge removed this
-failure mode: both halves are one commit.)
+Before tagging a dependent module against a symbol in the module it requires,
+that symbol must exist in the dependency's HEAD **and** in its released tag.
+Guarded reads make the gap invisible, not acceptable. (Inside `acks-extras` the
+merges removed this failure mode — the importer's since 2026-09-01: both halves
+are one commit.)
 
 **10f. Every README carries a GM "Getting started / Usage" walkthrough.**
 Numbered steps from empty world to the feature visibly working, naming the exact
