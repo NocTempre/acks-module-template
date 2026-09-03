@@ -403,7 +403,7 @@ where the surface it shows has changed. The owner rejected the previous
 rule is the kind table — a minor release never has to re-capture surfaces its
 changes did not touch. §4b and the acks-release skill amended to match.
 
-## 2026-08-15 — Math may ship; the book's words may not
+## 2026-08-15 — Math may ship; the book's words may not — IN FORCE except its citation clause (superseded 2026-09-03)
 
 **Why this is stricter than it has to be.** These modules are licensed, and
 nothing here is a compliance minimum. The owner is deliberately prototyping a
@@ -468,7 +468,9 @@ Spelunking rows already left this way, and `jumping.mjs` was already built this
 way. What made the difference was never how many numbers there were — it is
 whether the thing is a rule being *performed* or a value being *read*.
 
-**Enforcement.** `ip-scan.mjs` gains a citation signal: a book sigil next to a
+**Enforcement** (SUPERSEDED 2026-09-03 — the citation signal is removed and the
+page reference ships; questions 1 and 2 are both reviewer-only)**.**
+`ip-scan.mjs` gains a citation signal: a book sigil next to a
 page or chapter reference, inside shipped text (`lang/`, templates, pack
 sources), is a hard failure. Code comments and `docs/` are exempt and stay
 exempt — a comment citing RR p. 159 is attribution, and the comment doctrine
@@ -565,7 +567,7 @@ changed features and one entirely new one. The release was verified anyway —
 by a live session scoped from the changelog rather than from the gate — which
 is the failure mode worth naming: a silent waiver looks exactly like a pass.
 
-## 2026-09-02 — A citation without a locator word is still a citation
+## 2026-09-02 — A citation without a locator word is still a citation — SUPERSEDED (2026-09-03)
 
 **Ruled:** `ip-scan.mjs`'s CITATION signal makes the locator word
 (`p.` / `pp.` / `ch.` / `page`) optional and bounds the page number to three
@@ -597,3 +599,63 @@ Found while remediating the leaks the v6.2.0 pass had gone looking for and
 missed. Two lessons landed elsewhere rather than here: printed magnitudes
 reach a reader through *labels* as readily as through constants, and searching
 for values the code READS does not find values the code only PRINTS.
+
+## 2026-09-03 — The page reference ships; removing it protected nothing — IN FORCE
+
+**Owner ruling.** The IP protection is *not to ship numbers and not to ship
+prose*. A reference to the page is neither, and it **does** ship — in `lang/`,
+in a template, in a pack source, in a comment, in `docs/`. `ip-scan.mjs`'s
+CITATION signal and its `LOCATOR_ONLY` companion are removed; `ATTRIBUTION` is
+narrowed from the book and publisher NAMES to a copyright notice. This
+supersedes the enforcement clause of 2026-08-15 and the whole of 2026-09-02.
+
+**Why a reference is not the thing being protected against.** Reproduction
+substitutes for the book: a reader who has the sentence or the number does not
+need the page. A citation does the opposite — it only pays out to someone
+holding the book, so it can never be the substitution, and it sends people
+toward the purchase rather than around it. It is also the module's audit
+trail: it is what lets a Judge check the applied rule against the page, and
+what lets a later session tell a structural constant from a printed one.
+
+**The new evidence, which 2026-09-02 did not have.** That entry was one day
+old and was written from the widened regex finding 43 strings. Applying the
+rule to all 43 is what produced the evidence:
+
+- **21** were paraphrases whose prose and printed magnitudes went out together
+  with the citation. That is the rule working, and those stand.
+- **22** were rule sentences that kept their text and lost only the pointer —
+  "Domain rulers may hire henchmen of any level below their own", the
+  Irrefusable Offer dialog, the animal-recruitment gate, the secret-roll note.
+  The rule turned attributed derivative text into **unattributed** derivative
+  text, on the exact axis the doctrine exists to defend.
+
+The gate could not have told those two cases apart, because the signal it keyed
+on — the citation — is the harmless half of both. A rule whose mechanism fires
+on the correct behaviour will be satisfied by deleting the correct behaviour;
+that is what happened, string by string, for 22 strings.
+
+**Accepted cost: question 1 loses its mechanism entirely.** The three-question
+test of 2026-08-15 put "is it a sentence about the rule?" first and treated the
+citation signal as its mechanical half. It never was one — it detected a
+*marker* that honest authors attach and careless ones omit, which is the
+population inversion 2026-09-02 named and then failed to follow to its
+conclusion. Question 1 now joins question 2: reviewer-only. `ip-scan` decides
+paths and paste artifacts, and §4 must stop reading a clean run as a content
+verdict. That is written into the scanner's own header so it cannot be
+misread again.
+
+**ATTRIBUTION narrowed.** It flagged `all rights reserved`, `adventurer
+conqueror king` and `autarch`. The latter two are the plainest references
+there are, and banning them contradicts the ruling; a lang string naming the
+book a Judge needs is exactly right. What remains is the reservation-of-rights
+line and a copyright notice naming the publisher — nobody types either to cite
+a page, so in machine data they mean a page footer travelled in with the text
+above it. Templates are now scanned for that signal instead of for citations,
+comments included, since a paste is a paste wherever it landed.
+
+**What did not change.** Numbers and prose. The deferred magnitude program is
+untouched and still owed: ~125 `lang/` keys across the family carry a printed
+figure in text a user reads, and `scripts/influence/constants.mjs`, the
+henchman-cap arithmetic and the `item-loss-from-damage` threshold hold values
+read off a page. Those are question 2, and question 2 was never about
+citations.

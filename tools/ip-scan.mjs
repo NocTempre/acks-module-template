@@ -30,9 +30,11 @@ const STRICT = process.argv.includes("--strict");
 const FORBIDDEN_FILES = [/^RULES\.md$/iu, /^PROFICIENCIES\.md$/iu, /Reactions-Reference\.md$/iu];
 /* Extraction-pipeline state: holds raw fragments lifted from the user's PDFs. */
 const FORBIDDEN_PATHS = [/(^|[/\\])_proposals([/\\]|$)/u, /(^|[/\\])_manifest([/\\]|$)/u, /(^|[/\\])_ledger\.json$/u, /(^|[/\\])acks-rules([/\\]|$)/u];
-/* Publisher attribution has no business inside machine data — in a pack source
- * or cookbook it means text was copied in wholesale rather than authored. */
-const ATTRIBUTION = /all rights reserved|adventurer conqueror king|autarch/iu;
+/* A COPYRIGHT NOTICE inside machine data. Naming the book or its publisher is
+ * a reference and is welcome anywhere; a reservation-of-rights line is not one
+ * — nobody types "all rights reserved" to cite a page — so in a pack source or
+ * a cookbook it means a page footer travelled in with the text above it. */
+const ATTRIBUTION = /all rights reserved|(?:©|\(c\)|copyright)\s*(?:\d{4}[\s,–—-]*)*autarch/iu;
 const DATA_GLOBS = [/packs[/\\]_source[/\\].*\.json$/u, /^cookbook[/\\].*\.json$/u, /^register[/\\].*\.json$/u];
 /* A string leaf this long in a data file is a paragraph, not a label. */
 const PROSE_CHARS = 1500;
