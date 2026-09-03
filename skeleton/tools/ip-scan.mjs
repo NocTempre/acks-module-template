@@ -58,8 +58,13 @@ const ATTRIBUTION = /all rights reserved|adventurer conqueror king|autarch/iu;
  * Deliberately NOT applied to source comments or docs/: a comment citing a page
  * is attribution, and the family's comment doctrine asks for it. What is banned
  * is a citation in something a player or Judge READS — lang, templates, packs.
+ *
+ * The locator word is OPTIONAL: the commonest way to write a citation omits it
+ * — "(RR 168)", not "RR p. 168" — and a gate that matches only the pedantic
+ * spelling matches nothing. The page number is bounded to three digits, so a
+ * bare sigil standing beside an ordinary quantity is not read as a reference.
  */
-const CITATION = /\b(?:RR|JJ|MM|BTA|AX\s?\d|revised rulebook|judges?'? journal|monstrous manual)\b[\s,.]*(?:pp?\.|ch(?:apter|\.)|page)\s*\d/iu;
+const CITATION = /\b(?:RR|JJ|MM|BTA|AX\s?\d|revised rulebook|judges?'? journal|monstrous manual)\b[\s,.]*(?:pp?\.|ch(?:apter|\.)|page)?\s*\d{1,3}\b/iu;
 /*
  * ...unless the string is NOTHING BUT a citation. A value of "BTA p.62" is a
  * LOCATOR — it says where to look in the reader's own copy and reproduces

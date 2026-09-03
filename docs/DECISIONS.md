@@ -564,3 +564,36 @@ Found during acks-extras v4.14.0, which passed the gate while carrying four
 changed features and one entirely new one. The release was verified anyway —
 by a live session scoped from the changelog rather than from the gate — which
 is the failure mode worth naming: a silent waiver looks exactly like a pass.
+
+## 2026-09-02 — A citation without a locator word is still a citation
+
+**Ruled:** `ip-scan.mjs`'s CITATION signal makes the locator word
+(`p.` / `pp.` / `ch.` / `page`) optional and bounds the page number to three
+digits. `LOCATOR_ONLY` is unchanged, so a string that is *nothing but* a
+reference — the importer cookbook's ~1,250 `cite` fields — stays exempt.
+
+The 2026-08-15 enforcement clause above described the signal as "a book sigil
+next to a page or chapter reference", and the regex written from it required
+one of those words to appear. Almost nobody writes citations that way. The
+shipped form is `(RR 168)`, and the gate could not see it: `acks-extras`
+carried 43 of them in `lang/en.json` — rule sentences, a printed weekly
+distribution of the hiring pool, several modifier magnitudes, a level cap and
+a wage rule, each with a page number attached — through every release up to
+and including v6.2.0, while `ip-scan` reported clean on every one of them.
+
+The failure is worth naming precisely, because it is not "the regex was too
+narrow". Question 1 of the three-question test was the half that was supposed
+to be *mechanical*, and its mechanism matched only the spelling a careful
+author would use — the one an author who knew the rule would already have
+avoided. A gate calibrated to the pedantic form of a mistake is a gate that
+only catches people who were not making it. That is worse than no gate,
+because §4's release procedure treats a clean `ip-scan` as evidence.
+
+**Bounding the number is not cosmetic.** Without it, `MM` beside any quantity
+in a monster string reads as a reference. Three digits covers the page range
+of all three core books and leaves ordinary four-figure quantities alone.
+
+Found while remediating the leaks the v6.2.0 pass had gone looking for and
+missed. Two lessons landed elsewhere rather than here: printed magnitudes
+reach a reader through *labels* as readily as through constants, and searching
+for values the code READS does not find values the code only PRINTS.
