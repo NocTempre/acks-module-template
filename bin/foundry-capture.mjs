@@ -16,7 +16,9 @@
  *
  * The browser it launches is a separate throwaway profile: it cannot disturb a
  * browser the developer is using, and closing UI windows to compose a frame
- * (below) affects only this session's DOM. No world documents are written.
+ * (below) affects only this session's DOM. Nothing the driver does on its own
+ * writes to the world; what a run creates through it is recorded in the
+ * fixture ledger (below) and removed by it.
  *
  * NOTHING MACHINE-SPECIFIC LIVES HERE. Browser binary, origin and user name
  * are arguments; their values are local-only and belong in the machine's
@@ -33,19 +35,34 @@
  *   const api = await connect({ browser: EDGE, origin: ORIGIN, user: "Gamemaster" });
  *   try {
  *     await api.compose();                       // clear popups from other modules
- *     const { id, sel } = JSON.parse(await api.eval(`(async () => {
- *       const a = await Actor.create({ name: "Snapshot Fixture — Inn", type: "acks-extras.location" });
+ *     const inn = await api.create("Actor", { name: "Snapshot Fixture — Inn", type: "acks-extras.location" });
+ *     const sel = await api.eval(`(async () => {
+ *       const a = await fromUuid(${JSON.stringify(inn.uuid)});
  *       await a.sheet.render(true);
- *       return JSON.stringify({ id: a.id, sel: "#" + a.sheet.id });
- *     })()`));
+ *       return "#" + a.sheet.id;
+ *     })()`);
  *     await sleep(2000);
  *     await api.compose(sel);                    // sweep anything the write popped up
  *     console.log(await api.shot("docs/releases/v0.3.0/location-sheet.png", sel));
- *     console.log(await api.eval(`(async () => {  // destroy the fixture, prove it
- *       const a = game.actors.get("${id}"); if (a) await a.delete();
- *       return game.actors.get("${id}") ? "STILL PRESENT" : "deleted";
- *     })()`));
- *   } finally { api.close(); }
+ *   } finally {
+ *     console.log(await api.sweepTracked());     // { removed, missing, failed } — quote it in the report
+ *     api.close();
+ *   }
+ *
+ * THE FIXTURE LEDGER. Every document a run creates is recorded by uuid the
+ * moment it exists — `create()` records what it makes; `track()` records one
+ * made any other way, including one the feature wrote itself once its id has
+ * been read back — and `sweepTracked()` deletes exactly that list, newest
+ * first, re-resolving each uuid to prove it is gone. It returns what it
+ * removed, what it could not find and what refused to go, and the report
+ * quotes that object. Teardown keys on the run's own uuids and on nothing
+ * else: the world is shared, so a delete keyed on a name, a name prefix, a
+ * folder, a type or a time window takes other sessions' documents with
+ * yours. Every `track` prints its uuid, so a run that dies before its sweep
+ * leaves its ids in its log; the next run re-tracks those ids and sweeps —
+ * it never goes looking by name. `close()` warns while the ledger holds
+ * entries. A session driving a browser pane instead keeps the same list and
+ * runs `pageSweep(entries)` there — the very expression the driver uses.
  *
  * SHOOTING A CHAT CARD takes two extra moves, and skipping either one fails in
  * a way that reads as "the message was never posted":
@@ -67,6 +84,139 @@ import os from "node:os";
 import path from "node:path";
 
 export const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+
+/**
+ * Page-side expression that deletes exactly `entries` (`[{uuid, kind}]`, in
+ * the order given) and returns `{removed, missing, failed}` as JSON, each
+ * entry carrying its uuid, kind and name. A uuid whose container does not
+ * resolve at all (unknown document type, absent pack) lands in `failed` with
+ * the reason, so `missing` means precisely "resolved, and found nothing".
+ * Every removal is re-resolved after the delete; a document still present is
+ * `failed`, never `removed`. Exported so a session driving a browser pane can
+ * sweep its own ledger with the same code the driver runs.
+ */
+export function pageSweep(entries) {
+  return `(async () => {
+    const out = { removed: [], missing: [], failed: [] };
+    for (const entry of ${JSON.stringify(entries)}) {
+      if (!foundry.utils.parseUuid(entry.uuid)?.collection) {
+        out.failed.push({ ...entry, error: "unresolvable uuid: unknown document type or absent pack" });
+        continue;
+      }
+      const doc = await fromUuid(entry.uuid);
+      if (!doc) { out.missing.push(entry); continue; }
+      const found = { ...entry, name: doc.name ?? null };
+      try { await doc.delete(); }
+      catch (err) { out.failed.push({ ...found, error: String(err?.message ?? err) }); continue; }
+      if (await fromUuid(entry.uuid)) out.failed.push({ ...found, error: "still present after delete()" });
+      else out.removed.push(found);
+    }
+    return JSON.stringify(out);
+  })()`;
+}
+
+/**
+ * Page-side expression creating one document of `kind` from `data` — embedded
+ * in the document at `parentUuid` when given — and returning JSON: `{doc:
+ * {uuid, id, name}}`, `{doc: null}` when Foundry's create resolved to nothing,
+ * or `{error}` when the type or the parent does not resolve.
+ */
+function pageCreate(kind, data, parentUuid = null) {
+  return `(async () => {
+    const kind = ${JSON.stringify(kind)}, parentUuid = ${JSON.stringify(parentUuid)};
+    const cls = foundry.utils.getDocumentClass(kind);
+    if (!cls) return JSON.stringify({ error: "unknown document type: " + kind });
+    const parent = parentUuid ? await fromUuid(parentUuid) : null;
+    if (parentUuid && !parent) return JSON.stringify({ error: "parent not found: " + parentUuid });
+    const doc = await cls.create(${JSON.stringify(data)}, parent ? { parent } : {});
+    return JSON.stringify({ doc: doc ? { uuid: doc.uuid, id: doc.id, name: doc.name ?? null } : null });
+  })()`;
+}
+
+/**
+ * The fixture ledger behind `api.create` / `api.track` / `api.tracked` /
+ * `api.sweepTracked`: uuid → `{uuid, kind}` in creation order, bound to an
+ * `evaluate(expression)` that runs page-side code and returns its value.
+ * `connect()` composes it into the capture handle; it is exported so the same
+ * ledger can be driven against any page evaluator, a test's included.
+ */
+export function fixtureLedger(evaluate) {
+  const ledger = new Map();
+  const isTypeName = (kind) => /^[A-Z][A-Za-z]+$/.test(kind ?? "");
+  // A bare id needs its document type to become a uuid; a uuid carries its
+  // type two segments from the end (`Actor.a`, `Actor.a.Item.b`,
+  // `Compendium.scope.pack.Actor.a`), and a `kind` given beside one must agree.
+  const normalize = (ref, kind) => {
+    if (typeof ref !== "string" || !ref) throw new Error("foundry-capture: track() needs a uuid or id string");
+    if (kind !== undefined && !isTypeName(kind)) throw new Error(`foundry-capture: "${kind}" is not a document type name (Actor, Item, Scene, JournalEntry, …)`);
+    if (ref.startsWith(".")) throw new Error(`foundry-capture: "${ref}" is a relative uuid — track the absolute one`);
+    if (!ref.includes(".")) {
+      if (!kind) throw new Error(`foundry-capture: track("${ref}") — a bare id needs its document type as the second argument`);
+      return { uuid: `${kind}.${ref}`, kind };
+    }
+    const parts = ref.split(".");
+    const type = parts[parts.length - 2];
+    if (!isTypeName(type)) throw new Error(`foundry-capture: "${ref}" is not a document uuid`);
+    if (kind && kind !== type) throw new Error(`foundry-capture: uuid "${ref}" is a ${type}, not a ${kind}`);
+    return { uuid: ref, kind: type };
+  };
+
+  const api = {
+    /**
+     * Record a document this run created — by uuid, or by id plus its document
+     * type — so `sweepTracked()` deletes it. Idempotent per uuid; returns the
+     * uuid; prints it, so the run's log holds every id even if the run dies
+     * before its sweep.
+     */
+    track(uuidOrId, kind) {
+      const entry = normalize(uuidOrId, kind);
+      if (!ledger.has(entry.uuid)) {
+        ledger.set(entry.uuid, entry);
+        console.log(`  track: ${entry.uuid}`);
+      }
+      return entry.uuid;
+    },
+
+    /** The ledger as it stands: `[{uuid, kind}]` in creation order. */
+    tracked() {
+      return [...ledger.values()];
+    },
+
+    /**
+     * Create one document in page context and track it. `data` is the plain
+     * create payload (JSON; `type` selects a sub-type); `parent` is the uuid of
+     * the document an embedded one is created inside. Resolves to `{uuid, id,
+     * name}`. A create that resolves to nothing throws, naming the likeliest
+     * cause — a sub-type the server has not loaded, which needs a world
+     * relaunch — rather than handing back a fixture that does not exist.
+     */
+    async create(kind, data, { parent = null } = {}) {
+      if (!isTypeName(kind)) throw new Error(`foundry-capture: create() needs a document type name, got "${kind}"`);
+      const result = JSON.parse(await evaluate(pageCreate(kind, data, parent)));
+      if (result.error) throw new Error(`foundry-capture: create(${kind}) — ${result.error}`);
+      if (!result.doc) throw new Error(`foundry-capture: ${kind}.create resolved to nothing — a sub-type the server has not loaded (relaunch the world), or a type this seat may not create`);
+      api.track(result.doc.uuid, kind);
+      return result.doc;
+    },
+
+    /**
+     * Delete every tracked document, newest first, proving each is gone.
+     * Resolves to `{removed, missing, failed}`: `missing` resolved to nothing
+     * (already deleted, or never the id you thought); `failed` refused or is
+     * still present, and stays in the ledger so a retry re-runs exactly it.
+     * Deletes nothing the ledger does not name.
+     */
+    async sweepTracked() {
+      const entries = [...ledger.values()].reverse();
+      if (!entries.length) return { removed: [], missing: [], failed: [] };
+      const out = JSON.parse(await evaluate(pageSweep(entries)));
+      for (const e of [...out.removed, ...out.missing]) ledger.delete(e.uuid);
+      for (const e of out.failed) console.warn(`  warn: could not remove ${e.uuid}${e.name ? ` (${e.name})` : ""}: ${e.error}`);
+      return out;
+    },
+  };
+  return api;
+}
 
 class Cdp {
   constructor(ws) {
@@ -166,6 +316,8 @@ export async function connect({ browser, origin, user, port = 9333, width = 1600
     await cdp.send("Runtime.enable", {}, sessionId);
     await sleep(2500);
 
+    // The ledger's evaluator resolves `api` lazily; the handle is defined just below.
+    const fixtures = fixtureLedger((expression) => api.eval(expression));
     const api = {
       /** Evaluate an expression in page context; awaits promises, throws on page errors. */
       async eval(expression) {
@@ -226,7 +378,14 @@ export async function connect({ browser, origin, user, port = 9333, width = 1600
         return { file, bytes, clip };
       },
 
-      close: cleanup,
+      ...fixtures,
+
+      /** Tear the session down (see `cleanup`). Warns while the ledger still holds entries. */
+      close() {
+        const left = fixtures.tracked();
+        if (left.length) console.warn(`  warn: ${left.length} tracked fixture(s) not swept — sweepTracked() before close(): ${left.map((e) => e.uuid).join(", ")}`);
+        cleanup();
+      },
     };
 
     // The seat's id comes from the join page's own `game.users`, not from the

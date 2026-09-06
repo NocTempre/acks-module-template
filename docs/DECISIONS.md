@@ -659,3 +659,42 @@ figure in text a user reads, and `scripts/influence/constants.mjs`, the
 henchman-cap arithmetic and the `item-loss-from-damage` threshold hold values
 read off a page. Those are question 2, and question 2 was never about
 citations.
+
+## 2026-09-05 — Teardown is by the run's own ids; the prose that said so did not hold — IN FORCE
+
+Several live-tester agents shared the one test world. One ended its walk with
+a scratchpad cleanup that deleted every document whose name began with
+`Plate ` — its own fixtures, as far as it knew — and took another agent's
+party with them, dissolving that agent's formation mid-walk.
+`live-testing.md`'s concurrency section already said to act only on your own
+artifacts. The agent was not ignoring the rule; it was applying it with the
+wrong notion of "own". A name is a description, and two runs describing their
+fixtures the same way is the ordinary case, not a coincidence. CLAUDE.md's
+ladder for a lesson that recurred despite being written down is a gate, with
+the prose it replaces deleted.
+
+**Ruled.** `bin/foundry-capture.mjs` carries a fixture ledger: `api.create()`
+records the uuid of what it makes, `api.track(uuidOrId, kind)` records a
+document made any other way, and `api.sweepTracked()` deletes exactly that
+list — newest first, each re-resolved to prove it is gone — and returns what
+it removed, what it could not find and what refused. Teardown keys on the
+run's own uuids and on nothing else; a sweep by name, prefix, folder, type or
+time window is forbidden. The live-tester agent and the live-testing rule now
+state the mechanism where they stated the intention, and the sentence that
+failed is gone from both. A run that dies before its sweep has its ids in its
+log (every `track` prints), and re-tracking them is the recovery.
+
+**Rejected — refusing name-keyed deletes inside `api.eval()`.** A regex over
+the caller's expression would catch `startsWith("Plate ")` and miss the same
+sweep written over a folder or a type: a gate calibrated to one spelling of
+the mistake (2026-09-02, above). The gate is a sweep that cannot be written
+wrongly, not a detector for the ones that can.
+
+**Rejected — a file-backed ledger that survives a crashed run.** A second
+store that can go stale, be shared by two runs, or name documents a later
+session then deletes on trust. The log already carries the ids, and
+re-tracking them is an explicit act by whoever reads it.
+
+**Cost.** The ledger is mechanical only through the driver. A session that
+creates fixtures in a browser pane keeps the list by hand; `pageSweep()` is
+exported so the sweep it runs there is the driver's own code.
