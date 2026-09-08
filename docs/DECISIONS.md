@@ -698,3 +698,46 @@ re-tracking them is an explicit act by whoever reads it.
 **Cost.** The ledger is mechanical only through the driver. A session that
 creates fixtures in a browser pane keeps the list by hand; `pageSweep()` is
 exported so the sweep it runs there is the driver's own code.
+
+---
+
+## 2026-09-07 — The window contract gates what a caption can reach, not only what a window can scroll — IN FORCE
+
+Chrome's Issues panel, run against a live world, reported three classes the
+family's checks had never looked for: a control inside a `<summary>`, a form
+field with neither `id` nor `name`, and a `<label>` associated with nothing —
+265 resources of the last one. Two of the three are decidable from a template's
+own source, and one of them had already shipped as a live bug: `acks-extras`
+carried 29 literal `id=` attributes across four item templates, so opening two
+trap items made the second sheet's caption focus the FIRST sheet's field.
+
+**Ruled.** `validate.mjs` §8 grows from three checks to six, and its charter
+widens from "a window can be reached and read" to "and every control on it can
+be reached from the keyboard, named, and told apart from its twin in a second
+copy of the same window": interactive content inside a `<summary>` (an
+href-less `<a>` diagnosed separately — it is not focusable at all), a `<label>`
+no runtime pass could rescue, and a literal `id=` in a `.hbs`. Each takes an
+escape comment on or just above its line, in the shape the existing checks
+established. `.claude/rules/ui-layout.md` states the contract; the mechanics
+stay in the file.
+
+**Rejected — failing every `<label>` that carries no `for`.** That is the
+CONFORMANT source shape in this family: the id must be unique per window, so
+the binding is made after render (`acks-extras` `scripts/lib/a11y.mjs`) and a
+template that wrote its own would be the defect. The check fails only a caption
+the runtime pass provably cannot reach — no `for`, no wrapped control, and every
+control before its parent's close already claimed by a label of its own.
+
+**Rejected — matching a control inside a nested `<label>` as the boundary.**
+Tried, and it produced two false positives on shipped templates within one run:
+a caption followed by a checkbox row and THEN its own field is correct markup.
+The first fix — ignoring any label below the top depth — silenced a real defect
+in the same pass, which is the trade a gate must never make. The rule that
+holds is the runtime pass's own: a control another label wraps is spoken for,
+so its whole subtree is skipped, and the caption fails only when nothing
+unclaimed is left.
+
+**Cost.** The checks parse markup with a tag tokenizer rather than a DOM, so a
+Handlebars branch that opens a tag in one arm and closes it in another leaves
+an extent it cannot follow. Every one of those resolves to silence, which means
+the gate under-reports by construction; it is a floor, not an audit.
