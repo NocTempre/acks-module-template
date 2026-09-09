@@ -224,6 +224,15 @@ Release procedure (also encoded in the `acks-release` skill):
   landing one, run the test pass and cut the release in the same motion — a
   commit pushed after a release is silent drift between what users install
   and what the repo says they have.
+- **On a shared working tree, gate what you STAGED, not what is on disk.**
+  `build:packs`, `validate` and `test` read the files in the tree, and on a
+  machine running parallel sessions those include every other session's
+  in-flight hunk — while CI checks out the commit. Stage the release, then run
+  the gates against that tree (`git write-tree`, `git archive` it somewhere
+  clean, gate there), or the green being reported belongs to a tree nobody will
+  ever build. The same discipline catches a `git add` that swept up a neighbour
+  mid-write: diff the staged blob against HEAD rather than trusting the file,
+  and excise the foreign hunk with `git apply --cached` before it is committed.
 - **Module schema bumps carry no migrations of their own.** Pre-1.0 dev
   churn is not migrated; worlds track HEAD. The one exception is ingesting
   base-engine objects (system or Foundry documents) into module structures —
