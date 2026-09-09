@@ -741,3 +741,54 @@ unclaimed is left.
 Handlebars branch that opens a tag in one arm and closes it in another leaves
 an extent it cannot follow. Every one of those resolves to silence, which means
 the gate under-reports by construction; it is a floor, not an audit.
+
+## 2026-09-09 — The template's own tree was outside every gate it publishes — IN FORCE
+
+**Problem.** `docs/LICENSING.md` describes two layers protecting the family
+from committing licensed material: a pre-commit quarantine armed by `npm
+install`, and CI as the backstop for an unarmed clone. Both sentences are true
+of module repos and were false of this repo, which is where canon is authored
+and from which every module syncs.
+
+- The hook cannot arm itself here. `prepare` sets `core.hooksPath`, and this
+  repo has no `package.json` — it generates one for module repos rather than
+  carrying one — so `npm install` never runs and a fresh clone is ungated.
+- CI never looked at this tree. `ci.yml` scaffolds a module from `skeleton/`
+  and validates it in a SIBLING directory, so the `ip-scan` inside that
+  `npm run validate` is structurally unable to see a file committed here. The
+  scan that takes a repo private lives in `release-module.yml`, the reusable
+  workflow module repos call; it scans the caller.
+- `tools/` was outside everything. It is not synced from `skeleton/`, not
+  compared to it by `sync-toolchain --check` (which audits module repos against
+  `skeleton/`, and correctly reported zero drift while this diverged), and not
+  syntax-checked by `ci.yml`. Its two files are the IP gate: `pre-commit` execs
+  `ip-quarantine.mjs`, which imports `./ip-scan.mjs` by relative path. That copy
+  had fallen behind canon and was missing the `ruledata/` path ban — the one
+  ban added after a module shipped book tables as `ruledata/*.json` in every
+  release zip from v0.1.0 to the 2026-07-19 audit.
+
+**Ruling.** `ci.yml` gains two steps ahead of the scaffold: a scan of this tree
+with `skeleton/tools/ip-scan.mjs`, and a `cmp` of every `tools/*.mjs` against
+its `skeleton/` original. `tools/ip-scan.mjs` is refreshed to canon.
+`LICENSING.md` states how this repo arms, instead of describing a mechanism it
+does not have.
+
+**Why the skeleton copy runs the scan.** Canon is what every other repo is
+gated by, and reading it from `skeleton/` means the gate does not depend on the
+very copy whose currency is in question. The `cmp` step keeps that copy
+current; the scan does not wait on it.
+
+**Rejected — a root `package.json` carrying only `prepare`.** It would close
+the hook layer with the canonical mechanism. `manifest.mjs` GENERATES
+`package.json` for module repos, so a root one is a file this repo's own
+tooling has opinions about, and "nothing reads it" is an assumption rather than
+a finding. The hole it would close is the one `LICENSING.md` already documents
+and CI now genuinely backstops.
+
+**Accepted cost: a fresh clone of this repo is still hook-ungated** until
+someone runs `git config core.hooksPath .githooks`. CI catches what reaches a
+branch; nothing catches what a local commit contains until it is pushed.
+
+**Measure.** The `cmp` step fails if `tools/` and `skeleton/` diverge again,
+which is the failure that produced this entry rather than any leak — nothing
+was leaked, and the gate was found by checking a claim.

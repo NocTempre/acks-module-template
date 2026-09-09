@@ -28,6 +28,26 @@ jobs:
             node --check "$f"
           done
 
+      # The scaffold step below validates a module built from skeleton/, in a
+      # SIBLING directory, so its ip-scan can never see this tree. This repo is
+      # where canon is authored and the one whose pre-commit hook cannot arm
+      # itself (no package.json, so `prepare` never runs), which makes a scan of
+      # its own tree the only backstop it has. Run the SKELETON copy: canon is
+      # what every other repo gets, and using it here keeps this gate honest
+      # even while tools/ is being refreshed.
+      - name: Scan this repo's own tree for licensed material
+        run: node skeleton/tools/ip-scan.mjs .
+
+      # tools/ holds this repo's copies of the IP gate, which the pre-commit
+      # hook imports by relative path. They are the skeleton files and nothing
+      # else syncs or compares them, so a canon change lands in skeleton/ and
+      # leaves the gate this repo actually runs a version behind.
+      - name: Gate copies in tools/ match canon
+        run: |
+          for f in tools/*.mjs; do
+            cmp -s "$f" "skeleton/$f" || { echo "::error::$f differs from skeleton/$f"; exit 1; }
+          done
+
       - name: Scaffold a module from the skeleton
         run: |
           git config --global user.email "ci@example.invalid"

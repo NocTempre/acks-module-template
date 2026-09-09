@@ -122,6 +122,14 @@ The hook is armed by `npm install` (the canonical `prepare` script sets
 `core.hooksPath=.githooks`). Hooks are not committed, so a fresh clone that has
 never run `npm install` is ungated — this is why CI still backstops.
 
+**This repo is the exception and arms differently.** acks-module-template has
+no `package.json` — it GENERATES one for module repos rather than carrying one
+— so `npm install` never runs here and `prepare` cannot fire. A fresh clone of
+THIS repo is ungated until someone runs `git config core.hooksPath .githooks`
+by hand, and its backstop is the CI step that scans this tree with the
+skeleton's scanner. The module-repo backstop in `release-module.yml` scans the
+caller and never sees this repo.
+
 ### CI backstop
 
 CI re-runs the scan and, on a leak, takes the repo **private** rather than
