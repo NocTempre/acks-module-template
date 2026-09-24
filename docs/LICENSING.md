@@ -87,8 +87,11 @@ What it flags:
   holds raw fragments lifted from the user's own PDFs.
 - **Publisher attribution inside data files** — in a pack source or cookbook it
   means text was copied in wholesale rather than authored.
-- **Warning only:** very long string leaves in data files, so transcribed prose
-  gets a second look. Macro `command` bodies are exempt (authored JS).
+- **Warning only:** very long string leaves in data files, and very long string
+  or template literals in `scripts/` and `tools/` source, so transcribed prose
+  gets a second look. Macro `command` bodies in data files are exempt
+  (authored JS). Source is tokenized rather than scanned for quote marks, and
+  `bin/test-ip-scan.mjs` pins that reading: run it after editing the scanner.
 
 It scans **git-tracked files** in a work tree and **everything** elsewhere. An
 ignored, untracked file is not in the repo and never reaches the remote — the

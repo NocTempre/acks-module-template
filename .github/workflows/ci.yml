@@ -48,6 +48,13 @@ jobs:
             cmp -s "$f" "skeleton/$f" || { echo "::error::$f differs from skeleton/$f"; exit 1; }
           done
 
+      # The scan's long-literal warning tokenizes source, and a tokenizer that
+      # misreads fails quietly in both directions: a comment read as a literal
+      # is a warning every module prints for nothing, and a literal read as a
+      # comment is a paste nobody is told about. Invented sources pin both.
+      - name: IP scan measures literals, not what lies between quote marks
+        run: node bin/test-ip-scan.mjs
+
       - name: Scaffold a module from the skeleton
         run: |
           git config --global user.email "ci@example.invalid"

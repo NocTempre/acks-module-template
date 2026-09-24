@@ -641,8 +641,9 @@ Three layers keep the family consistent, by mechanism rather than discipline:
    hand-edited or stale canon fails CI until `sync-toolchain --apply` runs.
 3. **Template CI** (`ci.yml` here) — every template change scaffolds a module
    from the skeleton and runs the canonical build + validate, then runs
-   `bin/test-validate.mjs`, so canon itself can't break silently and a gate
-   that stops failing its own fixtures is caught.
+   `bin/test-validate.mjs` (and `bin/test-ip-scan.mjs` for the IP scanner),
+   so canon itself can't break silently and a gate that stops failing its
+   own fixtures is caught.
 
 **Operating rule: push the template BEFORE syncing it downstream.**
 `sync-toolchain.mjs` renders canon from the template's local **working tree**,

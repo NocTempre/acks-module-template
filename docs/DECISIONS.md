@@ -965,3 +965,78 @@ emitters. Four literal `NAMESPACE` consts and two `hook-ok` lines clear all
 calls WARN because they fire `acksLib*` names, the `acks-lib` namespace from
 before the merges. Renaming a hook changes what its listeners subscribe to,
 so the rename is `acks-extras`' call.
+
+## 2026-09-24 — The long-literal warning measures literals — IN FORCE
+
+**Problem.** `ip-scan.mjs` warns on a string or template literal over 1,500
+characters in `scripts/` or `tools/` source, so pasted prose gets a second
+look. It found literals by pairing quote marks with one regex that knew
+nothing of comments or regex literals, so a backtick in either opened a
+"template" that ran to the next backtick anywhere in the file. The canonical
+`validate.mjs` has backticks in both, and every module's `npm run validate`
+printed warnings about the gate's own code: a 3,583- and a 2,002-character
+span across comments and regexes in §8 at `b6ef157`, and at `d5d814a` a third,
+1,728 characters, from a §6 regex to a comment below it. None was a literal. A
+warning that fires on every run for nothing is one its readers learn to skip.
+The pairing also missed real literals. A template with another nested in a
+hole was cut at the inner backtick. A template after a regex holding a
+backtick was paired away. A string continued across a line with `\` never
+matched at all.
+
+**Ruled.** Source is tokenized. Comments and regex literals are consumed
+whole. A template is followed through its `${}` holes and the braces and
+literals nested in them. Whether a `/` opens a regex is decided from the token
+before it, and one that meets a line end before its closing `/` was division.
+A literal's length is its own text, delimiters included: a template's holes
+are code, and a literal nested in one is measured on its own. The warning
+names the literal's line. The tokenizer can lose its place: a quoted string
+meets a line end, a bracket closes the wrong opener, or something is still
+open at the end of the file. Then the file is measured by the old pairing and
+a warning says so, which over-reports a file the tokenizer cannot read and
+never skips it. The path bans, the LOCAL-ONLY extract names, the copyright
+notices and the data-file leaves are untouched. `bin/test-ip-scan.mjs` feeds
+the scanner invented sources, each case confirmed to fail when the behaviour
+it guards is broken, and template CI runs it.
+
+**Rejected — reusing `validate.mjs`'s `tokenizeJs`.** It lives in a file with
+no exports, whose top level runs the whole validation and imports
+`handlebars`. `ip-quarantine.mjs` loads the scanner by relative path in the
+pre-commit hook, on a clone that may never have run `npm install`. Moving the
+tokenizer to a shared file would add an import on that path and a COPY entry
+the hook fails without whenever a sync lands partially. So the tokenizer is
+inline and imports nothing. It is not a copy either: `tokenizeJs` reads
+`i++ / 2` as an unterminated regex that swallows the first word of the next
+line, and reads `if (ok) /'/.test(s)` as a division followed by a string.
+
+**Rejected — measuring a template backtick to backtick.** That is what the
+pairing measured whenever it paired correctly, and it counts the code in a
+template's holes as literal text. The character-generation chat card in
+`acks-extras` (`scripts/classes/chargen.mjs`) is a template spanning 1,824
+characters: seven holes and 14 characters of `<p>` tags. Measured by span, it
+becomes a new warning about authored code, which is the lesson `validate.mjs`
+was teaching. The measure chosen has a blind spot of its own. Prose split
+between literals in one template's holes (`${a ? "…" : "…"}`) is measured
+literal by literal, where the span summed it. Concatenation (`"…" + "…"`) has
+the same blind spot, and neither measure ever caught it.
+
+**Cost.** The scanner grows from 233 lines to 404, in a file every module
+carries. Two readings are heuristic. After a block's closing `}` a `/` is read
+as division, so a statement that opens with a regex straight after a block
+sends its file to the fallback. A `)` admits a regex only after `if`, `while`,
+`for` and `with`. The tokenizer was checked against acorn 8.16 on 7,645
+files: 1,984 sources from eleven local repositories and 5,661 from four
+`node_modules` trees, minified bundles among them. It lists the same 756,417
+literals at the same offsets and lengths, and it loses its place in none of
+them.
+
+**Found on landing.** `acks-extras` at `0cc2032` goes from 12 warnings to 7,
+none new. Gone as non-literals: `tools/validate.mjs`'s three, and a
+1,859-character span in `tools/validate-producers.mjs` from a doc comment
+into a template 48 lines below. Gone as measured: `tools/bridge-walk.mjs:274`,
+a live-test teardown script in a template spanning 1,796 characters, 350 of
+them in twelve `${JSON.stringify(…)}` holes, which leaves 1,446 of text.
+Kept: seven hole-free templates of authored code. Five are macro bodies in
+`tools/pack-data/equipment.mjs`, one is in `tools/pack-data/cleanup.mjs`, and
+one is a SQL schema in `tools/importer/build-chefdb.mjs`. They are the
+source-side twins of the macro `command` bodies `CODE_KEYS` exempts in data
+files. Whether source gets the same exemption is left open.
