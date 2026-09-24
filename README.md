@@ -21,12 +21,12 @@ release pipeline.
 | `manifest.mjs` | Declares which skeleton files are SYNCED into existing repos vs scaffold-only. |
 | `bin/new-module.mjs` | Scaffold a new module repo from the skeleton. |
 | `blank-template/` | Copy-me folder for starting a module by hand (copy → rename → `node INIT.mjs --title "..."`). Generated from `skeleton/` by `bin/make-blank.mjs` — never edit in place. |
-| `bin/sync-toolchain.mjs` | Diff/apply canonical files into the existing module repos; installs the shared skills user-level. |
+| `bin/sync-toolchain.mjs` | Diff/apply canonical files into the existing module repos. |
 | `bin/test-validate.mjs` | Runs the canonical `validate.mjs` over invented modules its gates must fail or pass. Run after editing it; template CI runs it too. |
 | `docs/TOOLCHAIN.md` | The canonical conventions — every "answer" the modules previously re-derived. Start here. |
 | `docs/DECISIONS.md` | Dated family-level rulings: why the conventions are these, what was tried and abandoned. Read before a structural change. |
 | `docs/LICENSING.md` | ACKS II App License obligations and the IP-leak gate. |
-| `.claude/skills/` | Shared skills: `acks-new-module`, `acks-hotfix`, `acks-release`, `acks-sync-toolchain`. |
+| `.claude/skills/` | Shared skills, one subdirectory each; the directory listing is the roster. |
 
 ## Usage
 
@@ -48,17 +48,10 @@ Apply canon to all clean repos (repos with uncommitted changes are skipped):
 node bin/sync-toolchain.mjs --apply
 ```
 
-Install/update the shared Claude skills into `~/.claude/skills` so they are
-available in every session regardless of working directory:
-
-```
-node bin/sync-toolchain.mjs --install-skills
-```
-
 ## Changing a canonical file
 
-1. Edit it in `skeleton/` here (never in a module repo — sync will overwrite).
-2. `node bin/sync-toolchain.mjs --apply` and `node bin/make-blank.mjs`
-3. In each module: `npm run build:packs && npm run validate`, then commit.
+Follow the [`/acks-sync-toolchain`](.claude/skills/acks-sync-toolchain/SKILL.md)
+skill. [TOOLCHAIN §9](docs/TOOLCHAIN.md) sets the push order between this repo
+and the module repos; read it before pushing either.
 
 See [docs/TOOLCHAIN.md](docs/TOOLCHAIN.md) for the full conventions.
