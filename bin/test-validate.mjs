@@ -229,6 +229,159 @@ export const USAGE = 'Handlebars.registerHelper("fixtureQuoted", fn)';
     exit: 0,
     out: [/validate: helper namespacing checked 0 names registered in scripts\/ against "acksFixture"/],
   },
+  {
+    name: "a global or hook written in a comment, a string or a template's text is not read as code",
+    files: {
+      "scripts/module.mjs": `// globalThis.fixtureRetired = {};
+/* Hooks.callAll("fixtureRetiredHook"); */
+export const USAGE = 'globalThis.fixtureQuoted = api; Hooks.call("fixtureQuotedHook")';
+export const HOWTO = \`Hooks.callAll("fixtureTemplated", globalThis.fixtureInTemplate = 1)\`;
+export const AFTER = (x) => \`\${x} Hooks.callAll("fixtureAfterHole")\`;
+export const acksFixture = (globalThis.acksFixture ??= {});
+Hooks.on("fixtureListened", () => {});
+Hooks.callAll("acksFixture.ready");
+`,
+    },
+    exit: 0,
+    out: [/validate: global and hook namespacing checked 1 globalThis write and 1 hook call in scripts\/ against "acksFixture"/],
+  },
+  {
+    name: "a .js file under scripts/ is read for globals and hooks",
+    files: {
+      "scripts/legacy.js": `globalThis.fixtureLegacy = {};
+Hooks.callAll("fixtureLegacyReady");
+`,
+    },
+    exit: 1,
+    fails: [
+      /^FAIL scripts\/legacy\.js: line 1: globalThis\.fixtureLegacy must start with "acksFixture"$/,
+      /^FAIL scripts\/legacy\.js: line 2: custom hook "fixtureLegacyReady" must start with "acksFixture"$/,
+    ],
+  },
+  {
+    name: "a global exposure is read in every spelling that writes one, and only those",
+    files: {
+      "scripts/module.mjs": `const API = { ready: true };
+const NAME = "fixtureHeld";
+globalThis["fixtureBracket"] = API;
+globalThis[NAME] = API;
+Object.assign(globalThis, { fixtureAssigned: API, acksFixtureFine: API });
+Object.defineProperty(globalThis, "fixtureDefined", { value: API });
+Object.defineProperties(globalThis, { fixtureDefinedToo: { value: API } });
+Reflect.set(globalThis, "fixtureReflected", API);
+globalThis.fixtureGuarded &&= API;
+globalThis.acksFixture.nested = API;
+globalThis.CONFIG.fixtureConfig = API;
+if (globalThis.fixtureCompared == API) globalThis.acksFixtureOk = API;
+`,
+    },
+    exit: 1,
+    fails: [
+      /^FAIL scripts\/module\.mjs: line 3: globalThis\.fixtureBracket must start with "acksFixture"$/,
+      /^FAIL scripts\/module\.mjs: line 4: globalThis\.fixtureHeld \(named at scripts\/module\.mjs:2\) must start with "acksFixture"$/,
+      /^FAIL scripts\/module\.mjs: line 5: globalThis\.fixtureAssigned must start with "acksFixture"$/,
+      /^FAIL scripts\/module\.mjs: line 6: globalThis\.fixtureDefined must start with "acksFixture"$/,
+      /^FAIL scripts\/module\.mjs: line 7: globalThis\.fixtureDefinedToo must start with "acksFixture"$/,
+      /^FAIL scripts\/module\.mjs: line 8: globalThis\.fixtureReflected must start with "acksFixture"$/,
+      /^FAIL scripts\/module\.mjs: line 9: globalThis\.fixtureGuarded must start with "acksFixture"$/,
+    ],
+    out: [/validate: global and hook namespacing checked 8 globalThis writes and 0 hook calls in scripts\/ against "acksFixture"/],
+  },
+  {
+    name: "a global exposure whose name cannot be read fails",
+    files: {
+      "scripts/api.mjs": `export default { acksFixtureApi: true };\n`,
+      "scripts/module.mjs": `import api from "./api.mjs";
+export function expose(key, value) {
+  globalThis[key] = value;
+}
+Object.assign(globalThis, api);
+Object.assign(globalThis, { ...api });
+`,
+    },
+    exit: 1,
+    fails: [
+      /^FAIL scripts\/module\.mjs: line 3: globalThis write whose name this check cannot read, so whether it starts with "acksFixture" is unchecked/,
+      /^FAIL scripts\/module\.mjs: line 5: globalThis write whose name this check cannot read/,
+      /^FAIL scripts\/module\.mjs: line 6: globalThis write whose name this check cannot read/,
+    ],
+  },
+  {
+    name: "a hook name held in a const, an object member, an import or a conditional is read",
+    files: {
+      "scripts/constants.mjs": `export const MODULE_ID = "acks-fixture";
+export const NAMESPACE = "acksFixture";
+export const HOOKS = Object.freeze({
+  READY: \`\${NAMESPACE}.ready\`,
+  LOOSE: "fixtureLoose",
+  BORROWED: "acksOtherModuleReady",
+});
+export const SINGLE = "fixtureSingle";
+export { HOOKS as EVENTS };
+`,
+      "scripts/relay.mjs": `export { SINGLE as RELAYED } from "./constants.mjs";\n`,
+      "scripts/module.mjs": `import { HOOKS, NAMESPACE } from "./constants.mjs";
+import { RELAYED } from "./relay.mjs";
+import * as C from "./constants.mjs";
+
+const LOCAL = "fixtureLocal";
+const TABLE = { PICKED: "fixturePicked", KEPT: \`\${NAMESPACE}.kept\` };
+
+Hooks.once("init", () => {
+  Hooks.callAll(HOOKS.READY);
+  Hooks.callAll(HOOKS.LOOSE);
+  Hooks.callAll(HOOKS.BORROWED);
+  Hooks.call(RELAYED);
+  Hooks.call(LOCAL);
+  Hooks.callAll?.(C.EVENTS["READY"]);
+  Hooks.callAll(game.ready ? TABLE.KEPT : TABLE.PICKED);
+  globalThis.Hooks?.callAll(\`\${NAMESPACE}.\${game.userId}Joined\`);
+});
+`,
+    },
+    exit: 1,
+    fails: [
+      /^FAIL scripts\/module\.mjs: line 10: custom hook "fixtureLoose" \(named at scripts\/constants\.mjs:5\) must start with "acksFixture"$/,
+      /^FAIL scripts\/module\.mjs: line 12: custom hook "fixtureSingle" \(named at scripts\/constants\.mjs:8\) must start with "acksFixture"$/,
+      /^FAIL scripts\/module\.mjs: line 13: custom hook "fixtureLocal" \(named at scripts\/module\.mjs:5\) must start with "acksFixture"$/,
+      /^FAIL scripts\/module\.mjs: line 15: custom hook "fixturePicked" \(named at scripts\/module\.mjs:6\) must start with "acksFixture"$/,
+    ],
+    out: [
+      /WARN scripts\/module\.mjs: line 11: hook "acksOtherModuleReady" \(named at scripts\/constants\.mjs:6\) fires under a foreign acks-\* namespace/,
+      /validate: global and hook namespacing checked 0 globalThis writes and 8 hook calls in scripts\/ against "acksFixture"/,
+    ],
+  },
+  {
+    name: "a hook name that cannot be read fails unless hook-ok says why",
+    files: {
+      "scripts/constants.mjs": `export const MODULE_ID = "acks-fixture";\n`,
+      "scripts/module.mjs": `import { MODULE_ID } from "./constants.mjs";
+const NAMESPACE = MODULE_ID.replace(/-([a-z0-9])/g, (_, c) => c.toUpperCase());
+const hook = "acksFixture.shadowed";
+
+export function announce(hook, ...args) {
+  Hooks.callAll(hook, ...args);
+}
+
+export function announceSafely(name, ...args) {
+  try {
+    // hook-ok: fires the name its caller passes; every caller passes an acksFixture.* literal
+    Hooks.callAll(name, ...args);
+  } catch (err) {
+    console.error(err);
+  }
+}
+
+Hooks.callAll(\`\${NAMESPACE}.ready\`);
+`,
+    },
+    exit: 1,
+    fails: [
+      /^FAIL scripts\/module\.mjs: line 6: hook call whose name this check cannot read, so whether it starts with "acksFixture" is unchecked/,
+      /^FAIL scripts\/module\.mjs: line 18: hook call whose name this check cannot read/,
+    ],
+    out: [/validate: global and hook namespacing checked 0 globalThis writes and 3 hook calls in scripts\/ against "acksFixture"; 1 hook call whose name it cannot read passed on hook-ok/],
+  },
 ];
 
 const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "acks-validate-"));

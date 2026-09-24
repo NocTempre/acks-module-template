@@ -884,3 +884,84 @@ regexes' gaps.
 **Found on landing.** `acks-extras` at HEAD registers three helpers, all as
 string literals, all namespaced, none unreadable. The old and new validators
 return the same verdict there. The only new output is the coverage line.
+
+## 2026-09-23 — The namespace check reads globals and hooks where they are written — IN FORCE
+
+**Problem.** The previous entry moved §7c's helper names onto §2b's reader
+and left globals and hooks on two regexes over each `.mjs` file's raw text:
+`globalThis.X =` (or `??=`, `||=`), and `Hooks.call/callAll` with a quoted
+first argument. They read a comment or a string as live code, never opened a
+`.js` file, and saw one spelling each. The family does not name hooks that
+way: a feature builds its hook names from a `NAMESPACE` const into an object
+it publishes (TOOLCHAIN §5b) and fires them by member, often from another
+file. In `acks-extras` the regex read 3 of 65 hook calls, and the comment on
+the hook constants in `equipment/constants.mjs` called them "on the honour
+system". The gap was known in the module and absent from the gate's output,
+which is the failure 2026-08-04 rules out.
+
+**Ruled.** Globals and hooks are read from §2b's tokens, in `.mjs` and `.js`
+files alike. A global write is an assignment to a property of `globalThis`
+itself, dotted or bracketed, under any assignment operator, or an
+`Object.assign`, `Object.defineProperty`, `Object.defineProperties`,
+`Reflect.set` or `Reflect.defineProperty` whose target is `globalThis`. A
+write into an exposure (`globalThis.acksX.lib = …`) is not a new one. A hook
+fire is `Hooks.call` or `Hooks.callAll`, optional chaining allowed. A name is
+followed back through string and template literals, module-level consts,
+object-literal members (`Object.freeze` included), named and namespace
+imports, re-exports including `export *`, and both arms of a conditional. A
+template whose hole does not read keeps its text up to that hole, and that
+text still decides the name once it starts with the namespace or has left
+it. Any call but `Object.freeze`, and any operator, ends the reading. A name
+is followed only where the file binds it once, as a module-level `const` or
+an import: a parameter or inner declaration of the same name can shadow it
+where it is used. The check prints how many writes and calls it found, and
+how many passed on the escape below.
+
+**Ruled — a name the check cannot read fails, and only a hook call may say
+why.** The previous entry's reason carries over whole: the name is all §7c
+checks and nothing else reads it, so passing an unreadable name passes it for
+good. A hook call takes `hook-ok: <reason>` on or just above it. The escape
+answers only the unreadable verdict; a name the check does read on that line
+is still judged. Global writes get no escape, and helpers keep none. This
+departs from the previous entry, and the evidence it did not have is the
+generic emitter. `acks-extras` has a function that fires whatever name its
+caller passes (`announceChange(hook, …)`) and a transfer routine handed its
+hook by four wrappers. Neither can be spelled so that this reads it, short of
+deleting the abstraction. Every `registerHelper` call has the rewrites that
+entry names, and every global write can be spelled `globalThis.<name> =`.
+
+**Rejected — a WARN for an unreadable hook, as a foreign one gets.** The
+foreign WARN is a verdict on a name the check read: it starts with another
+module's key. An unreadable name has had no verdict to soften.
+
+**Rejected — recognizing the runtime derivation.** Four `acks-extras`
+constants files computed `NAMESPACE` as `MODULE_ID.replace(…)`, which leaves
+every name built from it unreadable. The reader could special-case that
+expression. It does not: the skeleton seeds `NAMESPACE` as a literal the
+scaffolder renders, and a literal is compared with the id on every run, where
+a recognized derivation would only be trusted.
+
+**Rejected — following a parameter back to its callers.** It would read the
+emitters. It needs every call of the function, through every import that
+carries it, and the next wrapper defeats it again. `hook-ok` on the emitter
+costs a line.
+
+**Cost.** Reading stops at a class member, a `let` or `var`, an object
+literal with a spread, a call and `+` concatenation. A name built any of
+those ways fails as unreadable. `window.x =` and a classic script's top-level
+`var` also expose globals and are not seen; the family writes neither. An
+escaped emitter takes its callers' names out of the check: in `acks-extras`,
+three `announceChange` calls and the four storage wrappers. The helper half
+still follows same-file consts only, so a helper name imported from another
+file fails as unreadable while a hook name imported the same way is read.
+Closing that would revise a ruling made today and is left to an entry of its
+own. The validator grows by about 460 lines, most of them the reader.
+
+**Found on landing.** `acks-extras` at HEAD: 1 global write and 65 hook
+calls read, where the regexes read 1 and 3. 39 calls fail as unreadable: 37
+take their names from the four derived `NAMESPACE` consts, and 2 are the
+emitters. Four literal `NAMESPACE` consts and two `hook-ok` lines clear all
+39. They have to land with the sync, or `acks-extras`' validate goes red. 16
+calls WARN because they fire `acksLib*` names, the `acks-lib` namespace from
+before the merges. Renaming a hook changes what its listeners subscribe to,
+so the rename is `acks-extras`' call.

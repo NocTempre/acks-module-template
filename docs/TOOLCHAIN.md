@@ -466,16 +466,27 @@ renamed every pre-existing deviation rather than grandfathering it):
   (`Hooks.call/callAll`), Handlebars helpers — start with the **camelCase
   namespace**: the module id camelCased (`acks-extras` → `acksExtras`, hook
   `acksExtras.lightChanged`, helper `acksExtrasHas`). Derived from the id, never
-  declared. Hyphens can't appear in JS identifiers, hence camelCase here and
-  kebab elsewhere. Firing another acks-* module's hook is a warning, not a
-  failure — deliberate cross-module calls are legitimate.
-  - All three are read from source text, not execution. Helper names come
-    from §2b's registration reader (`scripts/` `.mjs` and `.js`), so the two
-    checks agree on what a registration is, and a `registerHelper` call that
-    reader cannot read **fails** here: the name is the whole of what this
-    check reads. Globals and hooks are a regex over each `.mjs` file's raw
-    text — a mention inside a comment is checked as if live, and any other
-    spelling is invisible to it.
+  declared in `module.json`. Hyphens can't appear in JS identifiers, hence
+  camelCase here and kebab elsewhere. Firing another acks-* module's hook is a
+  warning, not a failure — deliberate cross-module calls are legitimate.
+  - All three are read from source text, not execution, in `scripts/` `.mjs`
+    and `.js` files; comments and strings are not code. Helper names come
+    from §2b's registration reader, so the two checks agree on what a
+    registration is. Globals and hooks come from the same tokens: an
+    assignment to a property of `globalThis` itself, `Object.assign` /
+    `defineProperty` / `defineProperties` or `Reflect.set` /
+    `defineProperty` aimed at it, and every `Hooks.call/callAll`. A global or
+    hook name is followed through literals and templates, module-level
+    consts, object members, imports and re-exports, and conditionals; a
+    helper name through a same-file const only. A name the check cannot
+    read **fails**. A hook call whose name nothing written at the call can
+    carry (an emitter firing whatever its caller passes) takes
+    `// hook-ok: <reason>` on or just above it; globals and helpers have no
+    escape. So source writes the namespace as a string literal, as the
+    skeleton's `NAMESPACE` const does: one computed at runtime
+    (`MODULE_ID.replace(…)`) leaves every name built from it unreadable.
+    `window.x =` and a classic script's top-level `var` are not seen
+    (DECISIONS 2026-09-23).
   - In a multi-subsystem module the namespace is the **module's**, not the
     subsystem's: one `globalThis.acksExtras` with a key per feature, which is
     also what `game.modules.get(id).api` points at. Eight subsystems each
