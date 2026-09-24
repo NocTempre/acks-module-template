@@ -382,6 +382,87 @@ Hooks.callAll(\`\${NAMESPACE}.ready\`);
     ],
     out: [/validate: global and hook namespacing checked 0 globalThis writes and 3 hook calls in scripts\/ against "acksFixture"; 1 hook call whose name it cannot read passed on hook-ok/],
   },
+  // Both checks read one tokenizer. Each source below hides code from them, or
+  // hands them a string's text as code, wherever a `/` is misjudged: division
+  // read as a regex runs on to its line end, and a regex read as division lets
+  // a quote or backtick inside it open a string.
+  {
+    name: "a / after x++ or x-- divides, so the hook on its line and the const on the line after it are read",
+    files: {
+      "scripts/module.mjs": `let seen = 0;
+export function mark(total) {
+  if (seen++ / total > 0.5) Hooks.callAll("fixtureHalfway", seen / total);
+  if (seen-- / total < 0.5) Hooks.callAll("fixtureBelowHalf", seen / total);
+}
+export const share = (total) => seen++ / total;
+const READY = "acksFixture.ready";
+Hooks.once("init", () => Hooks.callAll(READY));
+`,
+    },
+    exit: 1,
+    fails: [
+      /^FAIL scripts\/module\.mjs: line 3: custom hook "fixtureHalfway" must start with "acksFixture"$/,
+      /^FAIL scripts\/module\.mjs: line 4: custom hook "fixtureBelowHalf" must start with "acksFixture"$/,
+    ],
+    out: [/validate: global and hook namespacing checked 0 globalThis writes and 3 hook calls in scripts\/ against "acksFixture"/],
+  },
+  {
+    name: "a regex opening the statement an if or for head governs is read whole, so its quotes open no string",
+    files: {
+      "scripts/module.mjs": `export function note(name, names) {
+  if (ready(name)) /["']/.test(name) && Hooks.callAll("fixtureQuoted", name);
+  for (const each of names) /["']/.test(each) && Hooks.callAll("fixtureEachQuoted", each);
+}
+`,
+    },
+    exit: 1,
+    fails: [
+      /^FAIL scripts\/module\.mjs: line 2: custom hook "fixtureQuoted" must start with "acksFixture"$/,
+      /^FAIL scripts\/module\.mjs: line 3: custom hook "fixtureEachQuoted" must start with "acksFixture"$/,
+    ],
+    out: [/validate: global and hook namespacing checked 0 globalThis writes and 2 hook calls in scripts\/ against "acksFixture"/],
+  },
+  {
+    name: "a regex opening a template hole is read whole, so no code hides in a string and no string reads as code",
+    files: {
+      "scripts/module.mjs": `export function label(name, kind) {
+  if (kind) return \`\${kind}: \${/'/.test(name) ? "quoted" : "bare"}\`;
+  return \`\${/'/.test(name) ? "quoted" : "bare"}\`;
+}
+export const USAGE = \`call Handlebars.registerHelper("acksFixtureDocumented", fn) in init\`;
+Hooks.callAll("fixtureAfterTemplate");
+`,
+      "templates/sheet.hbs": `<p>{{acksFixtureDocumented 1}}</p>\n`,
+    },
+    exit: 1,
+    fails: [
+      /^FAIL templates\/sheet\.hbs: line 1: \{\{acksFixtureDocumented .*throws "Missing helper: acksFixtureDocumented"/,
+      /^FAIL scripts\/module\.mjs: line 6: custom hook "fixtureAfterTemplate" must start with "acksFixture"$/,
+    ],
+    out: [/\+ 0 registered in scripts\//],
+  },
+  {
+    name: "a property named like a keyword is a name, so a / after it divides",
+    files: {
+      "scripts/module.mjs": `export function report(counts) {
+  if (counts.new / counts.total > 0.5) Hooks.callAll("fixtureChurned", counts.new / counts.total);
+}
+`,
+    },
+    exit: 1,
+    fails: [/^FAIL scripts\/module\.mjs: line 2: custom hook "fixtureChurned" must start with "acksFixture"$/],
+  },
+  {
+    name: "a / read as opening a regex that meets its line end divides, so the next line is read",
+    files: {
+      "scripts/module.mjs": `const of = 4;
+export const quarter = (n) => n / of / 2;
+Hooks.callAll("fixtureAfterOf");
+`,
+    },
+    exit: 1,
+    fails: [/^FAIL scripts\/module\.mjs: line 3: custom hook "fixtureAfterOf" must start with "acksFixture"$/],
+  },
 ];
 
 const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "acks-validate-"));

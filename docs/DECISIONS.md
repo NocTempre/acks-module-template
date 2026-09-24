@@ -1040,3 +1040,69 @@ Kept: seven hole-free templates of authored code. Five are macro bodies in
 one is a SQL schema in `tools/importer/build-chefdb.mjs`. They are the
 source-side twins of the macro `command` bodies `CODE_KEYS` exempts in data
 files. Whether source gets the same exemption is left open.
+
+## 2026-09-24 — `tokenizeJs` tells a regex from a division by the scanner's rules — IN FORCE
+
+**Problem.** One tokenizer, `validate.mjs`'s `tokenizeJs`, feeds both §2b's
+registration reader and §7c's global and hook reader. It decided whether a
+`/` opens a regex from the token before it, and in places decided wrong. It
+read a regex after `x++`, after `x--` and after a property spelled like a
+keyword (`counts.new / total`). It read division after every `)` and at the
+start of a template hole, so `if (ok) /'/.test(s)` and `${/'/.test(s)}` were
+a division and then a string. A regex that met a line end stepped past it
+and took the next line's first word as its flags. For each of these an
+invented module shows a verdict changing. A misread regex hid the rest of its
+line from both checks, and the first word of a next line written at column
+0. A hook call or `globalThis` write there went unchecked, so the module
+passed. A `const` there was lost, so a correct hook named through it failed
+as unreadable. A misread division let a quote inside the regex open a string
+to the line end, hiding a hook call beside it. Inside a template hole that
+string also took the hole's `}` and the closing backtick. The next block's
+`}` then closed the hole, the code up to the next backtick read as template
+text, and the template after it read as code. A `registerHelper("…")` quoted
+in a usage string became a registration, and a template calling that helper
+passed §2b.
+
+**Ruled.** A `/` opens a regex at the start of the source or of a hole, after
+punctuation other than `)`, `]`, `}`, `x++` and `x--`, after a word in
+`REGEX_AFTER_WORD` that is not a property name, and after the `)` closing an
+`if`, `while`, `for` or `with` head. Everywhere else it divides. A `/` read as
+opening a regex that meets a line end before its closing `/` divides instead,
+so a misjudged one stays on its line. These are the rules of `ip-scan.mjs`'s
+tokenizer (the entry above), applied to the tokens the readers already take.
+`bin/test-validate.mjs` gains five invented modules. Each one fails against
+the old tokenizer, and each fails when the one rule it guards is removed.
+
+**Rejected — one tokenizer for both files.** The entry above rejected that for
+a structural reason, and the reason still holds. Its second reason no longer
+does. It said `tokenizeJs` misread `i++ / 2` and `if (ok) /'/.test(s)`, and
+now `tokenizeJs` reads both as the scanner does. The two agree on where a
+regex starts and differ only in what they emit.
+
+**Rejected — a parser.** acorn decides every `/` the way the engine does, but
+no module repo installs it. Making it a canonical devDependency (TOOLCHAIN §5)
+would change every module's toolchain, which is more than a fix to a reader.
+
+**Cost.** One heuristic remains, the one the scanner also has. After a block's
+`}` a `/` divides, so a statement that opens with a regex straight after a
+block is misread. The scanner notices when that loses its place and falls back
+to pairing quote marks. `tokenizeJs` cannot notice. A quote in such a regex
+can hide the rest of its line, and a backtick everything up to the next
+backtick. A variable spelled like one of `REGEX_AFTER_WORD` (`const of = 4`)
+still reads as opening a regex, and the line-end rule turns it back into
+division only when no second `/` follows on that line. The check against
+acorn 8.16 covered 7,688 files: 2,027 local sources and 5,661 in four
+`node_modules` trees. The tokenizer puts identifiers, strings, template pieces
+and regexes at acorn's offsets in 7,671 of them, up from 7,665. The other 17
+show two misreads this entry leaves alone. In 15, all pdf.js builds, a
+member of a decimal literal is read into the number (`1.0.toString`). In the
+2 others, from prettier, an identifier is written with `\u` escapes. Neither
+shape holds a name either check reads: a number's member is a Number method,
+and no family source spells an identifier with an escape. The validator grows
+by 34 lines.
+
+**Found on landing.** At `4d9ca3b`, the old and new tokenizers turn every one
+of the 446 files in `acks-extras`' `scripts/` into the same tokens. Both
+checks therefore return the verdicts they did. The one family file that hit a
+fixed misjudgment is `tools/importer/dev-probe-rebuking.mjs`: a regex opens a
+template hole there, and neither check reads `tools/`.
