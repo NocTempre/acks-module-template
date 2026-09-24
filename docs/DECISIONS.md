@@ -851,3 +851,36 @@ left alone.
 
 **Found on landing.** `acks-extras` at HEAD: 4,247 calls to 21 distinct
 helpers across 94 templates, every one registered.
+
+## 2026-09-23 — The namespace check reads helpers through §2b's reader — IN FORCE
+
+**Problem.** `validate.mjs` §7c checked helper names with a regex over each
+`.mjs` file's raw text, and §2b, in the same file, read registrations with a
+tokenizer. The two disagreed about what a registration is. §7c never saw
+`registerHelper({ name: fn })` or a name held in a const, so an un-namespaced
+helper registered that way passed; it read a registration inside a comment
+or a string as live; and it skipped the `.js` files §2b reads.
+
+**Ruled.** One scan of `scripts/` feeds both sections. §7c checks every name
+the reader returns and prints how many. A `registerHelper` call the reader
+cannot read fails §7c.
+
+**Rejected — a WARN for the unreadable call, as §2b gives it.** §2b can
+afford a WARN because it has a backstop: a template calling that helper still
+fails as unknown. §7c has none. The name is the only thing it checks and no
+other check reads it, so a WARN would pass an un-namespaced helper for good,
+including one whose template calls carry `helper-ok`. The i18n pass set the
+precedent (2026-08-04): a root it cannot resolve fails and is never skipped.
+
+**Cost.** There is no escape. A name imported from another file, or a loop
+over `Object.entries`, has to be rewritten as a same-file const or as
+`registerHelper(object)`. Handlebars applies the object form as the loop
+would (`extend(this.helpers, object)`, handlebars 4.7.9). The reader matches
+any `registerHelper(` call, not only a `Handlebars.`-qualified one, so a
+module calling a `registerHelper` method of its own would have those names
+checked as helpers. Globals and hooks keep their raw-text regexes and those
+regexes' gaps.
+
+**Found on landing.** `acks-extras` at HEAD registers three helpers, all as
+string literals, all namespaced, none unreadable. The old and new validators
+return the same verdict there. The only new output is the coverage line.

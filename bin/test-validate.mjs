@@ -186,11 +186,48 @@ Handlebars.registerHelper("acksFixture" + "Joined", () => "");
       "templates/sheet.hbs": `<p>{{acksFixtureJoined 1}}</p>\n`,
     },
     exit: 1,
-    fails: [/^FAIL templates\/sheet\.hbs: line 1: \{\{acksFixtureJoined .*\(2 registerHelper calls in scripts\/ could not be read/],
+    fails: [
+      /^FAIL templates\/sheet\.hbs: line 1: \{\{acksFixtureJoined .*\(2 registerHelper calls in scripts\/ could not be read/,
+      /^FAIL scripts\/module\.mjs: line 2: registerHelper call whose helper name this check cannot read, so whether it starts with "acksFixture" is unchecked/,
+      /^FAIL scripts\/module\.mjs: line 3: registerHelper call whose helper name this check cannot read/,
+    ],
     out: [
       /WARN scripts\/module\.mjs:2: registerHelper call whose helper name this check cannot read/,
       /WARN scripts\/module\.mjs:3: registerHelper call whose helper name this check cannot read/,
     ],
+  },
+  {
+    name: "an un-namespaced helper fails the namespace check in every shape a template call is checked against",
+    files: {
+      "scripts/module.mjs": `const LOOSE = "fixtureHeld";
+Hooks.once("init", () => {
+  Handlebars.registerHelper({
+    acksFixtureFine: (s) => s,
+    fixtureTabled: (s) => s,
+  });
+  Handlebars.registerHelper(LOOSE, (s) => s);
+});
+`,
+      "scripts/legacy.js": `Handlebars.registerHelper("fixtureScript", (s) => s);\n`,
+    },
+    exit: 1,
+    fails: [
+      /^FAIL scripts\/module\.mjs: Handlebars helper "fixtureTabled" must start with "acksFixture"$/,
+      /^FAIL scripts\/module\.mjs: Handlebars helper "fixtureHeld" must start with "acksFixture"$/,
+      /^FAIL scripts\/legacy\.js: Handlebars helper "fixtureScript" must start with "acksFixture"$/,
+    ],
+    out: [/validate: helper namespacing checked 4 names registered in scripts\/ against "acksFixture"/],
+  },
+  {
+    name: "a registration commented out or quoted in a string is not checked for its namespace",
+    files: {
+      "scripts/module.mjs": `// Handlebars.registerHelper("fixtureRetired", (s) => s);
+/* Handlebars.registerHelper("fixtureParked", (s) => s); */
+export const USAGE = 'Handlebars.registerHelper("fixtureQuoted", fn)';
+`,
+    },
+    exit: 0,
+    out: [/validate: helper namespacing checked 0 names registered in scripts\/ against "acksFixture"/],
   },
 ];
 

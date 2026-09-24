@@ -423,9 +423,10 @@ could not get on screen is a gap, and naming it is the whole point.
   the handlebars package; registrations are a **source-text match** (a string
   or object literal passed to `registerHelper`, or a same-file const holding
   one). A `registerHelper` call it cannot read prints a WARN, and a template
-  calling that helper still fails — never a silent pass. A helper registered
-  elsewhere (the game system's, another module's) takes
-  `{{!-- helper-ok: <reason> --}}` on or just above the call.
+  calling that helper still fails — never a silent pass (the call itself
+  fails the namespace check, §5b). A helper registered elsewhere (the game
+  system's, another module's) takes `{{!-- helper-ok: <reason> --}}` on or
+  just above the call.
   `bin/test-validate.mjs` feeds the validator invented modules its gates must
   fail and pass — run it after editing `validate.mjs`; template CI runs it on
   every push.
@@ -468,6 +469,13 @@ renamed every pre-existing deviation rather than grandfathering it):
   declared. Hyphens can't appear in JS identifiers, hence camelCase here and
   kebab elsewhere. Firing another acks-* module's hook is a warning, not a
   failure — deliberate cross-module calls are legitimate.
+  - All three are read from source text, not execution. Helper names come
+    from §2b's registration reader (`scripts/` `.mjs` and `.js`), so the two
+    checks agree on what a registration is, and a `registerHelper` call that
+    reader cannot read **fails** here: the name is the whole of what this
+    check reads. Globals and hooks are a regex over each `.mjs` file's raw
+    text — a mention inside a comment is checked as if live, and any other
+    spelling is invisible to it.
   - In a multi-subsystem module the namespace is the **module's**, not the
     subsystem's: one `globalThis.acksExtras` with a key per feature, which is
     also what `game.modules.get(id).api` points at. Eight subsystems each
