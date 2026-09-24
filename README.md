@@ -17,7 +17,7 @@ release pipeline.
 
 | Path | Purpose |
 | --- | --- |
-| `skeleton/` | Complete module skeleton. Placeholder-bearing files (`{{MODULE_ID}}` …) are scaffold-only; the rest are the canonical synced files. |
+| `skeleton/` | Complete module skeleton. |
 | `manifest.mjs` | Declares which skeleton files are SYNCED into existing repos vs scaffold-only. |
 | `bin/new-module.mjs` | Scaffold a new module repo from the skeleton. |
 | `blank-template/` | Copy-me folder for starting a module by hand (copy → rename → `node INIT.mjs --title "..."`). Generated from `skeleton/` by `bin/make-blank.mjs` — never edit in place. |
