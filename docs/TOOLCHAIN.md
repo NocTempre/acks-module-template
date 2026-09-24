@@ -103,7 +103,8 @@ acks-<feature>/
 - `id` == repo name == npm package name; `title` = `ACKS II — <Feature>`.
 - `version`: plain semver `X.Y.Z`. Bump before tagging.
 - `compatibility`: `minimum: "14"`, `verified: "14.364"` (raise `verified` as
-  tested; existing modules keep their historical minimums until retested).
+  tested, and recapture validate.mjs's core helper list with it — §5; existing
+  modules keep their historical minimums until retested).
 - `relationships.systems`: `acks`, `minimum: "14"`.
 - Every `relationships.requires` entry carries a human `reason`. Standard deps
   when needed: `lib-wrapper` (>=1.12.0) for safe method wrapping, `socketlib`
@@ -410,6 +411,24 @@ could not get on screen is a gap, and naming it is the whole point.
   a parse) says so wherever it is documented — a literal-text gate is invisible
   to the pattern it guards written any other way, and pretending otherwise is
   how a canon-stated rule ends up with zero corresponding code.
+- **Template helpers (validate.mjs §2b).** Every helper a `.hbs` calls — a
+  block, or a mustache or sub-expression given arguments — must be one Foundry
+  core registers or one the module registers in `scripts/`; a call to anything
+  else compiles, passes every mocked test, and throws "Missing helper" on its
+  first live render. The core list sits in `validate.mjs` beside the Foundry
+  version it was captured from (`Object.keys(Handlebars.helpers)` on a live
+  server's `/join` page, the only page where the registry holds core alone);
+  **recapture it whenever `compatibility.verified` is raised**, since a helper
+  a newer build drops would otherwise keep passing. Templates are parsed with
+  the handlebars package; registrations are a **source-text match** (a string
+  or object literal passed to `registerHelper`, or a same-file const holding
+  one). A `registerHelper` call it cannot read prints a WARN, and a template
+  calling that helper still fails — never a silent pass. A helper registered
+  elsewhere (the game system's, another module's) takes
+  `{{!-- helper-ok: <reason> --}}` on or just above the call.
+  `bin/test-validate.mjs` feeds the validator invented modules its gates must
+  fail and pass — run it after editing `validate.mjs`; template CI runs it on
+  every push.
 - Optional module-owned pure-logic tests: mock minimal Foundry globals and
   import the real scripts. A single-subject module names the file
   `tools/test-logic.mjs`; a multi-subsystem one splits per subject and chains
@@ -602,8 +621,9 @@ Three layers keep the family consistent, by mechanism rather than discipline:
    (validators, dotfiles, Claude infra) are enforced: a module push with
    hand-edited or stale canon fails CI until `sync-toolchain --apply` runs.
 3. **Template CI** (`ci.yml` here) — every template change scaffolds a module
-   from the skeleton and runs the canonical build + validate, so canon itself
-   can't break silently.
+   from the skeleton and runs the canonical build + validate, then runs
+   `bin/test-validate.mjs`, so canon itself can't break silently and a gate
+   that stops failing its own fixtures is caught.
 
 **Operating rule: push the template BEFORE syncing it downstream.**
 `sync-toolchain.mjs` renders canon from the template's local **working tree**,
@@ -617,14 +637,17 @@ between two template commits. Order: commit + push the template, then
 local `--check` reporting `0 file(s) drifted` while CI is red — nothing is
 actually wrong, so re-run the failed checks rather than re-syncing anything.
 
-**`{{…}}` in `skeleton/` is reserved for scaffolder tokens.** Layer 3 greps the
-scaffolded module for any surviving `{{` and fails the build; that strictness is
-what makes a missed token loud, so nothing else may use the syntax. Human
-fill-in prompts use `_[brackets]_` — the skeleton README's registration and
-required-publications lines are the pattern. The §10f "Getting started" prompts
-shipped as `{{step one: …}}`, which `new-module.mjs` does not render (it knows
-only `MODULE_ID`, `MODULE_TITLE`, `MODULE_DESCRIPTION`, `LANG_PREFIX`,
-`MODULE_KEY`, `MODULE_NAMESPACE`), and broke template CI for three runs.
+**`{{KEY}}` — an uppercase key in double braces — is reserved in `skeleton/`
+for scaffolder tokens.** Layer 3 greps the scaffolded module for any surviving
+one and fails the build; that strictness is what makes a missed token loud, so
+nothing else may use the shape. Handlebars quoted in prose is not a token and
+passes: `validate.mjs` has to tell an author to write `{{@root.partId}}` or
+`{{!-- helper-ok: … --}}`. Human fill-in prompts use `_[brackets]_` — the
+skeleton README's registration and required-publications lines are the
+pattern. The §10f "Getting started" prompts shipped as `{{step one: …}}`,
+which `new-module.mjs` does not render (it knows only `MODULE_ID`,
+`MODULE_TITLE`, `MODULE_DESCRIPTION`, `LANG_PREFIX`, `MODULE_KEY`,
+`MODULE_NAMESPACE`), and broke template CI for three runs.
 
 Possible later: publish the harness as a git-dependency npm package
 (`acks-tools`) with bin entries, replacing the vendored `tools/*.mjs`.

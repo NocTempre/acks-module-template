@@ -22,6 +22,7 @@ release pipeline.
 | `bin/new-module.mjs` | Scaffold a new module repo from the skeleton. |
 | `blank-template/` | Copy-me folder for starting a module by hand (copy → rename → `node INIT.mjs --title "..."`). Generated from `skeleton/` by `bin/make-blank.mjs` — never edit in place. |
 | `bin/sync-toolchain.mjs` | Diff/apply canonical files into the existing module repos; installs the shared skills user-level. |
+| `bin/test-validate.mjs` | Runs the canonical `validate.mjs` over invented modules its gates must fail or pass. Run after editing it; template CI runs it too. |
 | `docs/TOOLCHAIN.md` | The canonical conventions — every "answer" the modules previously re-derived. Start here. |
 | `docs/DECISIONS.md` | Dated family-level rulings: why the conventions are these, what was tried and abandoned. Read before a structural change. |
 | `docs/LICENSING.md` | ACKS II App License obligations and the IP-leak gate. |

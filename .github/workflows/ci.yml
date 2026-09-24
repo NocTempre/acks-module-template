@@ -69,3 +69,10 @@ jobs:
           # is never rendered, so they cannot hold an unrendered placeholder.
           grep -rnE "\{\{[A-Z][A-Z0-9_]*\}\}" --include="*.json" --include="*.md" --include="*.mjs" . --exclude-dir=node_modules --exclude-dir=.git --exclude-dir=.claude \
             | grep -v "pack-data.mjs" && { echo "::error::unrendered placeholders"; exit 1; } || echo "placeholders fully rendered"
+
+      # The scaffold above has nothing for a gate to catch, so it proves only
+      # that canon passes a clean module. This feeds the validator invented
+      # modules it must fail, borrowing the scaffold's handlebars install —
+      # this repo has no package.json to install one of its own.
+      - name: Validator gates fail what they exist to catch
+        run: node bin/test-validate.mjs ../acks-ci-smoke/node_modules

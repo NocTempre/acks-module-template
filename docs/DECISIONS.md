@@ -792,3 +792,62 @@ branch; nothing catches what a local commit contains until it is pushed.
 **Measure.** The `cmp` step fails if `tools/` and `skeleton/` diverge again,
 which is the failure that produced this entry rather than any leak — nothing
 was leaked, and the gate was found by checking a claim.
+
+## 2026-09-23 — A template calls only helpers something registers — IN FORCE
+
+**Problem.** During `acks-extras` 8.4.0, `templates/lib/hp.hbs` wrote
+`{{selected cond}}` on its `<option>` tags. Foundry v14 registers `checked`,
+`disabled`, `selectOptions` and their kin, and no `selected`. `npm run
+validate` and `npm test` both passed; the window threw "Missing helper:
+selected" on its first live render and never opened. (The tagged file carries
+the `{{#if …}}selected{{/if}}` form — the broken shape was found live, which is
+the point.) Section 2 precompiles every template, and precompiling resolves no
+helper names: any name is legal until a render supplies the registry, and
+nothing offline had the registry.
+
+**Ruled.** `validate.mjs` §2b parses every template with the handlebars
+package's own parser and fails a call — a block, or a mustache or
+sub-expression given arguments, on a one-segment name that is neither a block
+param nor an `@data` variable — to a helper that neither Foundry core nor the
+module's `scripts/` registers. The core list was captured live from a server's
+`/join` page, which holds core alone: on the same 14.367 server the in-world
+registry held 59 helpers, being those 47, nine from the `acks` system (14.0.1)
+and three from `acks-extras`. The list is recorded with its Foundry version and
+recaptured when `compatibility.verified` rises (TOOLCHAIN §3, §5). Escape:
+`{{!-- helper-ok: <reason> --}}`. The check prints what it covered.
+`bin/test-validate.mjs` is the template's first test of its own validator —
+seven invented modules, each case confirmed to fail when the behaviour it
+guards is broken — and template CI runs it.
+
+A block with no arguments is flagged as well, though Handlebars does not throw
+on one: it runs the block as a section over the context property of that name
+until anything registers a helper under the name, which then takes the block
+over. Verified — `{{#rows}}` over `rows: [1, 2]` renders both rows, then
+renders the helper's output once a `rows` helper exists. The family writes no
+argument-less block today, so the rule costs nothing to adopt.
+
+**Rejected — `knownHelpersOnly`.** Handlebars' own compile option nearly does
+this in one line: pass the allow-list as `knownHelpers` and an unknown helper
+throws at precompile. Verified against handlebars 4.7.9, it reports only the
+first unknown in a template, it can carry no per-line escape, it misses the
+argument-less block, and it treats every path given arguments as a registry
+lookup, so `{{this.format x}}` — a function on the render context, legal at
+runtime — fails as the unknown helper `format`.
+
+**Rejected — rendering each template against mocks.** A mocked registry is
+the author's own belief about Foundry, which is the thing that was wrong.
+
+**Not listed — the game system's helpers.** They are a minified release's
+internals, versioned apart from Foundry and published as no API. A call to one
+is a dependency on that system build and says so at the call site, through the
+escape. `acks-extras` calls none of the nine.
+
+**Cost.** The list is one build's snapshot, so a helper a newer build drops
+passes until someone recaptures. Registrations are read from source text, not
+from execution: one in a file nothing imports, or behind a condition that
+never holds, still counts. A call on a context path (`this.x y`, `a.b y`)
+depends on the render context, which only a render has, so it is counted and
+left alone.
+
+**Found on landing.** `acks-extras` at HEAD: 4,247 calls to 21 distinct
+helpers across 94 templates, every one registered.
