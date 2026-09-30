@@ -116,6 +116,17 @@ export function pageSweep(entries) {
 }
 
 /**
+ * The payload `create()` sends: an Actor that states `system` and no `items`
+ * goes with `items: []`. The acks system's `AcksActor.create` treats a payload
+ * without items as a blank new actor — it replaces `system` with `{isNew:
+ * true}` and seeds a character's coins — so every figure a fixture set would
+ * be dropped without a word. A payload that states no `system` keeps that path.
+ */
+function createPayload(kind, data) {
+  return kind === "Actor" && data?.system != null && data.items == null ? { ...data, items: [] } : data;
+}
+
+/**
  * Page-side expression creating one document of `kind` from `data` — embedded
  * in the document at `parentUuid` when given — and returning JSON: `{doc:
  * {uuid, id, name}}`, `{doc: null}` when Foundry's create resolved to nothing,
@@ -186,13 +197,15 @@ export function fixtureLedger(evaluate) {
      * Create one document in page context and track it. `data` is the plain
      * create payload (JSON; `type` selects a sub-type); `parent` is the uuid of
      * the document an embedded one is created inside. Resolves to `{uuid, id,
-     * name}`. A create that resolves to nothing throws, naming the likeliest
-     * cause — a sub-type the server has not loaded, which needs a world
-     * relaunch — rather than handing back a fixture that does not exist.
+     * name}`. An Actor that states `system` and no `items` is sent with
+     * `items: []` (`createPayload`). A create that resolves to nothing throws,
+     * naming the likeliest cause — a sub-type the server has not loaded, which
+     * needs a world relaunch — rather than handing back a fixture that does not
+     * exist.
      */
     async create(kind, data, { parent = null } = {}) {
       if (!isTypeName(kind)) throw new Error(`foundry-capture: create() needs a document type name, got "${kind}"`);
-      const result = JSON.parse(await evaluate(pageCreate(kind, data, parent)));
+      const result = JSON.parse(await evaluate(pageCreate(kind, createPayload(kind, data), parent)));
       if (result.error) throw new Error(`foundry-capture: create(${kind}) — ${result.error}`);
       if (!result.doc) throw new Error(`foundry-capture: ${kind}.create resolved to nothing — a sub-type the server has not loaded (relaunch the world), or a type this seat may not create`);
       api.track(result.doc.uuid, kind);
