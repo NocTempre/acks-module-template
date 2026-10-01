@@ -463,6 +463,88 @@ Hooks.callAll("fixtureAfterOf");
     exit: 1,
     fails: [/^FAIL scripts\/module\.mjs: line 3: custom hook "fixtureAfterOf" must start with "acksFixture"$/],
   },
+  {
+    name: "an instanceof against a DOM node interface fails, named bare or off a window global, in .mjs and .js",
+    files: {
+      "scripts/module.mjs": `export function onRender(app, element) {
+  const root = element instanceof HTMLElement ? element : element?.[0];
+  if (!root) return;
+  root.addEventListener("change", (event) => {
+    if (!(event.target instanceof HTMLInputElement || event.target instanceof window.HTMLSelectElement)) return;
+    if (event.target.parentNode instanceof globalThis.Element) app.render();
+  });
+}
+export const isGroup = (node) => node instanceof SVGGElement || node instanceof DocumentFragment;
+`,
+      "scripts/legacy.js": `function isText(node) {
+  return node instanceof Text;
+}
+`,
+    },
+    exit: 1,
+    fails: [
+      /^FAIL scripts\/module\.mjs: line 2: instanceof HTMLElement — false for a node another browser window's document built.*"\/\/ realm-ok: <reason>"/,
+      /^FAIL scripts\/module\.mjs: line 5: instanceof HTMLInputElement /,
+      /^FAIL scripts\/module\.mjs: line 5: instanceof HTMLSelectElement /,
+      /^FAIL scripts\/module\.mjs: line 6: instanceof Element /,
+      /^FAIL scripts\/module\.mjs: line 9: instanceof SVGGElement /,
+      /^FAIL scripts\/module\.mjs: line 9: instanceof DocumentFragment /,
+      /^FAIL scripts\/legacy\.js: line 2: instanceof Text /,
+    ],
+    out: [/validate: node tests checked 7 instanceof tests in scripts\/ against the DOM node interfaces$/m],
+  },
+  {
+    name: "a class the file binds itself, a document class, a property named instanceof and a test in a comment or a string pass",
+    files: {
+      "scripts/graph.mjs": `export class Node {
+  constructor(id) {
+    this.id = id;
+  }
+}
+export const isNode = (x) => x instanceof Node;
+`,
+      "scripts/parts.mjs": `export function Element(name) {
+  this.name = name;
+}
+`,
+      "scripts/module.mjs": `import { Element } from "./parts.mjs";
+import { Node } from "./graph.mjs";
+// const root = element instanceof HTMLElement ? element : element?.[0];
+/* if (el instanceof HTMLInputElement) return; */
+export const USAGE = "never write element instanceof HTMLElement";
+export const HOWTO = (x) => \`\${x} instanceof HTMLElement\`;
+export function kinds(doc, part, x, Text) {
+  return [
+    doc instanceof Actor,
+    doc instanceof foundry.abstract.Document,
+    part instanceof Element,
+    part instanceof Node,
+    x instanceof Text,
+    x instanceof Document,
+    x instanceof Set,
+    x?.nodeType === 1,
+    x.instanceof,
+  ];
+}
+`,
+    },
+    exit: 0,
+    out: [/validate: node tests checked 8 instanceof tests in scripts\/ against the DOM node interfaces$/m],
+  },
+  {
+    name: "a DOM instanceof passes under realm-ok on its own line or in a comment just above, and under no other line's",
+    files: {
+      "scripts/module.mjs": `const probe = document.createElement("template");
+// realm-ok: built two lines up by this window's document and inserted nowhere
+export const isTemplate = probe instanceof HTMLTemplateElement;
+export const isDiv = (el) => el instanceof HTMLDivElement; // realm-ok: handed only what this file creates
+export const isSpan = (el) => el instanceof HTMLSpanElement;
+`,
+    },
+    exit: 1,
+    fails: [/^FAIL scripts\/module\.mjs: line 5: instanceof HTMLSpanElement /],
+    out: [/validate: node tests checked 3 instanceof tests in scripts\/ against the DOM node interfaces; 2 passed on realm-ok$/m],
+  },
 ];
 
 const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "acks-validate-"));

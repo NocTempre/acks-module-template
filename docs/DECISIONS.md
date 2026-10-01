@@ -1207,3 +1207,77 @@ driver's `compose()` closed that seat's 21 applications in 20 ms and the frame
 shot after it was clean. A script that called `close()` exited 85.6 seconds
 later through the old driver, its calls' timers still running, and at once
 through the new.
+
+## 2026-10-01 — A DOM node is not told by `instanceof` — IN FORCE
+
+**Problem.** Core 14 hosts an application in a browser window of its own
+(`detachWindow`), and builds a window's frame with the document of the browser
+window that hosts it. A window first rendered inside a detached one, which
+`renderChild` and a `windowId` option do, has a root that window's document
+built. In the main window `root instanceof HTMLElement` is false for it, for
+every node reached through it and for the target of every event inside it.
+`acks-extras` resolved a render hook's root with
+`element instanceof HTMLElement ? element : element?.[0]` in 37 places. For
+such a window the second arm ran, which is nothing for most roots and a form's
+first control for a `<form>`, since a form indexes its controls. The hooks
+passed the window by or worked on one of its controls, a listener guarded by
+`instanceof HTMLInputElement` dropped every event, and nothing reported any of
+it. `validate` and the suites stayed green: every stand-in a suite hands a
+hook is made in the one realm the suite runs in. The measurements are
+`acks-extras`' own (`docs/lib/DECISIONS.md`, "An element is told by its
+`nodeType`, never by its constructor").
+
+**Ruled.** `validate.mjs` §8 grows from six checks to seven. 8g fails an
+`instanceof` whose right-hand side names a DOM node interface, written bare or
+off `window`, `globalThis` or `self`, in a `.mjs` or `.js` under `scripts/`:
+`Node`, `Element`, `CharacterData`, `Text`, `Comment`, `DocumentFragment`,
+`ShadowRoot`, `MathMLElement`, and every `HTML…Element` and `SVG…Element`. It
+reads `tokenizeJs`'s tokens, so a test written in a comment, a string or a
+template's text is not one. A file that binds the bare name itself is testing
+a class of its own and is passed by. The escape is `// realm-ok: <reason>` on
+the test's line, or in a comment of its own on the line above. The check
+prints how many `instanceof` tests it read and how many passed on the escape.
+`.claude/rules/ui-layout.md` states the rule, and `bin/test-validate.mjs` gains
+three invented modules.
+
+**Rejected — a module-owned check**, the same test in `acks-extras`'
+`tools/validate-extra.mjs`. It needs no template commit and no push before a
+sync. The rule would then be no part of canon, and a module scaffolded from
+this template would not inherit it.
+
+**Rejected — no gate**, the sweep and a roadmap row. The expression reached
+37 places with nothing to stop it, and a row stops nothing.
+
+**Rejected — the node's own window as the remedy**,
+`node instanceof node.ownerDocument.defaultView.HTMLElement`. Which window's
+constructor claims a node does not follow the document the node sits in. A
+root first rendered detached and then brought back by `attachWindow()` sits in
+the main document and is still no instance of the main window's `HTMLElement`
+(measured, same entry). The failure message names `nodeType` and `matches`.
+The check does not fail that spelling, since it reads only a bare or
+window-global name.
+
+**Rejected — every platform class.** An event, a `DOMRect` or a `File` made
+in another window has that window's constructor too. No family source tests
+one with `instanceof`, and the words are ones a module names its own things
+with: `Document` is core's document base class, and `Event`, `Range` and
+`File` are ordinary class names. The list is the node interfaces, which is
+the failure that was measured.
+
+**Cost.** The check reads what is written, never what a name is bound to
+where it is used. A name the file binds anywhere passes every test of that
+name in the file, so a parameter called `Text` in one function hides a DOM
+`Text` test in another. A node class reached another way is not seen: held in
+a const, compared through `constructor`, or tested in a file outside
+`scripts/`. A comment trailing the code on the line above excuses nothing,
+where 8c to 8f take any text on that line. It is a floor, like the rest of §8.
+
+**Found on landing.** Against `acks-extras` at `c2cc033`, before its sweep,
+the check reads 64 `instanceof` tests and fails 40 of them, on 39 lines in 35
+files: 37 against `HTMLElement`, two against `HTMLInputElement` and one against
+`HTMLSelectElement`. At `85d2c6a`, the sweep, and at `85a5d21`, the 10.0.0
+release this change was held for, it reads 24 and fails none. Those 24 test
+documents, placeables, `Set`s and `Map`s, one core operator and the module's
+own classes. A module scaffolded from the skeleton passes with none read.
+`acks-divine-conduit`, which this template does not sync, holds one copy of
+the expression (`scripts/module.mjs`).
