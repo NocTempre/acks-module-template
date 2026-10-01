@@ -55,6 +55,13 @@ jobs:
       - name: IP scan measures literals, not what lies between quote marks
         run: node bin/test-ip-scan.mjs
 
+      # The capture driver's guards run only when a live page stops answering
+      # or a toast lands late, which no run can be made to do on demand. A
+      # scripted page pins the sequence they depend on: front the page, hide
+      # the tray, bound the capture, try once more.
+      - name: Capture driver fronts its page and bounds its captures
+        run: node bin/test-foundry-capture.mjs
+
       - name: Scaffold a module from the skeleton
         run: |
           git config --global user.email "ci@example.invalid"

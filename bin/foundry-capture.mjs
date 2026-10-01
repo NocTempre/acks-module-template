@@ -6,8 +6,8 @@
  * pane an agent is already driving — does not work: the pane only composites
  * frames while it is on screen, so a headless or backgrounded session times
  * out with no picture. This drives a throwaway Chromium over the DevTools
- * protocol instead, which composites regardless, and can clip the capture to
- * one element's bounding box.
+ * protocol instead, which composites off screen while its page holds the
+ * foreground (below), and can clip the capture to one element's bounding box.
  *
  * Clipping is not a convenience. §4b requires the world id, user name and
  * server URL stay out of frame, and Foundry paints all three into the players
@@ -64,6 +64,16 @@
  * entries. A session driving a browser pane instead keeps the same list and
  * runs `pageSweep(entries)` there — the very expression the driver uses.
  *
+ * A FRAME IS TAKEN OF A FOREGROUND PAGE WITH NO TOAST ON IT. A page that loses
+ * the foreground is hidden: it paints no frames, its transitions never end and
+ * its timers are throttled, so a capture, or a window close awaiting its
+ * transition, stops answering there. `compose()` and `shot()` put the page
+ * back in front before they do anything (`pageKeeper`) and say so when they
+ * found it hidden; a walk's own `api.eval` is not fronted, so close a window
+ * there with `{ animate: false }`, as `compose()` does. `shot()` also hides
+ * the notification tray for the capture itself, since a toast can land after
+ * any `compose()` — to photograph a toast, clip to it.
+ *
  * SHOOTING A CHAT CARD takes two extra moves, and skipping either one fails in
  * a way that reads as "the message was never posted":
  *
@@ -84,6 +94,16 @@ import os from "node:os";
 import path from "node:path";
 
 export const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+
+// How long a DevTools call may go unanswered, in ms: any call, a screenshot,
+// and a page-side read or restore that needs no frame to answer.
+const CDP_TIMEOUT_MS = 90_000;
+const CAPTURE_TIMEOUT_MS = 30_000;
+const PROBE_TIMEOUT_MS = 10_000;
+// How long `pageFrames` waits, page-side, for two animation frames.
+const FRAME_WAIT_MS = 4_000;
+// The stylesheet `pageTray` adds; a restore removes that sheet and no other.
+const TRAY_STYLE_ID = "foundry-capture-quiet-tray";
 
 /**
  * Page-side expression that deletes exactly `entries` (`[{uuid, kind}]`, in
@@ -231,24 +251,207 @@ export function fixtureLedger(evaluate) {
   return api;
 }
 
-class Cdp {
+/**
+ * The page targets a browser opened for itself: every page but the driver's
+ * own (`ownTargetId`) whose address is not a document's — any scheme other
+ * than http(s), about, file, data and blob, so `edge://…`, `chrome://…` and an
+ * extension's `chrome-extension://…` page. Takes the `targetInfos` of
+ * `Target.getTargets` and returns the entries among them.
+ */
+export function strayPages(targetInfos, ownTargetId) {
+  return (targetInfos ?? []).filter(
+    (t) => t.type === "page" && t.targetId !== ownTargetId && Boolean(t.url) && !/^(https?|about|file|data|blob):/i.test(t.url),
+  );
+}
+
+/**
+ * Page-side expression resolving to `document.visibilityState`. With `waitMs`,
+ * a page not yet visible is given that long to become so: the state follows
+ * `Page.bringToFront` by a moment.
+ */
+function pageVisibility(waitMs = 0) {
+  if (!waitMs) return "document.visibilityState";
+  return `document.visibilityState === "visible" ? "visible" : new Promise((resolve) => {
+    const done = () => resolve(document.visibilityState);
+    document.addEventListener("visibilitychange", done, { once: true });
+    setTimeout(done, ${waitMs});
+  })`;
+}
+
+/**
+ * Page-side expression resolving `true` once two animation frames have run —
+ * the second follows a paint of everything written before the first — or
+ * `false` when `ms` passes without them, as it does on a hidden page.
+ */
+function pageFrames(ms) {
+  return `new Promise((resolve) => {
+    const timer = setTimeout(() => resolve(false), ${ms});
+    requestAnimationFrame(() => requestAnimationFrame(() => { clearTimeout(timer); resolve(true); }));
+  })`;
+}
+
+/**
+ * Page-side expression that hides the notification tray (`hide` true) or
+ * restores it, by adding or removing one stylesheet, and returns whether the
+ * tray is now hidden. `visibility` keeps the tray's box, so nothing in the
+ * frame moves. A `subject` selector that resolves inside the tray leaves it
+ * showing: the toast is then what is being shot.
+ */
+function pageTray(hide, subject = null) {
+  return `(() => {
+    const id = ${JSON.stringify(TRAY_STYLE_ID)}, subject = ${JSON.stringify(subject)};
+    document.getElementById(id)?.remove();
+    if (!${Boolean(hide)} || (subject && document.querySelector(subject)?.closest("#notifications"))) return false;
+    const style = document.createElement("style");
+    style.id = id;
+    style.textContent = "#notifications, #notifications * { visibility: hidden !important; }";
+    document.head.append(style);
+    return true;
+  })()`;
+}
+
+/**
+ * Page-side expression that closes every open application but the one whose
+ * id is `keepId`, removes the notification toasts, and returns the class names
+ * of the applications it asked to close, as JSON. Each close is unanimated: an
+ * animated one waits out a transition, or a second where its element has none,
+ * and longer than that on a hidden page. A close that throws is passed over.
+ */
+function pageCompose(keepId) {
+  return `(async () => {
+    const keep = ${JSON.stringify(keepId)}, closed = [];
+    for (const app of foundry.applications.instances.values()) {
+      if (keep && app.id === keep) continue;
+      try { closed.push(app.constructor.name); await app.close({ animate: false }); } catch {}
+    }
+    ui.notifications?.clear?.();
+    document.querySelectorAll("#notifications .notification").forEach(n => n.remove());
+    return JSON.stringify(closed);
+  })()`;
+}
+
+/**
+ * The page keeper behind `api.compose` / `api.shot`: `front()` puts the
+ * driver's page back in the foreground, `compose()` clears it of windows and
+ * toasts, and `capture()` takes one frame of it with the notification tray
+ * out of the picture. Bound to `targetId`, the driver's own page, and to the
+ * three channels that page is driven through: `browser(method, params)` for
+ * the browser's commands, `page(method, params, timeout)` for the page
+ * session's, and `evaluate(expression, timeout)` for page-side code, each
+ * `timeout` in ms. `connect()` composes it into the capture handle; it is
+ * exported so the same sequence can be driven against a scripted page, a
+ * test's included.
+ */
+export function pageKeeper({ targetId, browser, page, evaluate }) {
+  // Strays already asked to close: one the browser keeps listed is asked once.
+  const dismissed = new Set();
+  // One step of `front()`: its value, or undefined after a warning.
+  const attempt = async (what, why, step) => {
+    try { return await step(); }
+    catch (err) { console.warn(`  warn: ${what} failed before ${why}: ${err.message}`); return undefined; }
+  };
+
+  const keeper = {
+    /**
+     * Close the pages the browser opened for itself (`strayPages`), activate
+     * the driver's page, and resolve to `{visibility, closed}`: the page's
+     * `document.visibilityState` as found (null when it did not answer) and
+     * the urls closed by this call. Warns when the page was found hidden, and
+     * says whether activating it showed it. `why` names the caller's step in
+     * those lines. A step that fails is a warning and the next one still runs.
+     */
+    async front(why) {
+      const visibility = (await attempt("reading the page's visibility", why, () => evaluate(pageVisibility(), PROBE_TIMEOUT_MS))) ?? null;
+      const closed = [];
+      const listed = await attempt("listing the browser's pages", why, () => browser("Target.getTargets"));
+      for (const stray of strayPages(listed?.targetInfos, targetId)) {
+        if (dismissed.has(stray.targetId)) continue;
+        dismissed.add(stray.targetId);
+        const done = await attempt(`closing ${stray.url}`, why, () => browser("Target.closeTarget", { targetId: stray.targetId }));
+        if (done === undefined) continue;
+        closed.push(stray.url);
+        console.warn(`  warn: closed a page the browser opened for itself, before ${why}: ${stray.url}`);
+      }
+      await attempt("fronting the page", why, () => page("Page.bringToFront"));
+      if (visibility !== null && visibility !== "visible") {
+        const after = (await attempt("re-reading the page's visibility", why, () => evaluate(pageVisibility(1000), PROBE_TIMEOUT_MS))) ?? "not answering";
+        console.warn(after === "visible"
+          ? `  warn: page was ${visibility} before ${why} — brought to front`
+          : `  warn: page was ${visibility} before ${why} and is ${after} after fronting — a wait on a frame or a timer will stall`);
+      }
+      return { visibility, closed };
+    },
+
+    /**
+     * Front the page, then close every open application except the one
+     * `keepSelector` names (an `#id`) and clear the toasts (`pageCompose`).
+     * Resolves to the class names of the applications it asked to close.
+     */
+    async compose(keepSelector = null) {
+      await keeper.front("compose()");
+      return JSON.parse(await evaluate(pageCompose(keepSelector ? keepSelector.replace(/^#/, "") : "")));
+    },
+
+    /**
+     * Take one PNG frame of the page — clipped to `clip` when given — and
+     * resolve to its base64 data. The notification tray is hidden for the
+     * capture and restored after it, pass or fail, unless `subject` (the
+     * selector being shot) lies inside the tray. Each attempt fronts the page
+     * and waits for two animation frames first. A capture unanswered after
+     * CAPTURE_TIMEOUT_MS is given up and tried once more; a second failure
+     * throws, naming both and whether frames were arriving.
+     */
+    async capture({ clip = null, subject = null } = {}) {
+      try {
+        await evaluate(pageTray(true, subject));
+        let first = null;
+        for (;;) {
+          await keeper.front(first ? "shot()'s retry" : "shot()");
+          const frames = await evaluate(pageFrames(FRAME_WAIT_MS), FRAME_WAIT_MS + PROBE_TIMEOUT_MS).catch(() => null);
+          try {
+            const shot = await page("Page.captureScreenshot",
+              { format: "png", ...(clip ? { clip } : {}), captureBeyondViewport: false }, CAPTURE_TIMEOUT_MS);
+            return shot.data;
+          } catch (err) {
+            const failure = `${err.message}, animation frames ${frames === null ? "not probed" : frames ? "arriving" : "not arriving"}`;
+            if (first) throw new Error(`foundry-capture: no screenshot in two attempts — ${first}; then ${failure}`);
+            first = failure;
+            console.warn(`  warn: capture failed (${failure}) — trying once more`);
+          }
+        }
+      } finally {
+        await evaluate(pageTray(false), PROBE_TIMEOUT_MS).catch((err) => console.warn(`  warn: could not restore the notification tray: ${err.message}`));
+      }
+    },
+  };
+  return keeper;
+}
+
+/**
+ * One DevTools connection over an open WebSocket. `send` resolves to a
+ * command's result, rejects with the browser's error object as JSON, and
+ * rejects `timeout: <method>` when no reply comes within `timeout` ms; a reply
+ * that arrives after that is dropped. Events are not dispatched.
+ */
+export class Cdp {
   constructor(ws) {
     this.ws = ws; this.id = 0; this.pending = new Map();
     ws.addEventListener("message", (ev) => {
       const msg = JSON.parse(ev.data);
       if (msg.id && this.pending.has(msg.id)) {
-        const { resolve, reject } = this.pending.get(msg.id);
+        const { resolve, reject, timer } = this.pending.get(msg.id);
         this.pending.delete(msg.id);
+        clearTimeout(timer);
         msg.error ? reject(new Error(JSON.stringify(msg.error))) : resolve(msg.result);
       }
     });
   }
-  send(method, params = {}, sessionId) {
+  send(method, params = {}, sessionId, timeout = CDP_TIMEOUT_MS) {
     const id = ++this.id;
     return new Promise((resolve, reject) => {
-      this.pending.set(id, { resolve, reject });
       this.ws.send(JSON.stringify({ id, method, params, sessionId }));
-      setTimeout(() => { if (this.pending.delete(id)) reject(new Error(`timeout: ${method}`)); }, 90000);
+      const timer = setTimeout(() => { if (this.pending.delete(id)) reject(new Error(`timeout: ${method}`)); }, timeout);
+      this.pending.set(id, { resolve, reject, timer });
     });
   }
 }
@@ -270,10 +473,12 @@ export async function connect({ browser, origin, user, port = 9333, width = 1600
   if (!fs.existsSync(browser)) throw new Error(`foundry-capture: browser not found at ${browser}`);
 
   const profile = fs.mkdtempSync(path.join(os.tmpdir(), "acks-capture-"));
+  // `--disable-sync`: a fresh profile can sign in with the OS account, and what
+  // that account syncs — an extension, with its first-run tab — opens over the page.
   const proc = spawn(browser, [
     "--headless=new", `--remote-debugging-port=${port}`, `--user-data-dir=${profile}`,
     `--window-size=${width},${height}`, "--no-first-run", "--no-default-browser-check",
-    "--disable-features=Translate,AcceptCHFrame", "about:blank",
+    "--disable-features=Translate,AcceptCHFrame", "--disable-sync", "about:blank",
   ], { stdio: ["ignore", "pipe", "pipe"] });
   proc.stderr.on("data", () => {});
   /**
@@ -329,43 +534,50 @@ export async function connect({ browser, origin, user, port = 9333, width = 1600
     await cdp.send("Runtime.enable", {}, sessionId);
     await sleep(2500);
 
+    // Page-side evaluation: awaits promises, throws on page errors, and gives
+    // up after `timeout` ms where one is passed.
+    const evaluate = async (expression, timeout) => {
+      const r = await cdp.send("Runtime.evaluate", { expression, awaitPromise: true, returnByValue: true }, sessionId, timeout);
+      if (r.exceptionDetails) {
+        throw new Error(`${r.exceptionDetails.text} ${r.exceptionDetails.exception?.description ?? ""}`.trim());
+      }
+      return r.result.value;
+    };
+    const keeper = pageKeeper({
+      targetId,
+      browser: (method, params) => cdp.send(method, params),
+      page: (method, params, timeout) => cdp.send(method, params, sessionId, timeout),
+      evaluate,
+    });
     // The ledger's evaluator resolves `api` lazily; the handle is defined just below.
     const fixtures = fixtureLedger((expression) => api.eval(expression));
     const api = {
       /** Evaluate an expression in page context; awaits promises, throws on page errors. */
       async eval(expression) {
-        const r = await cdp.send("Runtime.evaluate", { expression, awaitPromise: true, returnByValue: true }, sessionId);
-        if (r.exceptionDetails) {
-          throw new Error(`${r.exceptionDetails.text} ${r.exceptionDetails.exception?.description ?? ""}`.trim());
-        }
-        return r.result.value;
+        return evaluate(expression);
       },
 
       /**
        * Compose the frame: close every open application except `keepSelector`,
        * and clear notification toasts. Other modules' onboarding dialogs open
        * over the subject and document writes raise toasts that bleed into the
-       * clip — both were hit on the first real capture. Returns what it closed
-       * so a report can say so. Affects only this throwaway session's DOM.
+       * clip — both were hit on the first real capture. The sweep is
+       * `pageKeeper`'s `compose()`: the page is fronted first, so what the
+       * walk renders next is painted, and each close is unanimated. Returns
+       * what it closed so a report can say so. Affects only this throwaway
+       * session's DOM.
        */
       async compose(keepSelector = null) {
-        const keep = keepSelector ? keepSelector.replace(/^#/, "") : "";
-        return JSON.parse(await api.eval(`(async () => {
-          const closed = [];
-          for (const app of foundry.applications.instances.values()) {
-            if (${JSON.stringify(keep)} && app.id === ${JSON.stringify(keep)}) continue;
-            try { closed.push(app.constructor.name); await app.close(); } catch {}
-          }
-          ui.notifications?.clear?.();
-          document.querySelectorAll("#notifications .notification").forEach(n => n.remove());
-          return JSON.stringify(closed);
-        })()`));
+        return keeper.compose(keepSelector);
       },
 
       /**
        * Capture to `file`. With a selector, clips to that element's box — which
        * is how §4b's "keep the machine out of frame" is actually enforced.
-       * Creates the parent directory. Warns past the §4b ~300 KB ceiling.
+       * The frame is `pageKeeper`'s `capture()`: taken of a fronted page with
+       * the notification tray hidden, and tried once more if it does not
+       * answer. Creates the parent directory. Warns past the §4b ~300 KB
+       * ceiling.
        */
       async shot(file, selector = null) {
         let clip;
@@ -381,10 +593,9 @@ export async function connect({ browser, origin, user, port = 9333, width = 1600
           if (rect.width < 2 || rect.height < 2) throw new Error(`foundry-capture: selector has no area: ${selector}`);
           clip = { ...rect, scale: 1 };
         }
-        const shot = await cdp.send("Page.captureScreenshot",
-          { format: "png", ...(clip ? { clip } : {}), captureBeyondViewport: false }, sessionId);
+        const data = await keeper.capture({ clip, subject: selector });
         fs.mkdirSync(path.dirname(path.resolve(file)), { recursive: true });
-        fs.writeFileSync(file, Buffer.from(shot.data, "base64"));
+        fs.writeFileSync(file, Buffer.from(data, "base64"));
         const bytes = fs.statSync(file).size;
         if (bytes > 300_000) console.warn(`  warn: ${file} is ${Math.round(bytes / 1024)} KB, over the ~300 KB §4b ceiling`);
         if (!clip) console.warn(`  warn: ${file} is a full-viewport shot — §4b wants a clipped window, and an unclipped frame can show the user name`);

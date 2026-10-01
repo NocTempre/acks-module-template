@@ -1106,3 +1106,101 @@ of the 446 files in `acks-extras`' `scripts/` into the same tokens. Both
 checks therefore return the verdicts they did. The one family file that hit a
 fixed misjudgment is `tools/importer/dev-probe-rebuking.mjs`: a regex opens a
 template hole there, and neither check reads `tools/`.
+
+## 2026-10-01 — The capture driver keeps its page in front and its tray out of frame — IN FORCE
+
+**Problem.** Shooting `acks-extras` 9.6.0's snapshots, the driver failed three
+ways. A toast landed between `compose()` and the capture and sat over the
+subject: on a GM seat the importer opens its book library in the background,
+so its toasts arrive seconds after any sweep, and they name the Judge's books.
+After a few minutes the page stopped answering, a `Page.captureScreenshot` in
+one run and the evaluation awaiting a window's `close()` in another. Each
+unanswered call cost the full 90 seconds a DevTools call was allowed.
+
+The stall was reproduced on a fresh profile with the driver's own launch flags
+(Edge 154, headless). Within ten seconds of launch the browser lists a sync
+confirmation dialog as a page at its own address; it has no window and hides
+nothing. Between 51 and 58 seconds in, an extension opens its first-run page
+as a tab in the driver's window, in front of the driver's page. From then that
+page is hidden. It runs no animation frames, a 100 ms timer chain ticks once a
+second, and nine minutes in a 2-second timer had not fired after eight. A loop
+closing twelve windows the way `ApplicationV2#close` does, each close waiting
+for a transition or for one second, took 24 seconds hidden and 2.4 visible. Of
+seven screenshots of the hidden page, five answered in anything from 49 ms to
+7 seconds and two did not answer in the 15 and 30 seconds they were given.
+Neither page appears under `--disable-sync`, and under `--disable-extensions`
+only the dialog does. The cause is therefore read as the fresh profile signing
+in with the OS account and syncing an extension; the sign-in itself was not
+observed.
+
+**Ruled.** `connect()` launches with `--disable-sync`, and `pageKeeper` holds
+the rest. `front()` closes every page target that is neither the driver's own
+nor at a document's address, each one once, activates the driver's page with
+`Page.bringToFront`, and warns when it found the page hidden, saying whether
+fronting showed it. `compose()` and `shot()` call it before anything else.
+`compose()` then closes each application with `close({animate: false})`. An
+animated close waits for a transition, or for a second where its element has
+none, and the 21 applications open on a page that has just joined have none:
+that loop took 23.8 seconds animated and 9 ms unanimated, for the same 21
+closed and the same page left. `capture()` takes the frame: it hides the
+notification tray with one stylesheet and removes that sheet in a `finally`,
+leaves the tray showing when the shot's subject is inside it, and before each
+attempt fronts the page and waits for two animation frames. A screenshot is
+given 30 seconds, then one more attempt; a second failure throws, naming both
+and whether frames were arriving. `Cdp.send` takes a timeout per call and
+clears its timer when the reply comes. `bin/test-foundry-capture.mjs` drives
+the keeper against a scripted page that runs the driver's own page-side
+expressions, each case confirmed to fail when the behaviour it guards is
+broken, and template CI runs it.
+
+**Rejected — closing only pages at `edge://`.** That is the fix as it was
+first used, beside the launch flag and `Page.bringToFront`. The page it closes
+is the dialog, which was never in front of anything and stays listed after
+`Target.closeTarget` reports success. The page that took the foreground has an
+extension's address. Fronting alone showed the hidden page at once, frames and
+all, with that tab still open, and closing that tab alone did the same; the
+three clean runs are owed to the flag and the fronting. The rule is written by
+what a stray page is not, the driver's own or a document, so the next page a
+browser opens for itself needs no new spelling.
+
+**Rejected — `--disable-extensions`.** It kept the page visible for the four
+minutes it was watched, with the dialog still listed. It removes one cause of
+a hidden page that the sync flag already removes, and fronting answers the
+condition whatever caused it.
+
+**Rejected — fronting before every `api.eval`.** A walk makes hundreds of
+evaluations, and fronting is three round trips and a fourth for each stray.
+What stalls on a hidden page is a wait on a frame, a transition or a timer.
+The driver's own is the frame `shot()` takes, which is fronted, and
+`compose()` no longer makes one.
+
+**Cost.** No frame shows a toast unless the shot's subject is the toast. A
+capture that never answers is given up after two attempts of 30 seconds, each
+behind a frame wait of up to four, where it was given up after one of 90. A
+walk's own `api.eval` is not fronted, so a wait it makes on a page hidden since
+the last `compose()` or `shot()` is as slow as before. `Cdp`, `pageKeeper` and
+`strayPages` are exported for the test, on a file other scripts import. The
+scripted page pins the order of the driver's calls and nothing a browser does.
+One mutation survives it, the half of the tray's rule that reaches the tray's
+descendants, which only a live page evaluates. The unanimated close was not
+among the fixes a release run had proven: it was measured here on a
+player-role and a GM-role seat, and an application whose own `close()` drops
+its options still animates.
+
+**Found on landing.** One script was run against the test world through the
+driver at `6fd5dec` and through this one, on a non-GM seat, creating no world
+document. The old driver's page was hidden 75 seconds after launch, with the
+dialog and the extension's tab both listed; the new one's was visible, with
+neither. A toast raised before the shot was in the old driver's frame of a box
+clipped over the tray and absent from the new one's, and present in the new
+one's frame when the tray itself was the subject. The first `compose()` of a
+run, 21 applications on a visible page, took 23.6 seconds through the old
+driver and 1.6 through the new. With a tab opened over the page, `compose()`
+closed four dialogs in 12.7 seconds and in 0.07, and the new driver warned
+that it had found the page hidden. With a page at the browser's own address
+opened over it, `shot()` took 3.7 seconds and 0.2; the new driver closed that
+page first and said so. On a GM-role seat that was not the active GM, the new
+driver's `compose()` closed that seat's 21 applications in 20 ms and the frame
+shot after it was clean. A script that called `close()` exited 85.6 seconds
+later through the old driver, its calls' timers still running, and at once
+through the new.
