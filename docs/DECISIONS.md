@@ -1185,7 +1185,10 @@ One mutation survives it, the half of the tray's rule that reaches the tray's
 descendants, which only a live page evaluates. The unanimated close was not
 among the fixes a release run had proven: it was measured here on a
 player-role and a GM-role seat, and an application whose own `close()` drops
-its options still animates.
+its options still animates. The first `compose()` of a run used to hold the
+walk for about 24 seconds after `ready` and now returns in under two. A walk
+that leaned on that wait has to wait on a signal of its own: in these runs
+the importer was still raising toasts 20 seconds after `ready`.
 
 **Found on landing.** One script was run against the test world through the
 driver at `6fd5dec` and through this one, on a non-GM seat, creating no world
