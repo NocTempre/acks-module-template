@@ -790,4 +790,7 @@ every em dash and SHIPPED mojibake titles, undetectable to validate because
 the corruption is valid UTF-8 and valid JSON). `validate.mjs` gates both
 signatures by byte; detect by bytes (`c3 a2 e2 82 ac`), never by eye. A
 CLAUDE.md heading rendering unstripped is a manifest-encoding smell — the
-title-strip regex no-ops on a mojibake dash.
+title-strip regex no-ops on a mojibake dash. Line endings are the same
+hazard in a script that rewrites any tracked text file: Python's text mode
+and PowerShell both write CRLF on Windows. `git diff --stat` showing a whole
+file changed by a one-line edit is the signature; read it before staging.
