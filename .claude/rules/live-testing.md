@@ -131,7 +131,10 @@ all** — there is never a malformed population to migrate from that path.
 Parallel sessions share this working tree, this test world, and these
 settings. Expect another session's fixtures and failures in the world log.
 The only world documents a session deletes are the ones its own ledger names
-(step 4), and the only files it acts on are its own. Two more rules that
+(step 4), and the only files it acts on are its own; committing beside a peer
+is `shared-tree.md`. **A shutdown or a relaunch drops every client, a peer's
+included.** Find out who is seated before either, and where a seat is not
+yours, ask its owner. Two more rules that
 exist because they were broken: **never modify an in-force canonical doc
 outside an explicitly authorized phase** (a proposal doc opens with a
 NOT-IN-EFFECT banner until adopted), and **shared ledgers are re-read

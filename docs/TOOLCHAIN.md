@@ -225,15 +225,10 @@ Release procedure (also encoded in the `acks-release` skill):
   landing one, run the test pass and cut the release in the same motion — a
   commit pushed after a release is silent drift between what users install
   and what the repo says they have.
-- **On a shared working tree, gate what you STAGED, not what is on disk.**
-  `build:packs`, `validate` and `test` read the files in the tree, and on a
-  machine running parallel sessions those include every other session's
-  in-flight hunk — while CI checks out the commit. Stage the release, then run
-  the gates against that tree (`git write-tree`, `git archive` it somewhere
-  clean, gate there), or the green being reported belongs to a tree nobody will
-  ever build. The same discipline catches a `git add` that swept up a neighbour
-  mid-write: diff the staged blob against HEAD rather than trusting the file,
-  and excise the foreign hunk with `git apply --cached` before it is committed.
+- **On a shared working tree, gate the tree you commit, not the directory.**
+  The rule is the synced `.claude/rules/shared-tree.md` — own hunks only, the
+  gated tree id is the committed one, when a moved base is carried, how a
+  release tags and pushes — and the `acks-commit` skill carries it out.
 - **Module schema bumps carry no migrations of their own.** Pre-1.0 dev
   churn is not migrated; worlds track HEAD. The one exception is ingesting
   base-engine objects (system or Foundry documents) into module structures —
@@ -582,14 +577,15 @@ Full ruling and its corollaries: DECISIONS, 2026-07-19.
   every other canonical file:
   - `.claude/skills/` — the roster: `acks-bug-triage` (intake ledger +
     dispositions), `acks-hotfix` (patch scoping), `acks-minor` (minor
-    scoping), `acks-release` (mechanics for all three kinds),
-    `acks-hygiene-sweep` (standing audit + its tooling), `acks-new-module`
+    scoping), `acks-release` (mechanics for all three kinds), `acks-commit`
+    (one session's change out of a shared tree, and the tool that builds and
+    gates it), `acks-hygiene-sweep` (standing audit + its tooling), `acks-new-module`
     and `acks-sync-toolchain` (run from this repo). There is **no user-level
     install**: a `~/.claude/skills/acks-*` copy sits outside every drift gate
     and once silently clobbered newer text — delete any found.
   - `.claude/rules/` — always-true doctrine loaded on demand:
     `live-testing.md`, `ip-doctrine.md`, `docs-doctrine.md`,
-    `rules-lookup.md`, `ui-layout.md`, `delegation.md`. Each is the canonical
+    `rules-lookup.md`, `ui-layout.md`, `delegation.md`, `shared-tree.md`. Each is the canonical
     statement of its subject; every other file points at it.
   - `.claude/hooks/` — `single-branch-guard.mjs` (single-branch convention)
     and `no-windows-path-heredoc.mjs` (Windows paths never enter Bash

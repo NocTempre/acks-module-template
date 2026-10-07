@@ -62,6 +62,15 @@ jobs:
       - name: Capture driver fronts its page and bounds its captures
         run: node bin/test-foundry-capture.mjs
 
+      # The commit tool is the one piece of canon that writes to a branch, and
+      # its guards fire only when another session's commit, hunk or staging
+      # arrives at the wrong moment. Throwaway repositories stage each of
+      # those moments and check what the commit then holds.
+      - name: Commit tool commits the gated tree and no peer's hunk
+        run: |
+          node --check .claude/skills/acks-commit/commit-own-hunks.mjs
+          node bin/test-commit-own-hunks.mjs
+
       - name: Scaffold a module from the skeleton
         run: |
           git config --global user.email "ci@example.invalid"

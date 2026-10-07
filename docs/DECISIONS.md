@@ -1281,3 +1281,90 @@ documents, placeables, `Set`s and `Map`s, one core operator and the module's
 own classes. A module scaffolded from the skeleton passes with none read.
 `acks-divine-conduit`, which this template does not sync, holds one copy of
 the expression (`scripts/module.mjs`).
+
+## 2026-10-07 — A commit on a shared tree is one session's hunks, gated as the tree it commits — IN FORCE
+
+**Problem.** Several sessions write in one `acks-extras` working tree at once,
+on `main`. TOOLCHAIN §4 said to gate what is staged and not what is on disk,
+as one paragraph of prose, and each session carried it out with a script of
+its own, adapted from the last session's and kept in scratch space. What those
+runs met, between 2026-09-20 and 2026-10-07:
+
+- On three occasions (the 9.5.0 and 9.6.0 releases and a sweep on
+  2026-10-01) a peer's hunk arrived in a file the session counted as its own,
+  after the gate or within the hour before the commit. A whole-file `git add`
+  would have committed each ungated. Rebuilding the tree and comparing its id
+  with the gated one caught the second, and a per-hunk predicate the third.
+- A list built by exclusion, everything but the foreign paths, sees a foreign
+  file left out and is blind to one taken in. At 10.1.0 two of a peer's docs
+  files rode into a gated tree and the check printed clean. The count of
+  modified files caught it, after the peer had committed.
+- An export of a tree has no git history. A check that reads history prints a
+  note there and exits 0, so an export gate says nothing about it.
+- A peer published the version a session was drafting a changelog section for
+  (8.0.1), and the release preflight caught it only at the bump.
+- On 2026-10-06 several sessions were told to commit within one half hour.
+  A full gate ran about nine minutes, each was invalidated by another
+  session's commit, and three sessions committed on a moved base on their own
+  call.
+
+**Ruled.** The rule is `.claude/rules/shared-tree.md`, synced to every repo.
+Its mechanics are one tool, `.claude/skills/acks-commit/commit-own-hunks.mjs`,
+which builds a change in a private index, gates that tree in a clone, and
+stages on the shared index only when the tree id is the gated one.
+`bin/test-commit-own-hunks.mjs` runs it in this repo's CI. TOOLCHAIN §4's
+paragraph is a pointer to the rule. A release commits through the same tool,
+tags its own commit's sha and pushes that sha with the tag atomically.
+
+**Ruled by the owner, 2026-10-06 — a moved base may be carried.** Asked to
+choose between carrying a green gate over a base that moved and always running
+the full gate again, the owner chose to carry. The conditions put to them and
+accepted: the commits that landed write none of the change's files and no gate
+tooling, the tests pass again on the exact rebuilt tree, and the full gate
+then runs on the commit itself. The question was about sessions committing
+from the shared `acks-extras` tree. The rule file states it for every shared
+tree in the family, which is this entry's reading and not the owner's words. A
+release is outside it.
+
+**Rejected — always gate again.** With several sessions committing, a gate is
+as long as the window in which another commit lands, so the loop need not end.
+
+**Rejected — a check inside `validate`.** A gate cannot see how the commit
+that will carry its result is going to be staged.
+
+**Ruled by the owner, 2026-10-07 — TOOLCHAIN §2 stands.** Asked whether the
+default should become "commit, and leave it unpushed unless told", the owner
+kept "push what you commit". A session told to commit and hold a release
+leaves its commit unpushed on that word, each time.
+
+**Not decided here.** A worktree or a branch per session, with one session
+landing commits, would remove the shared index and most of this entry. The
+family is single-branch with no worktrees, enforced by
+`.claude/hooks/single-branch-guard.mjs`. The owner asked for an assessment on
+2026-10-07 and is not keen: there is one live environment, so work may as well
+merge as it is developed, though it might avoid rework.
+
+**Cost.** The clone holds committed files only, so a gitignored suite does not
+run in the gate. A carried commit is on `main` before the full gate has run on
+it, for as long as `postgate` takes. The hunk pattern is the session's claim:
+one that matches a peer's hunk takes it, and the `record` listing is where
+that shows, if it is read. "A new check that reads your files is gate tooling"
+is the session's judgement; the tool's pattern knows paths, not what a landed
+check reads. A release gates twice, once in the working tree before the live
+walk and once on the release tree at the commit.
+
+**Found on landing.** `bin/test-commit-own-hunks.mjs` holds 18 cases over
+throwaway repositories whose gate fails on a peer's line, so a gate that read
+the working tree in place of the built tree is red. Each of 22 single edits to
+a copy of the tool removes one guard, and the suite fails 18 of them. The four
+it passes: the staged tree compared with the gated one and the commit read
+back after it is made, both of which fire only when a second writer lands
+between two of the tool's own steps; the changed-path list compared with
+`change.json`, which the earlier refusals leave unreachable; and removing the
+clone's links before deleting it, which Node 22 on Windows does not need,
+since its recursive delete removes a junction without following it. The first
+such run passed 7 of 20 edits. One case had exited 2 for a reason other than
+the one it named, and the hunk count and the carry stages had no case. On this
+repo's own tree, with a peer's uncommitted `skeleton/.claude/settings.json` in
+it, `record` split TOOLCHAIN.md's five hunks between three changes. Before the
+commit that carries this entry, `gate` and `commit` had run on fixtures only.

@@ -206,7 +206,9 @@ Reflexes that are wrong here (full statements in the module's `CLAUDE.md`):
 Hand off to **`acks-release`** with kind = **hotfix**. It owns the version bump,
 the live gate, tagging, CI polling and manifest verification; none of that is
 repeated here. A hotfix captures no release snapshots unless the fix is
-UI-visible *and* the user asks.
+UI-visible *and* the user asks. When the user says to commit and hold the
+release, the fix lands through **`acks-commit`** and the ledger row reads
+`fixed-unreleased`.
 
 ### Voice
 
