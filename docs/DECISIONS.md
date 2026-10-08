@@ -1516,3 +1516,84 @@ seven. A module scaffolded from the skeleton passes with none read.
 `foundryvtt-acks-core`, which this template does not sync, spells one in
 `src/` that falls to neither: a `-=` segment built for Foundry 13 behind a
 test for the operator.
+
+## 2026-10-07 — A release push the remote rejects is repeated whole, inside a bound — IN FORCE
+
+**Problem.** `acks-release` step 7 covered GitHub failing after the push: the
+tag is on origin, the release finishes on its own, and the session reports
+and stops. Step 6 said nothing about the push itself being rejected. Nothing
+is on origin then, and a session that stops leaves a release commit and a tag
+in a tree other sessions share.
+
+**Found.** Releasing `foundryvtt-acks-extras` v10.2.1, the atomic push that
+this date's shared-tree entry ruled was rejected seven times between 11:08
+and 11:15 local time, each with `remote: Internal Server Error` and
+`! [remote rejected] … (Internal Server Error)` on both refs. The eighth
+attempt, at 11:16, was accepted unchanged. Each attempt read the remote
+first, and before all eight its `main` was where it had been and the tag was
+absent. The session's retry was six attempts 75 seconds apart, and the sixth
+was the one accepted, about eight and a half minutes after the first
+rejection. Those counts are from its output files, one per attempt. As the
+owner relayed it, githubstatus.com showed no incident and `gh api` answered
+throughout, and before the session settled on a retry it ran
+`git fsck --strict` on the commit and looked at the repository's rulesets, at
+a release or tag of that name and at the API's health. None of it found
+anything.
+
+**Ruled.** The handling is three cases under `acks-release` step 6, stated
+there and nowhere else: a push rejected with a server error is repeated alone
+and whole inside a bound, the session stops at the bound with the command
+that completes the release, and the tag goes alone where a peer's push
+carried the release commit to origin first. TOOLCHAIN §4 step 6 points at
+the skill. The owner was shown the text and the alternatives below on
+2026-10-07 and took it as proposed.
+
+**Rejected — the branch pushed first and the tag after it.** A remote that is
+failing writes is where one can land without the other, and the atomic push
+exists so that a release commit never reaches origin without its tag by the
+release's own hand.
+
+**Rejected — the rule's sentence in TOOLCHAIN as well.** A releasing session
+works from the skill, which is what syncs into a module repo. A copy in
+TOOLCHAIN would be a second place to tune the bound and the commands, and the
+first to drift. A pointer names the place.
+
+**Rejected — a script for the retry alone.** It would run only while a remote
+is failing. No release exercises that path and no test can drive it against
+the real remote, so the script would be least proven where it is needed.
+
+**Not decided here.** Whether step 6's tag and push become a tool beside the
+skill, as the commit is, with these three cases inside it and the bullets
+deleted as it lands. This date's tools entry orders four tools and this is
+not among them. For it: the session on the day wrote the step as two scratch
+scripts, which is where the shared-tree entry's problem started. Against it:
+the failure has happened once and had never been written down, which is short
+of "recurred despite being written down" (`skeleton/CLAUDE.md`, "Where a
+lesson lands"). The owner was shown both on 2026-10-07 and left it undecided.
+
+**Cost.** The bound, about fifteen minutes, is set from one outage of about
+eight and a half. A session that reaches it leaves a release commit and its
+tag local, and the next peer to commit above them and push carries the commit
+to origin without the tag. Telling a server error from any other refusal is
+the session's reading of git's output. The stop on a later version rests on
+documentation and has not been tried: GitHub marks a newly published release
+latest unless told otherwise, `softprops/action-gh-release` passes that
+default through, and the Release workflow sets nothing.
+
+**Found on landing.** On throwaway repositories, with git 2.50.1: a remote
+that rejected the atomic push moved neither ref; step 6's line run a second
+time stopped at `git tag` and pushed nothing; the push alone then landed both
+refs; with a peer's commit pushed above the release commit the atomic push
+was refused as a non-fast-forward and sent nothing, the fetch and
+`git branch -r --contains` named `origin/main`, and the tag pushed alone
+landed on the release commit. The fixture's rejection is a hook's. GitHub's
+server error was seen on the one day and cannot be staged, and the peer case
+has not happened to a release. In this repo the four commits pushed beneath
+`e7210be` have no workflow run and `e7210be` has one, which is why the peer
+case sends step 7a to the pushed tip. The rule landed in `a53a48c` and this
+entry in a commit of its own: another session's uncommitted entry stood at
+the end of this file, and a zero-context hunk cannot be divided between two
+sessions. `sync-toolchain.mjs --check` run from this repo's working tree
+reported five drifted files in `foundryvtt-acks-extras`, four of them other
+sessions' uncommitted canon, so the sync ran from a clean clone of the pushed
+commit, which reported one.
