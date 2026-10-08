@@ -36,13 +36,13 @@ Scaffold a new module (creates `C:\Proj\<id>`, renders placeholders, `git init -
 node bin/new-module.mjs acks-example --title "Example Feature" --desc "One-line description."
 ```
 
-Check the existing modules for drift from canon (read-only):
+Check the existing modules for drift from the pushed canon (writes nothing in them):
 
 ```
 node bin/sync-toolchain.mjs --check
 ```
 
-Apply canon to all clean repos (repos with uncommitted changes are skipped):
+Apply the pushed canon (a repo is held where a file the sync would write has an uncommitted change):
 
 ```
 node bin/sync-toolchain.mjs --apply

@@ -658,21 +658,26 @@ Three layers keep the family consistent, by mechanism rather than discipline:
 3. **Template CI** (`ci.yml` here) — every template change scaffolds a module
    from the skeleton and runs the canonical build + validate, then runs
    `bin/test-validate.mjs` (and `bin/test-ip-scan.mjs` for the IP scanner,
-   `bin/test-foundry-capture.mjs` for the capture driver), so canon itself
+   `bin/test-foundry-capture.mjs` for the capture driver,
+   `bin/test-sync-toolchain.mjs` for the sync itself), so canon itself
    can't break silently and a gate that stops failing its own fixtures is
    caught.
 
-**Operating rule: push the template BEFORE syncing it downstream.**
-`sync-toolchain.mjs` renders canon from the template's local **working tree**,
-but layer 2 re-runs that same script in CI against a fresh checkout of
-`acks-module-template` **main on GitHub**. Sync from an unpushed template and
-every module commits content that does not exist upstream yet, so `drift` fires
-on the very commit meant to fix it — on 2026-08-01 this reddened every module
-repo at once on `CLAUDE.md` (the only `RENDER` entry), from a sync run
-between two template commits. Order: commit + push the template, then
-`--apply` into the modules, then push those. The signature of the race is a
-local `--check` reporting `0 file(s) drifted` while CI is red — nothing is
-actually wrong, so re-run the failed checks rather than re-syncing anything.
+**Operating rule: push the template BEFORE syncing it downstream.** Layer 2
+runs `sync-toolchain.mjs` in CI against a fresh checkout of
+`acks-module-template` **main on GitHub**, so the only canon a module can
+commit and pass is the canon on that branch. The sync reads it from there:
+`--apply` writes `origin/main` as it fetches it and takes no other canon, and
+`--check` compares with the same commit. An edit that is uncommitted, or
+committed and not pushed, reaches no module, and the run lists it;
+`--check --worktree` and `--check --from <rev>` preview one. Order: commit +
+push the template, then `--apply` into the modules, then push those. A module
+trails canon from the template's push until its own sync is pushed, and a
+module push inside that window fails `drift`, so the sync follows the push at
+once. `--apply` holds a repo, whole, where a file it would write carries an
+uncommitted change, and a run that could not read a target exits 2; the
+script's header says what each exit status means. The rulings, and the
+incidents behind them, are DECISIONS 2026-08-05 and 2026-10-08.
 
 **`{{KEY}}` — an uppercase key in double braces — is reserved in `skeleton/`
 for scaffolder tokens.** Layer 3 greps the scaffolded module for any surviving

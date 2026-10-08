@@ -1822,3 +1822,190 @@ Not checked: two sessions' own `ship` runs meeting on a live repository; a
 lease across a machine's sleep, which only a moved clock has shown; the
 gate's length on a runner with two processors; and any system but Windows,
 which this commit's CI run is the first to try.
+
+## 2026-10-08 — The sync reads canon from a commit, holds what git cannot give back, and fails a target it did not read — IN FORCE
+
+**Problem.** `bin/sync-toolchain.mjs` was written for one session in one
+tree. It read canon from the files of the tree it ran in, skipped a repo for
+any uncommitted path, and ended on its level line when it had read nothing.
+On a tree several sessions write in, each of the three gave a wrong answer
+with a green exit.
+
+**Found.**
+
+- **Canon was whatever lay on disk.** On 2026-10-08 a peer's uncommitted hunk
+  in `skeleton/.claude/settings.json` made the bare `--check` report
+  `.claude/settings.json` as drift in `acks-extras`, exit 1, while the same
+  module tree read level against the pushed commit (47 files) and was green
+  in CI. `--apply` from that tree would have copied the hunk into the module.
+  Two sessions synced that day and each built its own way round it, a clean
+  clone and a `git archive` of the pushed head. The manifest was read from the
+  tree as well, so what counted as canon was a peer's to change, and an
+  untracked or ignored file under a `COPY_DIRS` directory was canon too.
+- **Nothing made `--apply` wait for the push.** §9's operating rule and the
+  2026-08-05 ruling put the order in prose and in the skill, and the script
+  would still write an unpushed commit, or an uncommitted edit, into a module.
+  The incident §9 used to tell stays here: on 2026-08-01 a sync run between
+  two template commits reddened every module repo at once on `CLAUDE.md`, the
+  only `RENDER` entry, and its tell was a local `--check` reporting
+  `0 file(s) drifted` while CI was red.
+- **A repo was skipped for any uncommitted path, and the skip exited 0.** On a
+  shared tree a module repo holds some session's uncommitted work most of the
+  time; the one sync of that day waited for a moment `acks-extras` was clean.
+  The skill said not to use `--force`, which was also the only way through,
+  and which overwrote an uncommitted synced file as readily as it ignored an
+  unrelated one. A skipped repo was counted as one "file written/skipped-dirty".
+- **A run that read no repo ended `done: 0 file(s) drifted from canon`, exit
+  0.** A target directory that was missing, or held no `module.json`, was
+  skipped with a line. From a clean clone the default target is looked for
+  beside the clone and is not there, which is how this was found: the way
+  round the first flaw walked into the fourth. `bin/nightly.mjs` reads the
+  exit status and would have written "clean". An argument the script did not
+  know was read past, so a mistyped `--apply` was a check and a mistyped
+  `--repo-path` was the default targets.
+
+**Ruled by the owner, 2026-10-08.**
+
+1. **Canon is a commit.** `--apply` writes `origin/main` as the run fetches it
+   and takes no other canon. That makes the 2026-08-05 order a mechanism: a
+   module cannot be synced ahead of the template, because the sync has nothing
+   unpushed to write. `--check` reads the same commit; `--from <rev>` and
+   `--worktree` preview a commit or the tree, and `--apply` refuses both. The
+   commit is exported through an index of its own and the sync runs from the
+   export, so the engine and the manifest are that commit's too. The run names
+   the commit and lists the canon in the tree that it did not read.
+2. **`--apply` destroys nothing git cannot give back.** A repo is held, whole,
+   where a path the sync would write or remove is modified, staged, untracked
+   or ignored: nothing is written in it, the paths are named, exit 1. Any
+   other uncommitted path is not looked at. `--force` writes the held paths
+   too.
+3. **A target that was not read fails the run**, exit 2, and so does an
+   argument the script does not know. Such a run ends `not done:`, never on
+   the line a level run ends on, and `bin/nightly.mjs` writes it up as NOT
+   CHECKED.
+4. **The script holds what files can decide; the skill holds what needs a
+   judgment**: whose a held path is, when `--force` is right, and what to do
+   when another session's canon is on the branch as well.
+
+**Built.** Two commits. `7603b06` gave the script its canon, its hold and its
+exit statuses, with seventeen cases and their CI step, and left `--check` on
+the working tree where no flag named a canon: every module's CI runs this
+script from `main` on each push, and until that commit's own CI the export
+had run on Windows alone. This commit moves the default and has the module
+workflow ask for `--worktree`, since its checkout is the canon and the bare
+check would fetch the branch a second time. A workflow not yet synced goes on
+passing the old command line, which now fetches and compares with the same
+commit. A case reads the workflow's command line out of `skeleton/` and runs
+it, so a flag the script stops reading fails in this repo's CI and not in
+every module's.
+
+**Found while building.**
+
+1. *git moves `origin/main` whether or not a fetch names it.* A fetch given
+   some other destination still moved the branch's ref, because the clone's
+   own fetch configuration names every branch. A copy of the script that
+   fetched into the wrong ref passed all fifteen cases there were. Only in a
+   clone configured for another branch does the script's own refspec do the
+   work; a case stages one, and that copy fails it.
+2. *The check that a run leaves the shared index alone could not fail where
+   it stood.* It looked for staged paths after the run, and a run that read
+   the pushed commit into the shared index would have left none, that commit
+   being the tree's own. Only the case that fetches another clone's commit
+   showed such a run. The check now stages a file before the run and looks
+   for it after, and a copy that exports through the shared index fails both.
+3. *A status left to its default reports a directory that is ignored whole as
+   one entry*, which names none of the files in it: `!! ign/` for a file two
+   levels down, in a scratch repository. The script asks for every file by
+   name, and a case ignores a directory whole.
+4. *A status rewrites the index of the repository it reads* where a file's
+   timestamp has moved and its bytes have not, and holds the lock a peer's
+   `git add` needs while it does. Every git call here runs with
+   `GIT_OPTIONAL_LOCKS=0`, and a case compares the index's bytes.
+5. *The directory the family's repos stand in is a repository itself.* A
+   module copy with no `.git` of its own is a directory of that one: git
+   reports its paths from that one's root, and its files are held by what
+   that one has not committed.
+6. *The variable a run sets for its engine is not a lock.* The first version
+   took any directory the variable named, a working tree included. An engine
+   now runs only from a directory that holds no `.git`, which an export never
+   does and a tree always does. A copy with no history that sets the variable
+   for itself still runs as one and writes its own files, 45 of them into a
+   scratch module. That takes a copy made on purpose and a variable no
+   document names.
+
+**Rejected — `--apply --from <rev>` for a commit that is not pushed.** A
+module's gate could then run before the template push, and the time a module
+trails the template would fall from one module gate to about a minute. The
+order would be an instruction again, and that instruction was broken once
+after it was written. The window it would shorten has cost one red run in the
+last hundred `Toolchain check` runs on `acks-extras`, and that one
+(2026-09-24, a release commit, `tools/ip-scan.mjs`) trailed a template commit
+made seven hours before it, not a gate.
+
+**Rejected — moving `--apply` alone and leaving `--check` on the tree.** Module
+CI's path would not change at all. The bare check is what a session, the
+nightly and the release procedure run, and it would go on reporting a peer's
+uncommitted edit as drift and passing a module that matches an edit nobody
+has pushed.
+
+**Rejected — keeping the tree, and refusing to run where it differs from
+`origin/main`.** Every sync and every check would stop while any session had
+an uncommitted edit under `skeleton/`, which was the state of the tree for
+the whole of the day this was ruled.
+
+**Rejected — writing the clean-clone recipe into the skill.** No code. It is
+the work instruction the 2026-10-07 ruling on tools declines, for a step two
+sessions had already had to work out alone.
+
+**Rejected — reading canon out of git file by file, in the tree's own
+engine.** One process and no scratch directory. The engine and the manifest
+would still be the tree's, so a peer's edit to either would decide what a sync
+writes, and the manifest could never import anything.
+
+**Rejected — holding per file and writing the rest.** A repo with part of its
+canon written fails the drift check as surely as one with none, and has to be
+finished or undone by hand.
+
+**Rejected — never holding.** A synced copy that differs is usually a
+hand-edit the doctrine forbids. It is also an apply somebody interrupted, or a
+peer's sync between its write and its commit, and an uncommitted byte that is
+overwritten is gone.
+
+**Rejected — failing only a run that read nothing.** A run over two targets
+that read one would still exit 0, and the nightly would still write "clean"
+for a repo it never opened.
+
+**Not decided here.** `bin/make-blank.mjs` regenerates `blank-template/` from
+the tree as it stands, so a peer's uncommitted `skeleton/` edit rides into the
+copy, and the CI step that compares the two sees it only once it is
+committed. The module's side of a check is still the files on disk. Nothing
+stops a module push while the module trails the template; a drift check at
+push time would, and would also stop a peer's unrelated push for as long as
+someone else's sync is in flight.
+
+**Cost.** A module trails the template from the template's push until its own
+sync is pushed, one module gate at the least, and a module push inside that
+window fails `drift`. An edit cannot be tried in a module before it is
+pushed, only previewed with `--check --worktree` or `--from`. A run from a
+commit fetches, exports the tree (107 files, well under a second here) and
+starts a second process. A session whose own interrupted apply left synced
+files behind is held by them and has to say `--force`.
+
+**Checked before this commit, and not.** On Windows,
+`test-sync-toolchain: 17 cases … 0 failed`; the same line on the Linux
+runner, in 11 s, in `7603b06`'s CI. 23 single edits to that commit's script,
+each taking one behaviour out, each turned a case red. That commit's script
+fails three of this commit's cases. This commit rewrites or adds to four
+cases; the edits those cases catch were made again to this commit's script,
+and each is still red. From the shared tree, with five uncommitted paths of
+canon in it, one of them a peer's, the bare check read `origin/main`, listed
+the five as canon it did not read and ended level on 47 files, exit 0;
+`--check --worktree` reported four of them as drift in `acks-extras`, exit 1.
+A `Toolchain check` dispatched on `acks-extras` ran `7603b06`'s script on a
+runner under the workflow's old command line: 47 files read, 0 drifted.
+
+Not checked: this commit's default under the old command line on a runner; an
+`--apply` into a real module repo, which the sync after this commit is the
+first of; a staged rename among the paths to be written; a fetch that hangs
+to its limit, or one refused for a credential; the nightly's new label, which
+was read and not run; and macOS.

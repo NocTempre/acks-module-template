@@ -27,7 +27,7 @@
  *                 this one.
  * `--apply` writes `--pushed` and takes no other canon, so what it writes is
  * on the branch already and a module is never synced ahead of the template.
- * `--check` reads the working tree where no flag names a canon.
+ * `--check` reads `--pushed` too where no flag names a canon.
  *
  * A commit is exported whole into a scratch directory and the sync runs from
  * the export: the engine, the manifest and the files are that commit's. An
@@ -63,8 +63,8 @@ const REMOTE = "origin";
 const BRANCH = "main";
 const TIP = `refs/remotes/${REMOTE}/${BRANCH}`;
 /** The canon `--check` reads where no flag names one. */
-const CHECK_CANON = "worktree";
-/** How long a fetch of the branch may take before the run goes on without it. */
+const CHECK_CANON = "pushed";
+/** How long a fetch of the branch may take. One that runs past it has failed. */
 const FETCH_MS = 60_000;
 /**
  * Set by a run for the engine it starts from an export: the export's directory

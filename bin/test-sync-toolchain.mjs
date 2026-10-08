@@ -173,15 +173,17 @@ try {
     check("and the builder syncs once the module has pack data", f.module.read("tools/build-packs.mjs") === "// build 1\n");
   });
 
-  await test("where no flag names a canon, --check reads the working tree", (check) => {
+  await test("where no flag names a canon, --check reads origin/main as it fetches it", (check) => {
     const f = fixture("default");
     f.level();
     f.template.write("skeleton/tools/validate.mjs", "// validate, not committed\n");
     const r = f.sync(["--check"]);
-    check("an uncommitted edit of canon is drift", r.status === 1 && /drift\s+tools\/validate\.mjs/u.test(r.out), r.out);
-    check("and the first line says the tree was read, and that it has moved", /^canon: this working tree at [0-9a-f]{12}, with 1 uncommitted path\(s\) of canon\n/u.test(r.out), r.out);
-    check("--check --worktree is the same run", f.sync(["--check", "--worktree"]).out === r.out);
-    check("--check --pushed does not see the edit", f.sync(["--check", "--pushed"]).status === 0);
+    check("an uncommitted edit of canon is not drift", r.status === 0 && /\ndone: 0 file\(s\) drifted from canon in 1 repo\(s\) read; canon is [0-9a-f]{12} \(origin\/main, fetched\)\n/u.test(r.out), r.out);
+    check("and the run lists the edit as canon it did not read", /uncommitted\s+skeleton\/tools\/validate\.mjs/u.test(r.out), r.out);
+    check("--check --pushed is the same run", f.sync(["--check", "--pushed"]).out === r.out);
+    const tree = f.sync(["--check", "--worktree"]);
+    check("--check --worktree reads the tree, where the edit is drift", tree.status === 1 && /drift\s+tools\/validate\.mjs/u.test(tree.out), tree.out);
+    check("and its first line says the tree was read, and that it has moved", /^canon: this working tree at [0-9a-f]{12}, with 1 uncommitted path\(s\) of canon\n/u.test(tree.out), tree.out);
   });
 
   await test("--apply writes origin/main, and an edit in the template's tree takes no part", (check) => {
@@ -275,6 +277,11 @@ try {
       const r = ci(...canon);
       check(`a level module passes (${canon[0] ?? "no canon flag"})`, r.status === 0 && /done: 0 file\(s\) drifted from canon in 1 repo\(s\) read/u.test(r.out), r.out);
     }
+    // The command line every module's workflow runs, read out of the workflow.
+    const workflow = fs.readFileSync(path.join(TEMPLATE_ROOT, "skeleton", ".github", "workflows", "toolchain-check.yml"), "utf8");
+    const flags = workflow.match(/^\s*run: node \.toolchain-template\/bin\/sync-toolchain\.mjs (.+) --repo-path "\$GITHUB_WORKSPACE"$/mu)?.[1].split(" ");
+    const asWorkflow = flags ? f.sync([...flags, "--repo-path", f.module.dir], { cwd: f.module.dir, script }) : { status: null, out: workflow };
+    check("the workflow's own command line is one the script reads, and it names the checkout as the canon", asWorkflow.status === 0 && /^canon: this working tree at [0-9a-f]{12}\n/u.test(asWorkflow.out), asWorkflow.out);
     f.module.write(VALIDATE, "// edited in the module\n");
     for (const canon of [[], ["--pushed"], ["--worktree"]]) {
       const r = ci(...canon);
@@ -284,6 +291,7 @@ try {
     const later = f.canon({ "skeleton/LICENSE": "licence 2\n" });
     const r = ci("--pushed");
     check("--pushed fetches in the shallow checkout: a commit pushed after it was made is the canon", r.status === 1 && /drift\s+LICENSE/u.test(r.out) && r.out.startsWith(`canon: ${later.slice(0, 12)} `), r.out);
+    check("and the check with no canon flag is the same run", ci().out === r.out);
     check("--worktree reads the checkout as it was made", ci("--worktree").status === 0);
     check("no scratch directory is left", fs.readdirSync(f.scratch).length === 0);
   });
@@ -425,6 +433,8 @@ try {
       const tree = run("--check", "--worktree");
       check(`${where}: --worktree reads the copy's files, and says it has no history`, tree.status === 0 && /^canon: this working tree \(a copy with no git history of its own\)\n/u.test(tree.out) && /done: 0 file\(s\) drifted from canon in 1 repo\(s\) read/u.test(tree.out), tree.out);
       check(`${where}: --pushed is exit 2`, run("--check", "--pushed").status === 2, run("--check", "--pushed").out);
+      const bare = run("--check");
+      check(`${where}: so is the check with no canon flag, and it names --worktree`, bare.status === 2 && /--check --worktree reads its files/u.test(bare.out) && !/===/u.test(bare.out), bare.out);
       check(`${where}: --apply is exit 2`, run("--apply").status === 2, run("--apply").out);
     }
   });
@@ -473,7 +483,7 @@ try {
     const first = f.level();
     const named = [...real.COPY, ...real.APPEND_OK, ...real.RENDER];
     check("--apply exits 0 and creates every file the manifest names", first.status === 0 && named.every((rel) => f.module.read(rel) !== null), first.out);
-    const again = f.sync(["--check"]);
+    const again = f.sync(["--check", "--worktree"]);
     const pushed = f.sync(["--check", "--pushed"]);
     check("the module then reads level from the tree and from the branch", again.status === 0 && pushed.status === 0 && /done: 0 file\(s\) drifted from canon in 1 repo\(s\) read/u.test(pushed.out), `${again.out}\n${pushed.out}`);
     check("and every line is a file read level", pushed.out.split("\n").filter((l) => /^ {2}ok /u.test(l)).length >= named.length + real.COPY_DIRS.length, pushed.out);
