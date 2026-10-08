@@ -602,17 +602,21 @@ Full ruling and its corollaries: DECISIONS, 2026-07-19.
     `live-testing.md`, `ip-doctrine.md`, `docs-doctrine.md`,
     `rules-lookup.md`, `ui-layout.md`, `delegation.md`, `shared-tree.md`. Each is the canonical
     statement of its subject; every other file points at it.
-  - `.claude/hooks/` — `single-branch-guard.mjs` (single-branch convention)
-    and `no-windows-path-heredoc.mjs` (Windows paths never enter Bash
-    heredocs), wired in the synced `.claude/settings.json`.
+  - `.claude/hooks/` — `single-branch-guard.mjs` (single-branch convention),
+    `no-windows-path-heredoc.mjs` (Windows paths never enter Bash
+    heredocs), `edit-ledger.mjs` (records each Edit and Write under its
+    session, in the git directory, for the commit tool to read) and
+    `shared-tree-guard.mjs` (refuses a hand-run `git add`, `git commit` or
+    discard in a repository that carries the commit tool), wired in the
+    synced `.claude/settings.json`.
   - `.claude/agents/` — the model/effort routing tier: `scout` (haiku,
     search), `implementer` (sonnet, scoped changes), `architect` (opus,
     read-only design/diagnosis), `live-tester` (sonnet, drives the test
     world), `doc-scribe` (haiku, docs chores). CLAUDE.md's "Sizing the task"
     says when each is used.
 - The template repo protects itself with the same `.claude/settings.json`
-  hook set (single-branch-guard, heredoc guard, `bgIsolation: none`) as its
-  children, and carries its own `CLAUDE.md` — it is the highest-blast-radius
+  hook set (single-branch-guard, heredoc guard, edit ledger, shared-tree
+  guard, `bgIsolation: none`) as its children, and carries its own `CLAUDE.md` — it is the highest-blast-radius
   repo in the family and gets no less guidance than the repos it governs.
 - Note that when a session runs from one repo with others as additional dirs,
   only the *session* repo's settings govern permissions; the per-module

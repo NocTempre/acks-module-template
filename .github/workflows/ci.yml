@@ -69,7 +69,18 @@ jobs:
       - name: Commit tool commits the gated tree and no peer's hunk
         run: |
           node --check .claude/skills/acks-commit/commit-own-hunks.mjs
+          node --check .claude/skills/acks-commit/ledger.mjs
           node bin/test-commit-own-hunks.mjs
+
+      # The ledger says whose a line is and the guard says which commands go
+      # around the commit tool. Both are wrong silently: a line credited to
+      # the wrong session is committed by it, and a command let through
+      # commits another session's staging. Payloads shaped as the tools
+      # report them, and command lines as sessions write them, check both.
+      - name: Edit ledger credits a line to its writer, and the guard refuses a hand-run commit
+        run: |
+          for f in .claude/hooks/*.mjs; do node --check "$f"; done
+          node bin/test-shared-tree-hooks.mjs
 
       - name: Scaffold a module from the skeleton
         run: |

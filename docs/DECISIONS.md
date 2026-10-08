@@ -1597,3 +1597,100 @@ sessions. `sync-toolchain.mjs --check` run from this repo's working tree
 reported five drifted files in `foundryvtt-acks-extras`, four of them other
 sessions' uncommitted canon, so the sync ran from a clean clone of the pushed
 commit, which reported one.
+
+## 2026-10-07 — The edit ledger and the shared-tree guard — IN FORCE
+
+**Problem.** The first two of the tools ruled on this date under "A worktree
+or a branch per session is rejected, and what is left lands as tools". Whose
+hunk was whose stayed a claim, made by a pattern a session wrote and a
+listing it read. And nothing stopped a hand-run `git add` or `git commit`, so
+the commit tool was one way to commit among several.
+
+**Built.**
+
+- `.claude/hooks/edit-ledger.mjs` runs after every Edit and Write and appends
+  one record under the session's id in `<git dir>/acks-ledger/`: the file's
+  path, and its content before and after.
+- `.claude/skills/acks-commit/ledger.mjs` replays a file's records in order
+  and answers, for each line the working tree holds, which session wrote it,
+  and for each line taken out, which removed it.
+- `commit-own-hunks.mjs` reads that. A `change.json` that names no path takes
+  every line this session wrote and no other. A pattern still takes what no
+  record accounts for, and can no longer take a line the ledger gives another
+  session.
+- `.claude/hooks/shared-tree-guard.mjs` runs ahead of every `git` command in
+  Bash and every PowerShell command, and refuses the ones that write the
+  shared index, make or move a commit, or discard a path's changes.
+
+**Found while building.**
+
+1. *A record is worth its `pre`.* The Edit and Write tools report the file as
+   they found it, and a patch. The hook keeps the reported file only where
+   the patch undone over the file on disk gives the same text, and with no
+   reported file keeps the undone patch. A difference between one record's
+   content after and the next record's content before is a writer no hook
+   saw: a script, a formatter, a session older than the hook. Those lines are
+   nobody's, and so are the lines of a record with no `pre`.
+2. *Git's hunks are not the replay's.* Two edits by one session, a paragraph
+   added and a blank line removed, came out of `git diff -U0` as one line
+   replaced and one line moved. Read hunk by hunk, half of the session's own
+   change had no writer. So a file whose only writers since a committed
+   content are this change's sessions is taken entire, however git divides
+   it. A file with other writers is read hunk by hunk, each hunk at every
+   place its lines let it slide to. A hunk two such places give to different
+   writers is nobody's to take, and the sessions among them still stop a
+   pattern from taking it.
+3. *Two sessions' lines in one hunk divide.* Entries appended to one file by
+   two sessions are one hunk to git. The tool takes this session's lines of
+   it where every line has a writer and this session removed every line the
+   hunk removes, and leaves the rest in the working tree.
+4. *The guard judges a command by its repository.* The commit tool's own
+   scratch clone, a test fixture and a probe all commit by hand, by design.
+   A command is refused only where the repository it runs in carries the
+   commit tool and its `origin` is a remote URL.
+5. *Unstaging has to pass.* A session between `git add` and `git commit`
+   when the hook arrives is refused its commit, and a run of the tool that
+   dies while staging leaves the index held. `git restore --staged` and
+   `git reset` of paths write no file and move no branch, and are the way
+   out of both.
+6. *A hook process costs about a third of a second here.* The ledger is one
+   hook after the write, with no second one before it.
+7. *The ledger keeps whole copies.* The directory above these repositories
+   is a repository too, so a hook that recorded wherever it found a `.git`
+   would have copied a local-only rules extract, or a machine's environment
+   file, into that repository's git directory. It records only where the
+   repository carries the commit tool, and only a file git does not ignore.
+
+**Rejected — a snapshot hook before each edit.** It would give `pre` without
+trusting the tool's report, at twice the cost on every edit, and the report
+checked against its own patch gives the same.
+
+**Rejected — crediting an unseen change to the session whose record comes
+next.** It hands that session a script's lines, or a peer's from before the
+hook reached it.
+
+**Rejected — telling two removed lines of the same text apart by which is
+older than the ledger.** It is wrong once a line has been removed, committed
+and written again. Two tombstones with different removers are nobody's.
+
+**Rejected — refusing every `git reset` and `git restore`.** It leaves stale
+staging that no session can clear.
+
+**Cost.** About a third of a second on every Edit, Write, `git` command and
+PowerShell command. What a script writes is still claimed by a pattern and
+read in a listing. Lines that repeat their neighbours can end as nobody's
+where two sessions wrote in one file. The guard reads the command as text: a
+command a shell builds at run time (`sh -c`, `xargs`, an alias) passes, so it
+stops a habit and is no boundary. A record is kept fourteen days after its
+session last wrote, so a change older than that is nobody's.
+
+**Checked before this commit, and not.** Offline:
+`bin/test-shared-tree-hooks.mjs` and the ledger cases of
+`bin/test-commit-own-hunks.mjs`, with each of 64 single edits to the hook, the
+reader, the guard and the tool turning at least one case red. The hook was
+also fed the results this session's transcript holds for four of its own Edit
+and Write calls, and gave each line to the session. Not checked: either hook
+running under Claude Code. What a PostToolUse payload carries is read from the
+SDK's types and from those transcript results. Whether a running session
+takes up a hook that arrives by sync, and whose session id a subagent's edit
+carries, are unknown until one is live.

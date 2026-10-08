@@ -5,12 +5,14 @@
  * moved under the gate is refused or carried by the stated conditions and no
  * others. Each case is a fresh repository with a gate that fails on a peer's
  * line, so a gate that read the working tree in place of the built tree is
- * red.
+ * red. The ledger cases write through the edit-ledger hook as two sessions
+ * and check that a line is taken by its writer and by nobody else.
  *
- * Usage:  node bin/test-commit-own-hunks.mjs [<commit-own-hunks.mjs>]
+ * Usage:  node bin/test-commit-own-hunks.mjs [<commit-own-hunks.mjs>] [--group tree|ledger]
  *         (defaults to .claude/skills/acks-commit/commit-own-hunks.mjs; pass a
  *         modified copy to confirm a case fails when the behaviour it guards
- *         is broken)
+ *         is broken. A copy imports `ledger.mjs` from beside itself.
+ *         `--group` runs the shared-tree cases or the ledger's alone)
  */
 import { execFileSync, spawnSync } from "node:child_process";
 import fs from "node:fs";
@@ -19,7 +21,11 @@ import path from "node:path";
 import url from "node:url";
 
 const TEMPLATE_ROOT = path.dirname(path.dirname(url.fileURLToPath(import.meta.url)));
-const KIT = path.resolve(process.argv[2] ?? path.join(TEMPLATE_ROOT, ".claude", "skills", "acks-commit", "commit-own-hunks.mjs"));
+const GROUP = process.argv.includes("--group") ? process.argv[process.argv.indexOf("--group") + 1] : null;
+const KIT = path.resolve(process.argv[2] && !process.argv[2].startsWith("--") ? process.argv[2] : path.join(TEMPLATE_ROOT, ".claude", "skills", "acks-commit", "commit-own-hunks.mjs"));
+const HOOK = path.join(TEMPLATE_ROOT, ".claude", "hooks", "edit-ledger.mjs");
+const ME = "session-me-0001";
+const PEER = "session-peer-0002";
 
 const BODY = Array.from({ length: 30 }, (_, n) => `line ${n + 1}`);
 /**
@@ -51,8 +57,12 @@ console.log("ok - gate " + (process.argv[2] ?? ""));
 const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "acks-commit-"));
 const results = [];
 
-/** A committed repository with two text files, a file to remove, gate tooling and an untracked node_modules. */
-function fixture(name, changeJson) {
+/**
+ * A committed repository with two text files, a file to remove, gate tooling
+ * and an untracked node_modules. The tool runs as `session`, or as no session
+ * at all: the id this test's own shell carries never reaches it.
+ */
+function fixture(name, changeJson, { session = null } = {}) {
   const root = path.join(tmp, name);
   const repo = path.join(root, "repo");
   const change = path.join(root, "change");
@@ -69,6 +79,9 @@ function fixture(name, changeJson) {
   write("gone.txt", "to be removed\n");
   write("other.txt", "untouched\n");
   write("tools/validate.mjs", "// stands for gate tooling\n");
+  // The ledger hook records only where the commit tool is carried.
+  fs.mkdirSync(path.join(repo, ".claude", "skills", "acks-commit"), { recursive: true });
+  write(".claude/skills/acks-commit/commit-own-hunks.mjs", "// stands for the commit tool\n");
   write("node_modules/sentinel.txt", "must survive every clone\n");
   const git = (...args) => execFileSync("git", args, { cwd: repo, encoding: "utf8", stdio: ["pipe", "pipe", "pipe"] });
   git("init", "-q", "-b", "main");
@@ -79,15 +92,44 @@ function fixture(name, changeJson) {
   git("commit", "-q", "-m", "base");
   fs.writeFileSync(path.join(change, "commit-msg.txt"), "the change\n");
   fs.writeFileSync(path.join(change, "change.json"), JSON.stringify({ gate: ["node gate.mjs validate", "node gate.mjs test"], carry: ["node gate.mjs test"], ...changeJson }, null, 1));
+  const env = { ...process.env };
+  delete env.CLAUDE_CODE_SESSION_ID;
+  if (session) env.CLAUDE_CODE_SESSION_ID = session;
   const kit = (...args) => {
-    const r = spawnSync(process.execPath, [KIT, ...args, "--change", change], { cwd: repo, encoding: "utf8" });
+    const r = spawnSync(process.execPath, [KIT, ...args, "--change", change], { cwd: repo, encoding: "utf8", env });
     return { status: r.status, out: `${r.stdout}${r.stderr}` };
   };
+  /** Rewrite change.json, keeping the fixture's gate. */
+  const rechange = (json) => fs.writeFileSync(path.join(change, "change.json"), JSON.stringify({ gate: ["node gate.mjs validate", "node gate.mjs test"], carry: ["node gate.mjs test"], ...json }, null, 1));
   /** Rewrite numbered lines of a file in the working tree. */
   const edit = (rel, changes) => {
     const text = fs.readFileSync(path.join(repo, rel), "utf8").split("\n");
     for (const [n, value] of Object.entries(changes)) text[Number(n) - 1] = value;
     write(rel, text.join("\n"));
+  };
+  /**
+   * A session writing through the Edit and Write tools: the file is written,
+   * then the ledger hook is told, as Claude Code tells it.
+   */
+  const as = (who) => {
+    const through = (rel, next) => {
+      const file = path.join(repo, rel);
+      const pre = fs.existsSync(file) ? fs.readFileSync(file, "utf8") : null;
+      fs.writeFileSync(file, next);
+      const tool_response = pre === null ? { type: "create", filePath: file, originalFile: null, structuredPatch: [] } : { filePath: file, originalFile: pre, structuredPatch: [] };
+      const payload = { session_id: who, hook_event_name: "PostToolUse", cwd: repo, tool_name: pre === null ? "Write" : "Edit", tool_input: { file_path: file }, tool_response };
+      const r = spawnSync(process.execPath, [HOOK], { cwd: repo, input: JSON.stringify(payload), encoding: "utf8" });
+      if (r.status !== 0 || r.stdout || r.stderr) throw new Error(`the ledger hook exited ${r.status} and printed: ${r.stdout}${r.stderr}`);
+    };
+    return {
+      write: through,
+      edit: (rel, changes) => {
+        const text = fs.readFileSync(path.join(repo, rel), "utf8").split("\n");
+        for (const [n, value] of Object.entries(changes)) text[Number(n) - 1] = value;
+        through(rel, text.join("\n"));
+      },
+      append: (rel, more) => through(rel, fs.readFileSync(path.join(repo, rel), "utf8") + more),
+    };
   };
   /** A peer's commit: one file written and committed on the shared branch. */
   const land = (rel, text) => {
@@ -100,10 +142,11 @@ function fixture(name, changeJson) {
     const recorded = kit("record");
     return recorded.status === 0 ? kit("ship") : recorded;
   };
-  return { repo, change, git, kit, ship, edit, write, land, head: () => git("rev-parse", "HEAD").trim(), show: (rel) => git("show", `HEAD:${rel}`) };
+  return { repo, change, git, kit, ship, edit, write, land, as, rechange, head: () => git("rev-parse", "HEAD").trim(), show: (rel) => git("show", `HEAD:${rel}`) };
 }
 
-function test(name, body) {
+function test(name, body, group = "tree") {
+  if (GROUP && GROUP !== group) return;
   const problems = [];
   const check = (what, ok, detail = "") => {
     if (!ok) problems.push(`${what}${detail ? `\n      ${String(detail).trim().split("\n").join("\n      ")}` : ""}`);
@@ -195,8 +238,8 @@ try {
     f.edit("b.txt", { 5: "line 5 changed" });
     const base = f.head();
     const bare = f.kit("ship");
-    check("ship with no record exits 1", bare.status === 1 && /run `record` and read its listing first/.test(bare.out), bare.out);
-    check("record is green", f.kit("record").status === 0);
+    check("ship with no record lists the change and exits 1", bare.status === 1 && /== b\.txt: 1 hunk\(s\), 1 this change's, taken whole/.test(bare.out) && /read it, then run `ship` again/.test(bare.out), bare.out);
+    check("no commit is made by it", f.head() === base);
     f.edit("b.txt", { 6: "line 6 PEER, written after the listing was read" });
     const r = f.kit("ship");
     check("ship exits 1 on the later edit", r.status === 1 && /not what the last `record` hashed/.test(r.out), r.out);
@@ -323,6 +366,184 @@ try {
     const r = spawnSync(process.execPath, [KIT, "record", "--change", path.join(f.repo, "scratch")], { cwd: f.repo, encoding: "utf8" });
     check("it exits 2 and says where the directory belongs", r.status === 2 && /lies outside the repository/.test(r.stderr), `${r.stdout}${r.stderr}`);
     check("nothing is recorded there", !fs.existsSync(path.join(f.repo, "scratch", "record.json")));
+  });
+
+  // --- the edit ledger ---
+
+  const ledgerCase = (name, body) => test(name, body, "ledger");
+  const working = (f) => f.git("diff", "-U0", "HEAD");
+
+  ledgerCase("a file listed with no pattern gives up the hunks the ledger says this session wrote, and ship needs no listing read", (check) => {
+    const f = fixture("ledger-own", { files: { "a.txt": {} } }, { session: ME });
+    f.as(ME).edit("a.txt", { 3: "line 3 by me" });
+    f.as(PEER).edit("a.txt", { 20: "line 20 PEER" });
+    f.as(ME).edit("a.txt", { 27: "line 27 by me" });
+    const shipped = f.kit("ship");
+    check("ship exits 0 with no record made first", shipped.status === 0, shipped.out);
+    check("the listing says whose each hunk is", /MINE -3,1 \(-1 \+1\) \[me\]/.test(shipped.out) && /left -20,1 \(-1 \+1\) \[session session-\]/.test(shipped.out) && /MINE -27,1/.test(shipped.out), shipped.out);
+    check("HEAD holds both of this session's lines", f.show("a.txt").includes("line 3 by me") && f.show("a.txt").includes("line 27 by me"));
+    check("HEAD holds no peer line", !f.show("a.txt").includes("PEER"));
+    check("the peer's hunk alone is left in the working tree", working(f).includes("+line 20 PEER") && !working(f).includes("by me"), working(f));
+  });
+
+  ledgerCase("a file this session alone has written is taken entire, however git pairs its lines into hunks", (check) => {
+    const f = fixture("ledger-sole", {}, { session: ME });
+    f.write("a.txt", "first\n\nsecond\n\n\nthird\n");
+    f.git("commit", "-q", "-am", "paragraphs");
+    // Two edits git reads as a line replaced and a line moved.
+    f.as(ME).write("a.txt", "first\n\nnew\n\nsecond\n\n\nthird\n");
+    f.as(ME).write("a.txt", "first\n\nnew\n\nsecond\n\nthird\n");
+    const shipped = f.kit("ship");
+    check("ship exits 0 with no record made first", shipped.status === 0, shipped.out);
+    check("HEAD holds the file as the working tree does", f.show("a.txt") === "first\n\nnew\n\nsecond\n\nthird\n" && working(f) === "", f.show("a.txt"));
+  });
+
+  ledgerCase("a change written before the ledger's first record of a file is nobody's", (check) => {
+    const f = fixture("ledger-before", {}, { session: ME });
+    // No hook saw this one, and the file's first record finds it already there.
+    f.edit("a.txt", { 20: "line 20 PEER, from before the ledger" });
+    f.as(ME).edit("a.txt", { 3: "line 3 by me" });
+    const first = f.kit("ship");
+    check("ship stops with the earlier hunk left", first.status === 1 && /MINE -3,1 \(-1 \+1\) \[me\]/.test(first.out) && /left -20,1 \(-1 \+1\) \[no record\]/.test(first.out), first.out);
+    const second = f.kit("ship");
+    check("ship run again commits this session's line alone", second.status === 0 && f.show("a.txt").includes("line 3 by me") && !f.show("a.txt").includes("PEER"), second.out);
+  });
+
+  ledgerCase("a change that names no path is every file this session wrote, and no file a peer wrote", (check) => {
+    const f = fixture("ledger-auto", {}, { session: ME });
+    f.as(ME).edit("a.txt", { 3: "line 3 by me" });
+    f.as(ME).write("new.txt", "a new file by me\n");
+    f.as(PEER).edit("b.txt", { 5: "line 5 PEER" });
+    f.as(PEER).write("theirs.txt", "a new file, PEER's\n");
+    f.as(ME).edit("other.txt", { 1: "changed by me" });
+    f.as(ME).edit("other.txt", { 1: "untouched" });
+    // A file this session created and a peer has since rewritten.
+    f.as(ME).write("taken-over.txt", "by me\n");
+    f.as(PEER).write("taken-over.txt", "rewritten, PEER's now\n");
+    const shipped = f.kit("ship");
+    check("ship exits 0", shipped.status === 0, shipped.out);
+    const names = f.git("diff", "--name-only", "HEAD~1", "HEAD").trim().split("\n").sort().join(",");
+    check("the commit writes this session's two files", names === "a.txt,new.txt", names);
+    const status = f.git("status", "--porcelain").trim().split("\n").map((l) => l.trim()).sort().join("|");
+    check("the peer's files are as they were", status === "?? taken-over.txt|?? theirs.txt|M b.txt", status);
+  });
+
+  ledgerCase("a new file holding lines that are not this session's is not added on the ledger's word", (check) => {
+    const f = fixture("ledger-new-mixed", {}, { session: ME });
+    f.as(ME).write("new.txt", "by me\nalso by me\n");
+    f.write("new.txt", "by me\nalso by me\na line by a script\n");
+    const r = f.kit("record");
+    check("record exits 1 and counts the lines", r.status === 1 && /REFUSED: new\.txt: new, and 1 of its 3 line\(s\) are not this session's by the ledger/.test(r.out), r.out);
+    f.rechange({ added: ["new.txt"] });
+    check("named under added, it is taken whole", f.kit("record").status === 0);
+  });
+
+  ledgerCase("a hunk two readings give to different sessions is not taken by a pattern", (check) => {
+    const f = fixture("ledger-among", { files: { "a.txt": { own: "same" } } }, { session: ME });
+    f.write("a.txt", "top\nsame\nsame\nbottom\n");
+    f.git("commit", "-q", "-am", "two equal lines");
+    f.as(PEER).write("a.txt", "top\nsame\nbottom\n");
+    f.as(ME).write("a.txt", "top\nbottom\n");
+    const r = f.kit("record");
+    check("record exits 1 and names the other session", r.status === 1 && /the pattern picks a hunk, and the ledger gives session- a line in it/.test(r.out), r.out);
+    f.rechange({ files: { "a.txt": {} } });
+    const bare = f.kit("record");
+    check("and the ledger gives this session none of it", bare.status === 1 && /the ledger gives this session none of its hunks/.test(bare.out), bare.out);
+  });
+
+  ledgerCase("two sessions' entries appended one after the other commit apart, each its own lines", (check) => {
+    const f = fixture("ledger-joined", { files: { "a.txt": {} } }, { session: ME });
+    f.as(PEER).append("a.txt", "## theirs\na PEER entry\n");
+    f.as(ME).append("a.txt", "## mine\nmy entry\n");
+    const recorded = f.kit("record");
+    check("record divides the one hunk", recorded.status === 0 && /PART -30,0 \(-0 \+4\) \[me \+ session session-\]/.test(recorded.out), recorded.out);
+    const shipped = f.kit("ship");
+    check("ship exits 0", shipped.status === 0, shipped.out);
+    check("HEAD ends with this session's entry and holds no peer line", f.show("a.txt").endsWith("line 30\n## mine\nmy entry\n"), f.show("a.txt").slice(-80));
+    check("the peer's entry alone is left, ahead of this session's", /^\+## theirs\n\+a PEER entry$/m.test(working(f)) && !working(f).includes("+## mine"), working(f));
+  });
+
+  ledgerCase("a pattern cannot take a hunk the ledger gives another session", (check) => {
+    const f = fixture("ledger-veto", { files: { "a.txt": { own: "line" } } }, { session: ME });
+    f.as(ME).edit("a.txt", { 3: "line 3 by me" });
+    f.as(PEER).edit("a.txt", { 20: "line 20 PEER" });
+    const r = f.kit("record");
+    check("record exits 1 and names the session", r.status === 1 && /the pattern picks a hunk, and the ledger gives session- a line in it/.test(r.out), r.out);
+    f.rechange({ files: { "a.txt": { whole: true } } });
+    const whole = f.kit("record");
+    check("a whole file is refused the same way", whole.status === 1 && /listed whole, and the ledger gives session- a line in it/.test(whole.out), whole.out);
+    f.as(PEER).write("new.txt", "a new file, PEER's\n");
+    f.rechange({ files: { "a.txt": { own: "by me" } }, added: ["new.txt"] });
+    const added = f.kit("record");
+    check("so is a named new file", added.status === 1 && /new\.txt: added, and the ledger gives session- a line in it/.test(added.out), added.out);
+  });
+
+  ledgerCase("a hunk no record accounts for is left, and ship stops for its listing to be read", (check) => {
+    const f = fixture("ledger-gap", {}, { session: ME });
+    f.as(ME).edit("a.txt", { 3: "line 3 by me" });
+    // A writer no hook saw, between two of this session's edits.
+    f.edit("a.txt", { 10: "line 10 PEER, by a script" });
+    f.as(ME).edit("a.txt", { 15: "line 15 by me" });
+    const base = f.head();
+    const first = f.kit("ship");
+    check("ship stops with the hunk listed as nobody's", first.status === 1 && /left -10,1 \(-1 \+1\) \[no record\]/.test(first.out) && /read it, then run `ship` again/.test(first.out), first.out);
+    check("no commit is made", f.head() === base);
+    const second = f.kit("ship");
+    check("ship run again exits 0", second.status === 0, second.out);
+    check("HEAD holds this session's two lines and not the script's", f.show("a.txt").includes("line 3 by me") && f.show("a.txt").includes("line 15 by me") && !f.show("a.txt").includes("PEER"));
+    check("the script's line is still in the working tree", working(f).includes("+line 10 PEER, by a script"));
+  });
+
+  ledgerCase("this session's line beside one no record accounts for is refused until a pattern claims the hunk", (check) => {
+    const f = fixture("ledger-beside", { files: { "a.txt": {} } }, { session: ME });
+    f.as(ME).edit("a.txt", { 3: "line 3 by me", 20: "line 20 by me" });
+    f.edit("a.txt", { 4: "line 4, by a script" });
+    const r = f.kit("record");
+    check("record exits 1 and says what the hunk holds", r.status === 1 && /REFUSED: a\.txt: the hunk at -3 holds this session's lines beside 2 no record accounts for/.test(r.out), r.out);
+    f.rechange({ files: { "a.txt": { own: "by me", count: 2 } } });
+    const claimed = f.kit("record");
+    check("a pattern takes it", claimed.status === 0 && /MINE -3,2 \(-2 \+2\) \[me \+ no record\]/.test(claimed.out), claimed.out);
+    // Added lines alone: nothing of the hunk is divided off while a line in it has no writer.
+    const g = fixture("ledger-beside-added", { files: { "a.txt": {} } }, { session: ME });
+    g.as(ME).append("a.txt", "an entry by me\n");
+    g.write("a.txt", `${fs.readFileSync(path.join(g.repo, "a.txt"), "utf8")}a line by a script\n`);
+    const added = g.kit("record");
+    check("a hunk of added lines is held the same way", added.status === 1 && /REFUSED: a\.txt: the hunk at -30 holds this session's lines beside 1 no record accounts for/.test(added.out), added.out);
+  });
+
+  ledgerCase("another session's records count as this one's only under adopt", (check) => {
+    const f = fixture("ledger-adopt", { files: { "a.txt": {} } }, { session: ME });
+    f.as(PEER).edit("a.txt", { 3: "line 3 by the session before" });
+    const r = f.kit("record");
+    check("record exits 1 with none of the hunks this session's", r.status === 1 && /the ledger gives this session none of its hunks/.test(r.out), r.out);
+    f.rechange({ files: { "a.txt": {} }, adopt: ["session"] });
+    const loose = f.kit("record");
+    check("a prefix under eight characters is refused", loose.status === 2 && /give eight characters or more/.test(loose.out), loose.out);
+    f.rechange({ files: { "a.txt": {} }, adopt: [PEER.slice(0, 12)] });
+    const bare = f.kit("ship");
+    check("ship stops for the listing, the hunk taken", bare.status === 1 && /MINE -3,1 \(-1 \+1\) \[me\]/.test(bare.out) && /read it, then run `ship` again/.test(bare.out), bare.out);
+    const shipped = f.kit("ship");
+    check("ship run again commits it", shipped.status === 0 && f.show("a.txt").includes("line 3 by the session before"), shipped.out);
+  });
+
+  ledgerCase("with no session id a pattern is read as before, and the ledger only labels", (check) => {
+    const f = fixture("ledger-no-session", { files: { "a.txt": { own: "by a session", count: 1 } } });
+    f.as(PEER).edit("a.txt", { 3: "line 3 by a session" });
+    const r = f.kit("record");
+    check("record takes the hunk and labels its writer", r.status === 0 && /MINE -3,1 \(-1 \+1\) \[session session-\]/.test(r.out), r.out);
+    f.rechange({ files: { "a.txt": {} } });
+    const bare = f.kit("record");
+    check("a file with no pattern is refused", bare.status === 2 && /no session id says whose edits the ledger gives/.test(bare.out), bare.out);
+    f.rechange({});
+    const none = f.kit("record");
+    check("so is a change that names no path", none.status === 2 && /change\.json names no path, and no session id/.test(none.out), none.out);
+  });
+
+  ledgerCase("a session with nothing of its own in the working tree has nothing to commit", (check) => {
+    const f = fixture("ledger-empty", {}, { session: ME });
+    f.as(PEER).edit("a.txt", { 3: "line 3 PEER" });
+    const r = f.kit("record");
+    check("record exits 1", r.status === 1 && /nothing in the working tree is this session's to commit/.test(r.out), r.out);
   });
 } finally {
   // A clone a failed case left behind may still hold a link into its fixture's
