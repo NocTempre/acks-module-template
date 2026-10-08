@@ -1694,3 +1694,131 @@ running under Claude Code. What a PostToolUse payload carries is read from the
 SDK's types and from those transcript results. Whether a running session
 takes up a hook that arrives by sync, and whose session id a subagent's edit
 carries, are unknown until one is live.
+
+## 2026-10-08 — The landing lease, and a gate whose serial work runs side by side — IN FORCE
+
+**Problem.** The last two of the tools ruled on 2026-10-07 under "A worktree
+or a branch per session is rejected, and what is left lands as tools". A
+commit that landed under another session's gate cost that session its gate or
+a carry, and the gate was long enough for that to be the usual case: most of
+its minutes were one process waiting on another.
+
+**Built.**
+
+- `.claude/skills/acks-commit/lease.mjs` is one file in the git directory,
+  held by the run that created it. `gate`, `commit` and `ship` hold it while
+  they run, `ship` from its gate through its commit. A run that finds it held
+  names the holder and waits, twenty minutes unless `--wait` says otherwise,
+  and exits 5 where the wait runs out.
+- `tools/validate.mjs` checks the syntax of its files eight at a time, and
+  starts the IP scan and the module's own validator beside its own checks.
+  What each printed is shown whole, at the place it had.
+- `acks-extras` runs its test suites, its importer's checks after the
+  register lint, and its extra validator's child checks side by side, in a
+  commit of its own. That repo's DECISIONS has the entry.
+
+**Found while building.**
+
+1. *A lease is taken only from a holder that is gone or has stopped.* Gone is
+   a process id nothing answers to. Stopped is a heartbeat that stands still
+   at two looks, twenty seconds apart: at one look, a machine waking from
+   sleep shows every heartbeat as old.
+2. *Removing a dead holder's lease is an exclusion of its own.* Two waiters
+   that judged one lease dead would each remove what stood there, and the
+   second would remove the first one's new lease. The removal happens inside
+   a directory only one can create, and reads the lease again there.
+3. *A holder that lost its lease is still running.* It asks before it stages,
+   and stops where the lease is another's.
+4. *A lease that is there and cannot be read looked like one just given up.*
+   The asker went round without a pause that counted, for as long as the file
+   stood. A single edit to the reader, made to see which case would fail, hung
+   the suite instead. The looks that find nothing are counted now.
+5. *The settings filter let `git.exe` past the guard.* The hook ran only for
+   a Bash command that begins `git `, by a filter in `settings.json`, and the
+   guard already knew `git` under any path or `.exe`. The filter is gone and
+   the hook reads every Bash command, as it already read every PowerShell
+   one. That is a node started per command: 0.2 s, measured while a gate was
+   running.
+6. *A refusal did not say where it judged.* A command after `cd "$DIR"` is
+   judged in the session's project, since the directory is the shell's to
+   compute. A scratch clone's `git reset --hard` was refused that way with no
+   word of why. The refusal names the directory it used.
+7. *A background command is stopped at a timeout it is given, and not
+   otherwise.* One given ten minutes was stopped at ten; one given none ran
+   thirteen. A `ship` that waits for the lease and then gates is run with
+   none, and the skill says so.
+8. *Most of what is left of the gate is one check.* On a copy of
+   `acks-extras` at ae71ea0, `validate` started beside the tests took 277 s
+   before and 160 s after, and the tests 109 s and 40 s. Each printed what it
+   had printed, apart from its timings. The cookbook drift check there is one
+   process recompiling the cookbook, 199 s of a 303 s `validate` when each
+   child was timed, and nothing here shortens it.
+
+**First live run of the two hooks (the entry above left it open).** A running
+session took both up when the sync wrote `settings.json`, with no restart.
+The guard refused `git add` in Bash, after a `cd`, under `git -C` into the
+template, and in PowerShell, and passed it in a scratch clone. The ledger
+recorded a Write as `create` and an Edit as `original`, each `pre` the `post`
+before it, and a subagent's edit under its parent's session with the agent
+named. A `change.json` of `{}` listed the one file the session had written,
+and refused once that file was removed.
+
+**Rejected — a queue, so the longest waiter goes first.** Each waiter would
+hold a ticket that has to be taken from it when it dies, which is the lease's
+own problem a second time. Waiters look every two seconds and the first to
+look takes it. Revisit where a session is seen to wait through more than one
+other's turn.
+
+**Rejected — a named pipe or a socket as the lease.** The system gives it up
+when its holder dies, which is the property wanted. On a POSIX system the
+socket's file outlives the holder and has to be removed by a waiter, which is
+the takeover in finding 2 without a place to put the exclusion, and a holder
+cannot be read with `cat`.
+
+**Rejected — holding the lease from a `gate` run to a later `commit` run.**
+It needs a lease that outlives its process, and then nothing says when it is
+abandoned. `ship` is the run that holds from gate to commit. `gate` and
+`commit` run apart each hold it for their own length, and a commit that lands
+between them is a moved base, as it was.
+
+**Rejected — one shared helper that `validate.mjs` imports.** The validator
+is copied alone into every scaffold and every test fixture. It keeps its
+twenty lines, and a module that wants its own scripts side by side carries
+its own helper.
+
+**Rejected — leaving a check out where nothing it reads has changed.** The
+ruling was the same checks.
+
+**Cost.** Changes land one gate after another. Before, two disjoint changes
+could gate at once and both land, one by a carry; now the second waits. A
+commit made around the tool, the owner's or a session's from before the hooks
+reached it, still moves a base, and exit 3 and the carry stand for it. A
+suite that fails no longer stops the ones after it, so a red run lasts as
+long as its suites do. What the scan and the extra validator print appears when
+`validate` reaches their place, not as they run, and on standard output
+whichever stream they wrote it to. A validator that throws at a check of its
+own leaves the two running with nothing reading them. Two checks that write to one
+scratch place would now collide; none does today, and nothing checks the next
+one.
+
+**Checked before this commit, and not.** In a scratch clone on this base:
+`test-landing-lease: 17 cases … 0 failed`, `test-commit-own-hunks: 31 cases
+… 0 failed` with the lease held, `test-shared-tree-hooks: 31 cases, 0
+failed`, and `test-validate: 33 cases, 0 failed`, four of them new: a file
+that does not parse, two reported in the order walked, and what the scan and
+the extra validator print and how each one's exit counts. The validator
+before this change passes the same 33. 26 single edits to the lease and to
+the tool's use of it, and 11 to the validator's new parts, each turned a
+case red. On the copy of `acks-extras` the validator was also run red:
+three files broken, and one late importer check alone made to fail. Both
+times it exited 1 and named what failed. The tool, holding the lease, gated
+and committed this change in a scratch clone with a peer's hunk beside it,
+and a second run that asked for the lease meanwhile stopped with status 5
+and the holder's name. Synced from that commit into a clone of `acks-extras`,
+the tool's gate there gave `npm run validate: exit 0 in 199s`, against 324 s
+the day before, and 164 s once that repo's own change was in.
+
+Not checked: two sessions' own `ship` runs meeting on a live repository; a
+lease across a machine's sleep, which only a moved clock has shown; the
+gate's length on a runner with two processors; and any system but Windows,
+which this commit's CI run is the first to try.

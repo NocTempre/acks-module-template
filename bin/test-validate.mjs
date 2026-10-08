@@ -717,6 +717,49 @@ await actor.update({ "-=old": null });
     fails: [/^FAIL module\.json: declared Macro pack "macros" has no packs\/_source\/macros, so the commands it ships were not read for legacy update keys — run npm run build:packs/],
     out: [/validate: legacy update keys checked 0 "-=" or "==" key spellings in 1 script under scripts\/ and 0 macro commands in packs\/_source: /],
   },
+  {
+    // The files are checked several at a time. The one walked first is long
+    // enough to be the last whose check ends.
+    name: "a file that does not parse fails at its name, and two are reported in the order they were walked",
+    files: {
+      "scripts/slow.mjs": `${"export function step() {}\nstep();\n".repeat(60_000)}export const broken = ;\n`,
+      "tools/quick.mjs": "export const broken = ;\n",
+    },
+    exit: 1,
+    fails: [/^FAIL scripts\/slow\.mjs: .*slow\.mjs:\d+$/, /^FAIL tools\/quick\.mjs: .*quick\.mjs:1$/],
+    out: [/^FAIL scripts\/slow\.mjs: [^\n]*\r?\nFAIL tools\/quick\.mjs: /m],
+  },
+  {
+    // Both run beside the checks above them. The scan is shown first and
+    // ends last.
+    name: "the IP scan and the module's own validator each show what they printed, the scan first, and pass at exit 0",
+    files: {
+      "tools/ip-scan.mjs": 'await new Promise((resolve) => setTimeout(resolve, 600));\nconsole.log("scan: nothing flagged");\n',
+      "tools/validate-extra.mjs": 'console.log("extra: read the fixture");\n',
+    },
+    exit: 0,
+    out: [/validate: legacy update keys checked [^]*scan: nothing flagged\r?\nextra: read the fixture\r?\nvalidate: scripts, templates, /],
+  },
+  {
+    name: "an IP scan that exits non-zero fails validation",
+    files: {
+      "tools/ip-scan.mjs": 'console.log("scan: one path flagged");\nprocess.exit(1);\n',
+      "tools/validate-extra.mjs": 'console.log("extra: read the fixture");\n',
+    },
+    exit: 1,
+    out: [/scan: one path flagged\r?\nextra: read the fixture/],
+    absent: [/validate: scripts, templates, /],
+  },
+  {
+    name: "a module's own validator that exits non-zero fails validation, and what it wrote to either stream is shown",
+    files: {
+      "tools/ip-scan.mjs": 'console.log("scan: nothing flagged");\n',
+      "tools/validate-extra.mjs": 'console.log("extra: read the fixture");\nconsole.error("extra: found a problem");\nprocess.exit(3);\n',
+    },
+    exit: 1,
+    out: [/scan: nothing flagged\r?\nextra: read the fixture/, /extra: found a problem/],
+    absent: [/validate: scripts, templates, /],
+  },
 ];
 
 const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "acks-validate-"));

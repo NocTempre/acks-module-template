@@ -478,7 +478,11 @@ try {
     check("cd into the guarded repository from elsewhere", guard(`cd "${posix(guarded.repo)}" && git commit -m x`, elsewhere).denied);
     check("-C into the guarded repository from elsewhere", guard(`git -C "${posix(guarded.repo)}" commit -m x`, elsewhere).denied);
     check("a PowerShell path with backslashes", process.platform !== "win32" || guard(`git -C ${guarded.repo} commit -m x`, { ...elsewhere, tool_name: "PowerShell" }).denied);
-    check("a directory it cannot read falls back to the session's project", guard('cd "$(pwd)" && git commit -m x', { cwd: plain.repo }).denied);
+    const computed = guard('cd "$(pwd)" && git commit -m x', { cwd: plain.repo });
+    check("a directory it cannot read falls back to the session's project", computed.denied);
+    check("and the refusal says where it judged", computed.reason.includes(`it was judged in ${guarded.repo}`), computed.reason);
+    check("a refusal in a directory it could read says no such thing", !/it was judged in/.test(guard("git commit -m x").reason));
+    check("git under a path and an .exe is git", guard("/usr/bin/git add -A").denied && guard("git.exe commit -m x").denied && guard('"C:/Program Files/Git/cmd/git.exe" add -A').denied);
     check("and passes where that project is not guarded", !guard('cd "$(pwd)" && git commit -m x', elsewhere).denied);
   });
 

@@ -448,7 +448,8 @@ could not get on screen is a gap, and naming it is the whole point.
   package.json; CI runs it `--if-present`.
 - Optional `tools/validate-extra.mjs` (module-owned): an extra check that must
   run as PART of validation (not just `npm test`). The canonical `validate.mjs`
-  auto-runs it last if present and fails on its non-zero exit, so
+  starts it, where present, beside its own checks, prints what it printed
+  last, and fails on its non-zero exit, so
   `scripts.validate` stays exactly `node tools/validate.mjs` (canon) while the
   module still gets its own gate. acks-extras uses it for the merge guards
   (no stale family ids, flag scopes resolved, one libWrapper registration per

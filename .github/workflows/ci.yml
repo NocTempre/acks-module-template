@@ -48,6 +48,14 @@ jobs:
             cmp -s "$f" "skeleton/$f" || { echo "::error::$f differs from skeleton/$f"; exit 1; }
           done
 
+      # blank-template/ is skeleton/ as bin/make-blank.mjs copies it, and nothing
+      # else compares the two, so a skeleton change that skips the regeneration
+      # leaves the copy-me folder a version behind under a green run.
+      - name: Blank template is the skeleton as last regenerated
+        run: |
+          node bin/make-blank.mjs
+          test -z "$(git status --porcelain -- blank-template)" || { echo "::error::blank-template/ is stale; run node bin/make-blank.mjs"; git status --porcelain -- blank-template; exit 1; }
+
       # The scan's long-literal warning tokenizes source, and a tokenizer that
       # misreads fails quietly in both directions: a comment read as a literal
       # is a warning every module prints for nothing, and a literal read as a
@@ -70,7 +78,15 @@ jobs:
         run: |
           node --check .claude/skills/acks-commit/commit-own-hunks.mjs
           node --check .claude/skills/acks-commit/ledger.mjs
+          node --check .claude/skills/acks-commit/lease.mjs
           node bin/test-commit-own-hunks.mjs
+
+      # One run of the commit tool gates and commits at a time. A lease that two
+      # runs can hold, or one taken from a run that is still at work, loses a
+      # gate or commits under one, and neither shows until two sessions land
+      # in the same minute. Runs started side by side check it.
+      - name: Landing lease is held by one run at a time
+        run: node bin/test-landing-lease.mjs
 
       # The ledger says whose a line is and the guard says which commands go
       # around the commit tool. Both are wrong silently: a line credited to
