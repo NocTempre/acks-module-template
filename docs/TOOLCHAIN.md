@@ -203,7 +203,8 @@ Release procedure (also encoded in the `acks-release` skill):
 5. **Capture the release snapshots the kind calls for — §4b** — during that
    same live-verify session, and update `docs/GALLERY.md`.
 6. Commit, tag the release commit `v<version>`, and push that commit with
-   its tag in one atomic push.
+   its tag in one atomic push. A push the remote refuses is the skill's
+   step 6.
 7. Confirm publication with BOUNDED checks (never `gh run watch` — it hangs
    through GitHub API outages, which 2026-07-16 stranded several agents):
    poll `gh release view v<version> --json assets` ~30s apart, cap ~5 min,
