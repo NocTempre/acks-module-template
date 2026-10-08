@@ -98,6 +98,15 @@ jobs:
           for f in .claude/hooks/*.mjs; do node --check "$f"; done
           node bin/test-shared-tree-hooks.mjs
 
+      # The sync writes canon into every module repo and its check gates every
+      # push they make, and each of its guards fires only in a tree no run
+      # stands in by default: an edit nobody has committed, a commit nobody has
+      # pushed, a file git cannot give back, a target that is not there.
+      # Throwaway repositories stage each one and check what the sync then
+      # reads, writes and reports.
+      - name: Toolchain sync reads a commit, holds what git cannot give back, and fails a target it did not read
+        run: node bin/test-sync-toolchain.mjs
+
       - name: Scaffold a module from the skeleton
         run: |
           git config --global user.email "ci@example.invalid"

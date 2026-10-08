@@ -30,13 +30,13 @@ const date = new Date().toISOString().slice(0, 10);
 const lines = [`# Nightly family run — ${date}`, ""];
 const failures = [];
 
-/** Runs a command in a repo, capturing combined output; returns {ok, out}. */
+/** Runs a command in a repo, capturing combined output; returns {ok, status, out}. */
 function run(cwd, cmd, args) {
   try {
     const out = execFileSync(cmd, args, { cwd, encoding: "utf8", stdio: ["ignore", "pipe", "pipe"], timeout: 10 * 60 * 1000, shell: cmd === "npm" });
-    return { ok: true, out };
+    return { ok: true, status: 0, out };
   } catch (err) {
-    return { ok: false, out: `${err.stdout ?? ""}\n${err.stderr ?? ""}`.trim() || String(err.message) };
+    return { ok: false, status: err.status ?? null, out: `${err.stdout ?? ""}\n${err.stderr ?? ""}`.trim() || String(err.message) };
   }
 }
 
@@ -69,9 +69,12 @@ for (const target of DEFAULT_TARGETS) {
 
 lines.push("## toolchain drift");
 const drift = run(TEMPLATE_ROOT, process.execPath, [path.join(TEMPLATE_ROOT, "bin", "sync-toolchain.mjs"), "--check"]);
-lines.push(`- sync-toolchain --check: ${drift.ok ? "clean" : "**DRIFT**"}`);
+// The check exits 1 where a repo has drifted and anything else where it could
+// not compare one, which is a run that says nothing about drift either way.
+const drifted = drift.status === 1;
+lines.push(`- sync-toolchain --check: ${drift.ok ? "clean" : drifted ? "**DRIFT**" : "**NOT CHECKED**"}`);
 if (!drift.ok) {
-  failures.push({ repo: "acks-module-template", what: ["toolchain drift"] });
+  failures.push({ repo: "acks-module-template", what: [drifted ? "toolchain drift" : "toolchain drift not checked"] });
   lines.push("", "```", drift.out.split("\n").slice(-25).join("\n"), "```");
 }
 lines.push("");
