@@ -1368,3 +1368,63 @@ the one it named, and the hunk count and the carry stages had no case. On this
 repo's own tree, with a peer's uncommitted `skeleton/.claude/settings.json` in
 it, `record` split TOOLCHAIN.md's five hunks between three changes. Before the
 commit that carries this entry, `gate` and `commit` had run on fixtures only.
+
+## 2026-10-07 — A worktree or a branch per session is rejected, and what is left lands as tools — IN FORCE
+
+**Problem.** The entry above left open whether each session should work in a
+worktree or on a branch of its own, with one session landing commits. The
+owner asked for an assessment, and wanted two things from it that pull apart:
+less rework between sessions, and work that merges as it is developed, since
+there is one live environment.
+
+**Found.** The `architect` agent sorted the rework by cause and asked of each
+whether an isolated tree removes it.
+
+| Cause | Seen as | Removed by an isolated tree |
+| --- | --- | --- |
+| One index and one tree | A peer's hunk in a session's file, a peer's file taken in by an exclusion list, a gate red on a peer's in-flight hunk (the entry above) | Yes, and `acks-commit` removes it too |
+| A gate as long as the gap between commits | Seven commits to `acks-extras` between 22:01 and 23:00 on 2026-10-06, against a gate of five to nine minutes | No. A branch still lands on a `main` that moved |
+| One test world | A wait for a seat, a shutdown that drops a peer's client, a launch refused while peers are live | No, and it adds a cost: the dev install is a junction to the main tree, so a worktree's code is live only once it has landed |
+| A version number a peer took | 8.0.1 | No |
+
+Two of the gates lost on 2026-10-06 were already running in clones of their
+own, so the tree they read was isolated and they were lost all the same.
+
+**Ruled by the owner, 2026-10-07.** Rejected. Sessions keep one working tree
+and one branch.
+
+**Rejected — a worktree or a branch per session.** It removes the one cause
+the commit tool already removes, leaves the cause of that night's rework
+standing, and puts a landing between an edit and the live world. It would
+also undo the single-branch guard this file promoted to canon on 2026-08-05
+(TOOLCHAIN §7), and bring back the stranded branch as something a session can
+leave behind.
+
+**Rejected — a trial for sessions that walk nothing live.** Offered beside
+the above and not taken.
+
+**Ruled by the owner, 2026-10-07 — what is left lands as tools.** Shown the
+assessment's other proposals, the owner answered that what is needed is a
+tool in the harness and not a work instruction, and chose this order:
+
+1. A hook that refuses a hand-run `git add` or `git commit`, and the commands
+   that discard a path's changes, so the commit tool is the one way to commit.
+2. A ledger written by a hook as each session edits, from which the commit
+   tool reads whose lines are whose.
+3. A lease, so one gate-to-commit runs at a time.
+4. The gate's serial work run side by side, with the same checks.
+
+The prose each one replaces is deleted as it lands. The entry above shipped
+one tool beside several pages a session has to read, and a rule that is only
+written down is the kind this family has seen recur.
+
+**Not decided here.** A lease on the test world, and where a release's live
+walk runs. Landing several queued changes under one gate waits for gate logs
+that show a queue.
+
+**Cost.** Until the ledger lands, whose hunk is whose stays a claim, made by
+a pattern the session writes and a listing it reads, and a pattern that
+matches a peer's hunk commits it under a green gate. An isolated tree cannot
+do that. A commit that lands under a gate still costs that gate or a carry
+until the lease and the shorter gate land. A hook binds only the sessions
+started after it is synced.
