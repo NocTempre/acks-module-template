@@ -427,6 +427,19 @@ could not get on screen is a gap, and naming it is the whole point.
   `bin/test-validate.mjs` feeds the validator invented modules its gates must
   fail and pass — run it after editing `validate.mjs`; template CI runs it on
   every push.
+- **Legacy update keys (validate.mjs §9).** Foundry 14 retires the `-=key`
+  (forced deletion) and `==key` (forced replacement) spellings of an update
+  key, and logs a compatibility warning for every one written. Each is a value
+  now, under the bare key: `new foundry.data.operators.ForcedDeletion()` and
+  `foundry.data.operators.ForcedReplacement.create(value)`. A **source-text
+  match** over `scripts/` and over the command of every script macro in
+  `packs/_source`, so a macro is read as `build:packs` last wrote it. A
+  literal that spells such a key fails where the source writes it, and where
+  nothing written beside it says what becomes of it; one the source only tests
+  passes, since a hook reads the old spelling for as long as another package
+  may send it. Either failure takes `// legacy-key-ok: <reason>` on or just
+  above the line. The section's own comment lists the spellings it tells
+  apart and the ones it does not see.
 - Optional module-owned pure-logic tests: mock minimal Foundry globals and
   import the real scripts. A single-subject module names the file
   `tools/test-logic.mjs`; a multi-subsystem one splits per subject and chains
@@ -739,9 +752,12 @@ snapshot pipelines, and never let a lookup miss no-op without a log.
 smaller object never clears a key a prior write set.** Writing `{a: 1}` over a
 stored `{a: 1, b: 2}` leaves `b` alive indefinitely, surviving every re-run of
 the write. Anything conditionally present in a written object must be
-retracted explicitly when the condition fails: `-=key` deletion syntax /
-`unsetFlag` for the dropped keys, or `{diff: false, recursive: false}` to
-replace the object whole. And any `getFlag`/`setFlag` against a FOREIGN scope
+retracted explicitly when the condition fails: the forced-deletion operator as
+the value of each dropped key (`new foundry.data.operators.ForcedDeletion()`,
+which acks-extras' lib spells `unset()`) or `unsetFlag`, or
+`{diff: false, recursive: false}` to replace the object whole. The `-=key`
+spelling of the deletion is retired in Foundry 14 and fails validate (§5).
+And any `getFlag`/`setFlag` against a FOREIGN scope
 is guarded by `game.modules.get(scope)?.active` first — an unregistered scope
 throws, so the unguarded read works on every world that has the other module
 and dies on the supported configuration that does not.

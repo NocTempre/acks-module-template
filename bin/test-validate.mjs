@@ -40,6 +40,18 @@ const BASE = {
   "scripts/module.mjs": 'export const MODULE_ID = "acks-fixture";\n',
 };
 
+// The same module declaring one Macro pack, and a document of that pack's source.
+const PACKED = JSON.stringify(
+  {
+    ...JSON.parse(BASE["module.json"]),
+    flags: { "acks-fixture": { idPrefix: "acksFx" } },
+    packs: [{ name: "macros", label: "Macros", path: "packs/macros", type: "Macro" }],
+  },
+  null,
+  2,
+);
+const macro = (id, data) => JSON.stringify({ _id: id, _key: `!macros!${id}`, ...data }, null, 2);
+
 // Every registration shape the reader accepts, beside every shape it must not
 // mistake for one: a name in a comment, in a string, one level down in a
 // nested object, and a method that merely shares the name. The regex holds a
@@ -544,6 +556,166 @@ export const isSpan = (el) => el instanceof HTMLSpanElement;
     exit: 1,
     fails: [/^FAIL scripts\/module\.mjs: line 5: instanceof HTMLSpanElement /],
     out: [/validate: node tests checked 3 instanceof tests in scripts\/ against the DOM node interfaces; 2 passed on realm-ok$/m],
+  },
+  {
+    name: "a legacy update key fails in every spelling that writes one, in .mjs and .js",
+    files: {
+      "scripts/module.mjs": `const MOD = "acks-fixture";
+export async function strip(doc, race, keys, update, source) {
+  await doc.update({ "-=stale": null, "flags.acks-fixture.==rows": [] });
+  await doc.update({ [\`flags.\${MOD}.-=minted\`]: null });
+  await doc.update({ [\`system.-=\${race}\`]: null });
+  update["system.==racial"] = {};
+  update["-=" + race] ??= null;
+  await doc.update(Object.fromEntries(keys.map((k) => ["flags.-=" + k, null])));
+  foundry.utils.setProperty(source, \`flags.\${MOD}.-=legacy\`, null);
+}
+`,
+      "scripts/legacy.js": `game.user.update({ "flags.-=seen": null });\n`,
+    },
+    exit: 1,
+    fails: [
+      /^FAIL scripts\/module\.mjs: line 3: legacy forced-deletion key "-=stale" written as a property name of an object literal — .*\{key: new foundry\.data\.operators\.ForcedDeletion\(\)\}; or state why not with "\/\/ legacy-key-ok: <reason>" on or just above the line$/,
+      /^FAIL scripts\/module\.mjs: line 3: legacy forced-replacement key "==rows" written as a property name of an object literal — .*\{key: foundry\.data\.operators\.ForcedReplacement\.create\(value\)\}/,
+      /^FAIL scripts\/module\.mjs: line 4: legacy forced-deletion key "-=minted" written as a computed property name /,
+      /^FAIL scripts\/module\.mjs: line 5: legacy forced-deletion key "-=…" written as a computed property name /,
+      /^FAIL scripts\/module\.mjs: line 6: legacy forced-replacement key "==racial" written as the key of a member assignment /,
+      /^FAIL scripts\/module\.mjs: line 7: legacy forced-deletion key "-=…" written as the key of a member assignment /,
+      /^FAIL scripts\/module\.mjs: line 8: legacy forced-deletion key "-=…" written as the key of a \[key, null\] entry /,
+      /^FAIL scripts\/module\.mjs: line 9: legacy forced-deletion key "-=legacy" written as the path handed to setProperty\(\) /,
+      /^FAIL scripts\/legacy\.js: line 1: legacy forced-deletion key "-=seen" written as a property name of an object literal /,
+    ],
+    out: [
+      /validate: legacy update keys checked 9 "-=" or "==" key spellings in 2 scripts under scripts\/ and 0 macro commands in packs\/_source: 9 written, 0 neither written nor read where spelled, 0 read$/m,
+    ],
+  },
+  {
+    name: "a legacy update key that is only tested, compared or looked up passes",
+    files: {
+      "scripts/module.mjs": `const MOD = "acks-fixture";
+const FLAG = "attached";
+export function watch(changes, key, keys) {
+  if (\`-=\${FLAG}\` in (changes.flags?.[MOD] ?? {})) return "detached";
+  if (("flags." + MOD + ".-=" + FLAG) in changes) return "detached";
+  if (foundry.utils.hasProperty(changes, \`flags.\${MOD}.-=baseType\`)) return "undeclared";
+  if (hasProperty(changes, "flags." + MOD + ".-=scene")) return "unlinked";
+  if (Object.hasOwn(changes, "-=flags") || changes.hasOwnProperty("==system")) return "whole";
+  if (key === "-=ownership" || "==ownership" !== key) return "owned";
+  if (changes["-=name"] !== undefined) return "renamed";
+  if (keys.includes("-=img") || key.startsWith("-=prototypeToken")) return "pictured";
+  switch (key) {
+    case "-=folder":
+      return "unfiled";
+  }
+  const { "-=sort": unsorted, [\`-=\${FLAG}\`]: detached, ...kept } = changes;
+  return foundry.utils.getProperty(changes, "system.-=details") ?? unsorted ?? detached ?? kept;
+}
+`,
+    },
+    exit: 0,
+    out: [
+      /validate: legacy update keys checked 15 "-=" or "==" key spellings in 1 script under scripts\/ and 0 macro commands in packs\/_source: 0 written, 0 neither written nor read where spelled, 15 read$/m,
+    ],
+  },
+  {
+    name: "an operator, a comment, a regex and a key no literal spells from its start are not read as legacy keys",
+    files: {
+      "scripts/module.mjs": `// await doc.update({ "-=stale": null });
+/* update["system.==racial"] = {}; */
+const OPERATORS = ["=", "+=", "-=", "==", "==="];
+export function fold(total, step, key, path) {
+  total -= step;
+  if (total == step || key.startsWith("-=") || /^(-=|==)\\w/.test(key)) return "-= " + step;
+  return { same: "== " + total, rule: "a == b", dotted: "x.-= y", path: \`\${path}-=\${key}\`, operators: OPERATORS };
+}
+`,
+    },
+    exit: 0,
+    out: [
+      /validate: legacy update keys checked 0 "-=" or "==" key spellings in 1 script under scripts\/ and 0 macro commands in packs\/_source: 0 written, 0 neither written nor read where spelled, 0 read$/m,
+    ],
+  },
+  {
+    name: "a legacy update key whose use is not written where it is spelled fails, and legacy-key-ok passes it and a written one",
+    files: {
+      "scripts/module.mjs": `const DROP = "-=stale";
+export const dropKey = (key) => \`-=\${key}\`;
+export const LEGACY = ["-=sheetClass", "==ownership"];
+export function note(key) {
+  console.warn("flags.-=" + key);
+}
+// legacy-key-ok: a world saved before the operator still sends this key, and the hook only strips it
+const INBOUND = "-=sheetClass";
+export const OUTBOUND = "==rows"; // legacy-key-ok: matched against the diff another module sends
+// legacy-key-ok: runs where the operator does not exist
+export const strip = (doc) => doc.update({ "-=stale": null });
+const first = 1; // legacy-key-ok: a comment after code excuses its own line, never the next
+const LATE = "-=late";
+export function clear(legacy, update) {
+  if (legacy) ["-=name", "-=img"].forEach((k) => (update[k] = null));
+}
+`,
+    },
+    exit: 1,
+    fails: [
+      /^FAIL scripts\/module\.mjs: line 15: legacy forced-deletion key "-=name" spelled as an array element, /,
+      /^FAIL scripts\/module\.mjs: line 15: legacy forced-deletion key "-=img" spelled as an array element, /,
+      /^FAIL scripts\/module\.mjs: line 1: legacy forced-deletion key "-=stale" spelled as a value bound, returned or passed on, where nothing written says whether it is written or only read — .*hasProperty\(changes, key\); or state why not with "\/\/ legacy-key-ok: <reason>" on or just above the line$/,
+      /^FAIL scripts\/module\.mjs: line 2: legacy forced-deletion key "-=…" spelled as a value bound, returned or passed on, /,
+      /^FAIL scripts\/module\.mjs: line 3: legacy forced-deletion key "-=sheetClass" spelled as an array element, /,
+      /^FAIL scripts\/module\.mjs: line 3: legacy forced-replacement key "==ownership" spelled as an array element, /,
+      /^FAIL scripts\/module\.mjs: line 5: legacy forced-deletion key "-=…" spelled as an argument of warn\(\), /,
+      /^FAIL scripts\/module\.mjs: line 13: legacy forced-deletion key "-=late" spelled as a value bound, returned or passed on, /,
+    ],
+    out: [
+      /validate: legacy update keys checked 11 "-=" or "==" key spellings in 1 script under scripts\/ and 0 macro commands in packs\/_source: 0 written, 8 neither written nor read where spelled, 0 read; 3 passed on legacy-key-ok$/m,
+    ],
+  },
+  {
+    name: "a script macro's command is read from packs/_source by its own lines, wherever a document holds one, and a chat macro is not",
+    files: {
+      "module.json": PACKED,
+      "packs/_source/macros/strip-flags.json": macro("acksFxStripFlag1", {
+        name: "Strip Flags (GM)",
+        type: "script",
+        command: `const scopes = ["a", "b"];
+for (const actor of game.actors) {
+  if ("-=flags" in actor) continue;
+  await actor.update(Object.fromEntries(scopes.map((s) => ["flags.-=" + s, null])));
+}
+`,
+      }),
+      "packs/_source/macros/keep-old.json": macro("acksFxKeepOld001", {
+        name: "Keep Old",
+        type: "script",
+        command: `// legacy-key-ok: also run against a world the operator does not exist in
+await actor.update({ "-=old": null });
+`,
+      }),
+      "packs/_source/macros/say-hello.json": macro("acksFxSayHello01", { name: "Say Hello", type: "chat", command: `update({ "-=greeting": null })` }),
+      "packs/_source/macros/bundle.json": macro("acksFxBundle0001", {
+        name: "Bundle",
+        macros: [{ name: "Inner", type: "script", command: `token.document.update({ "==texture": {} });` }],
+      }),
+    },
+    exit: 1,
+    fails: [
+      /^FAIL packs\/_source\/macros\/strip-flags\.json: macro "Strip Flags \(GM\)" command line 4: legacy forced-deletion key "-=…" written as the key of a \[key, null\] entry — .*on or just above the line of the command\. packs\/_source is what build:packs writes: change the command where tools\/pack-data\.mjs builds it, then rebuild$/,
+      /^FAIL packs\/_source\/macros\/bundle\.json: macro "Inner" command line 1: legacy forced-replacement key "==texture" written as a property name of an object literal /,
+    ],
+    out: [
+      /validate: legacy update keys checked 4 "-=" or "==" key spellings in 1 script under scripts\/ and 3 macro commands in packs\/_source: 2 written, 0 neither written nor read where spelled, 1 read; 1 passed on legacy-key-ok$/m,
+    ],
+  },
+  {
+    name: "a declared Macro pack with no source under packs/_source fails as unread",
+    files: {
+      "module.json": PACKED,
+      "packs/macros/CURRENT": "MANIFEST-000002\n",
+    },
+    exit: 1,
+    fails: [/^FAIL module\.json: declared Macro pack "macros" has no packs\/_source\/macros, so the commands it ships were not read for legacy update keys — run npm run build:packs/],
+    out: [/validate: legacy update keys checked 0 "-=" or "==" key spellings in 1 script under scripts\/ and 0 macro commands in packs\/_source: /],
   },
 ];
 

@@ -1428,3 +1428,91 @@ matches a peer's hunk commits it under a green gate. An isolated tree cannot
 do that. A commit that lands under a gate still costs that gate or a carry
 until the lease and the shorter gate land. A hook binds only the sessions
 started after it is synced.
+
+## 2026-10-07 — A retired update key fails where it is written and passes where it is read — IN FORCE
+
+**Problem.** Foundry 14 retires two spellings of an update key,
+`{"-=key": null}` and `{"==key": value}`. It tells one by its first two
+characters (`foundry.utils.isDeletionKey`, read in the 14.367 install),
+migrates it wherever it merges, diffs or cleans data, and logs a compatibility
+warning for every such key of every write. `acks-extras` ruled on 2026-09-11
+that every forced deletion it writes is the operator, through lib's `unset()`
+(its `docs/lib/DECISIONS.md`, "A deletion is the operator, spelled once"), and
+swept `scripts/` in the same release. Two later releases added four legacy
+writes to `scripts/`, 8.7.0 one and 9.2.0 three, and two shipped macros had
+carried one each since `v0.1.0`, where the sweep did not look: a macro's
+command is text inside `tools/pack-data/`. Nothing failed on any of the six.
+Three of the four and both macros were found by hand on 2026-10-07; the fourth
+had gone in 10.2.0, and the backtest below is what shows it was there. This
+template recommended the retired spelling itself, in the hygiene-sweep prompt
+and in TOOLCHAIN §10h.
+
+**Ruled.** `validate.mjs` gains §9, and the IP scan and the module's extra
+validator become §10 and §11. It reads `tokenizeJs`'s tokens of every `.mjs`
+and `.js` under `scripts/` and of the `command` of every script macro under
+`packs/_source`, so a key in a comment is not one. A string or template
+literal spells a legacy key where it holds `-=` or `==` after a dot, or at its
+own start with no `+` joining it to what came before, followed by a name or by
+a `${}` hole or a `+` that supplies one. Where the literal stands gives one of
+three verdicts. **Written**: a property name of an object literal, quoted or
+computed, the key of a member assignment, the key of a `[key, null]` entry,
+the path handed to `setProperty`. **Read**: the left operand of `in`, an
+operand of a comparison, a `case` label, the key of a member looked up, a
+property a destructuring pattern takes, an argument of `hasProperty` and its
+kind. **Neither**: bound to a name, returned, an array element, an argument of
+any other call. Written and neither fail, and a read passes. The escape is `// legacy-key-ok: <reason>` on the line, or in a
+comment of its own on the line above; in a macro that is a line of its
+command. A declared Macro pack with no directory under `packs/_source` fails
+as unread. The check prints how many spellings it read, in how many scripts
+and macro commands, and how many fell to each verdict and to the escape. The
+hygiene-sweep prompt and TOOLCHAIN §10h name the operator, and
+`bin/test-validate.mjs` gains six invented modules.
+
+**Rejected — a module-owned check**, the same test in `acks-extras`'
+`tools/validate-extra.mjs`. The rule would be no part of canon, and a module
+scaffolded from this template would not inherit it.
+
+**Rejected — failing every spelling, with a comment on each reader.** A hook
+tests a diff for the legacy key for as long as another package may still send
+it, so the readers are the half that stays. `acks-extras` has three such
+files. What each does with the key is written beside it, as `in` or
+`hasProperty`, and an escape that restates what the source already says is
+one a reviewer learns to skip.
+
+**Rejected — passing a spelling nothing decides.** A key bound to a name is
+written or tested somewhere this does not follow. Passed, the two-step write
+`const key = "-=" + name; update[key] = null` is green. It fails, and the
+message says that nothing written decides it.
+
+**Rejected — reading a macro's command where it is authored.** In
+`tools/pack-data/` a command is an inline template in one file, a string with
+`\n` escapes in another, a module-level const, a helper's argument and a
+remap of `m.command`. A reader of that source guesses which literals are
+commands and cooks their escapes before it can tokenize one. `packs/_source`
+is what `build:packs` writes from all of them, and what ships.
+
+**Cost.** A macro is read as `build:packs` last wrote it. Every gate builds
+before it validates, so a gate reads the current command; `npm run validate`
+alone, after an edit to pack data, reads the old one. The check reads what is
+written beside the literal and follows no name: an operator that arrives
+through a `${}` hole or a `+` with no dot written before it in the same
+literal is not seen (`${path}-=${key}`), nor is a key joined any other way, or
+source outside `scripts/` that is no macro command. A reader the check cannot
+follow costs its author the escape: one that holds its keys in an array, one
+that compares against the right-hand end of a `+` chain, a destructuring
+pattern in a parameter list.
+
+**Found on landing.** Against `acks-extras` at `3088cf4`, release 10.2.1, the
+check reads six spellings in 505 scripts and 33 macro commands: two written,
+one in each of the macros "Clean Up After the Merge (GM)" and "Configure
+Proficiencies", and four read, in the three files that test a diff for one.
+`acks-extras` takes this validator with those two macros converted, or its
+`validate` is red. Across its 183 tags no spelling falls to neither. It reads
+29 written at `v7.5.3` and two at `v7.5.4`, the sweep; three at `v8.7.0`, six
+at `v9.2.0`, five at `v10.2.0` and two at `v10.2.1`. The ten archived repos it
+was merged from, as archived: six written in `acks-equipment`, one in
+`acks-lib`, one in `foundryvtt-acks-importer`, none spelled in the other
+seven. A module scaffolded from the skeleton passes with none read.
+`foundryvtt-acks-core`, which this template does not sync, spells one in
+`src/` that falls to neither: a `-=` segment built for Foundry 13 behind a
+test for the operator.
