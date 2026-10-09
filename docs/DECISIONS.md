@@ -2009,3 +2009,158 @@ Not checked: this commit's default under the old command line on a runner; an
 first of; a staged rename among the paths to be written; a fetch that hangs
 to its limit, or one refused for a credential; the nightly's new label, which
 was read and not run; and macOS.
+
+## 2026-10-09 — `blank-template/` is retired, and the scaffolder says whether the module it built is level with canon — IN FORCE
+
+**Problem.** The entry above left `bin/make-blank.mjs` undecided. It copied
+`skeleton/` as the tree held it into `blank-template/`, a tracked folder for
+starting a module by hand, and a CI step regenerated the folder and compared.
+On a tree several sessions write in, the copy took whatever lay under
+`skeleton/` at that moment, and the step could see it only in a commit.
+
+**Found.**
+
+- **A peer's uncommitted edit rode into the copy.** In a scratch clone with
+  one uncommitted edit standing in for a peer's and one of the session's own,
+  a regeneration changed both files of the copy. Committing the session's own
+  change with `blank-template/` taken whole put the peer's line in the commit.
+  On the day of the ruling a run in the shared tree would have copied a peer's
+  pending hunk in `skeleton/.claude/settings.json`, and the session that
+  synced that day edited the copy by hand to keep it out.
+- **CI saw it once it was committed, and not before.** The step regenerates
+  in a checkout, so it compares a commit with itself. It failed on a fresh
+  clone of that scratch commit. The step was a day old (`6dbb3f3`). Before it
+  nothing compared the two, and 15 of the 54 commits that changed `skeleton/`
+  after the folder was made left the copy as it was.
+- **The folder was replaced by removing it.** It is absent, then part-written,
+  for the length of the copy: 115 ms at the median over twenty runs, on a
+  machine running a test suite beside it. This is the least of the three.
+- **A module started from the folder had not been a family module since
+  2026-08-18.** That day the skills, rules, hooks and agents became canon at
+  the template's root, and `bin/new-module.mjs` learned to copy them and
+  `make-blank` did not. The same id through both paths gave 23 files against
+  56. The by-hand module's `settings.json` started four hooks it did not have,
+  and the drift check read `34 file(s) drifted`. No CI step ever ran
+  `INIT.mjs`.
+- **A scaffolded module started off canon as well.** The manifest has enforced
+  `scripts.prepare` since 2026-07-18 and `skeleton/package.json` never carried
+  it. A new module failed its own first drift check on that line, and its
+  first install armed no pre-commit quarantine. Template CI built a scaffold
+  on every push and compared it with nothing.
+- **The scaffolder reads the tree as `make-blank` did.** A module made beside
+  a peer holds that peer's uncommitted canon, in its first commit.
+
+Nothing under `blank-template/` is in the manifest, so no module repo held a
+file of it. What replaces the folder was already there and was the only path
+that built a whole module, which is what the 2026-08-15 lesson asks of a
+retirement.
+
+**Ruled by the owner, 2026-10-08.**
+
+1. **`blank-template/` is retired**, and `bin/make-blank.mjs` and
+   `bin/blank-init.mjs` with it. `bin/new-module.mjs` is the one way a module
+   is started.
+2. **The scaffolder keeps reading the tree, and the module is checked as it
+   is made.** The run ends by having the sync's `--check` compare the module
+   with `origin/main`, and says whether it is level, naming any path that is
+   not.
+3. **`skeleton/package.json` carries `prepare`, and template CI fails where a
+   fresh scaffold is not level with canon.**
+4. **One template commit, pushed, then `acks-extras` synced and pushed.**
+
+**Built.** `bin/new-module.mjs` builds the module as it did, then runs
+`sync-toolchain.mjs --check --repo-path <module>` and shows what that prints,
+less the files read level. Its last line is the verdict: `level:` and exit 0,
+`not level:` and exit 1 with the command that writes the pushed branch over
+the files named, `not checked:` and exit 2. `--pushed`, `--from <rev>` and
+`--worktree` are the check's flags and are handed to it. A checkout is its
+own canon, so CI's scaffold step says `--worktree`. An argument the script
+does not know, a flag with no value, a second id or a second canon is refused
+before anything is written, exit 2. `bin/test-new-module.mjs` has ten cases
+and a CI step of its own. The step that regenerated the folder is gone with
+it, and the sync skill loses the step that ran `make-blank`.
+
+**Found while building.**
+
+1. *The sync already says what the scaffolder owed its reader.* Its note
+   lists every path under `skeleton/` and the shared trees that the tree
+   holds and the branch does not, whether or not the sync writes that file. A
+   scaffold-only file a peer is editing is named that way though the module
+   reads level. The scaffolder adds the verdict and nothing else.
+2. *An exit status does not say the check ran, or that the build did.* node
+   exits 1 for a script it cannot load, which is the check's status for
+   drift, and 0 for an empty file, which is its status for level. A script
+   another session is halfway through writing can be either, so the verdict
+   asks for the check's own `done:` line as well. node's status for an error
+   nothing caught is 1 too: a first commit git refused ended as a module that
+   differs does. The build is caught, ends `not checked:` with exit 2, and
+   leaves the directory for its maker to remove. A case stages each.
+3. *The command a verdict names is read in another directory.* The first
+   wording named `bin/sync-toolchain.mjs` as the template's root sees it, and
+   its reader stands in the new module. It names both paths whole, in quotes.
+4. *A runner has no committer until the step that names one.* The suite runs
+   before that step and the scaffolder makes a first commit, so the suite
+   names the committer in the environment it gives git. With no identity
+   configured anywhere it passes the same ten.
+
+**Rejected — building the folder on demand, outside git.** `make-blank.mjs
+<dest>` would write a whole copy, shared trees included, and the scaffolder
+would be rebuilt on it so that CI ran one implementation for both paths.
+About sixty lines kept for a path with no sign of use: it built a module
+short of 33 files from 2026-08-18 and nobody met it.
+
+**Rejected — keeping it tracked and regenerating only the paths a session
+names.** It stays a second statement of canon. Made whole it is 58 files
+that 70 of the last 100 commits would have had to regenerate, and a file two
+sessions are editing still mixes their hunks in the copy.
+
+**Rejected — keeping it tracked and mirroring each edit by hand.** Every
+canon edit is typed twice so that the ledger credits both, and the script
+only compares. The same 58 files, and a second place to forget.
+
+**Rejected — scaffolding from a commit, as the sync reads canon.** It is the
+consistent rule, and it prevents where the check only reports. It means
+moving the export out of `sync-toolchain.mjs` into a file both scripts share,
+on the day that script landed, and every module's CI runs that script from
+`main`. A scaffold is rare, its first push already fails `drift`, and the
+check costs one process.
+
+**Rejected — deriving the folder inside the commit tool's gate clone.** It is
+the general answer to a generated file on a shared tree. It gives the one
+tool that writes to the branch a way to commit files no session wrote, for
+one folder.
+
+**Rejected — adding `prepare` and no gate.** The line was missing from
+2026-07-18 with a scaffold built on every push. The next disagreement between
+`skeleton/` and the manifest would stand as long.
+
+**Not decided here.** `tools/ip-*.mjs` at the template's root are tracked
+copies of `skeleton/tools/` files that a CI step compares, the same kind of
+thing as the folder: a copy made from the tree takes a peer's hunk with it.
+A file the sync does not write is named when the tree's differs from the
+branch's and is not compared, so a peer's uncommitted README is in the module
+with a level verdict over it.
+
+**Cost.** The copy-me folder is gone: a module is started by running the
+script. A scaffold made beside uncommitted canon exits 1, and its maker runs
+one `--apply` and makes one commit in the new repo before going on. The
+scaffolder's check fetches and starts a second process. A usage error exits 2
+where it exited 1, and a caller that read the exit status as made or not made
+has three answers to read.
+
+**Checked before this commit, and not.** In a scratch clone on this base, on
+Windows: `test-new-module: 10 cases … 0 failed`, and the same ten with no git
+identity configured. 30 single edits to the scaffolder, each taking one
+behaviour out, each turned a case red. A replay of this repo's CI steps
+passed its thirteen stages on that tree, the scaffold stage ending `level:`,
+before the tenth case and what it guards were added; the suite and the edits
+were run again after. Before the build, also in scratch: a regeneration
+beside two uncommitted edits changed both copies, and the CI step failed on a
+clone of the commit that took the folder whole; one id was put through the
+folder and through the scaffolder, and each module through the drift check.
+
+Not checked: the suite on the Linux runner, which this commit's CI run is the
+first to try; a scaffold from the shared tree itself, where the module would
+land beside the family's repos; the `not level` remedy in a module anyone
+keeps, which a case runs in a throwaway one; a check whose fetch hangs or is
+refused, which is the sync's own; and macOS.

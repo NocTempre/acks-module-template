@@ -19,8 +19,7 @@ release pipeline.
 | --- | --- |
 | `skeleton/` | Complete module skeleton. |
 | `manifest.mjs` | Declares which skeleton files are SYNCED into existing repos vs scaffold-only. |
-| `bin/new-module.mjs` | Scaffold a new module repo from the skeleton. |
-| `blank-template/` | Copy-me folder for starting a module by hand (copy → rename → `node INIT.mjs --title "..."`). Generated from `skeleton/` by `bin/make-blank.mjs` — never edit in place. |
+| `bin/new-module.mjs` | Scaffold a new module repo from the skeleton, and say whether it is level with canon. |
 | `bin/sync-toolchain.mjs` | Diff/apply canonical files into the existing module repos. |
 | `bin/test-validate.mjs` | Runs the canonical `validate.mjs` over invented modules its gates must fail or pass. Run after editing it; template CI runs it too. |
 | `docs/TOOLCHAIN.md` | The canonical conventions — every "answer" the modules previously re-derived. Start here. |
@@ -30,7 +29,7 @@ release pipeline.
 
 ## Usage
 
-Scaffold a new module (creates `C:\Proj\<id>`, renders placeholders, `git init -b main`, first commit):
+Scaffold a new module (creates `C:\Proj\<id>`, renders placeholders, `git init -b main`, first commit, then says whether the module is level with the pushed canon):
 
 ```
 node bin/new-module.mjs acks-example --title "Example Feature" --desc "One-line description."

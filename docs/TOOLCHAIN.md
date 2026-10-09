@@ -656,10 +656,12 @@ Three layers keep the family consistent, by mechanism rather than discipline:
    (validators, dotfiles, Claude infra) are enforced: a module push with
    hand-edited or stale canon fails CI until `sync-toolchain --apply` runs.
 3. **Template CI** (`ci.yml` here) — every template change scaffolds a module
-   from the skeleton and runs the canonical build + validate, then runs
+   from the skeleton, fails where that module is not level with canon, and
+   runs the canonical build + validate, then runs
    `bin/test-validate.mjs` (and `bin/test-ip-scan.mjs` for the IP scanner,
    `bin/test-foundry-capture.mjs` for the capture driver,
-   `bin/test-sync-toolchain.mjs` for the sync itself), so canon itself
+   `bin/test-sync-toolchain.mjs` for the sync itself,
+   `bin/test-new-module.mjs` for the scaffolder), so canon itself
    can't break silently and a gate that stops failing its own fixtures is
    caught.
 
@@ -678,6 +680,15 @@ once. `--apply` holds a repo, whole, where a file it would write carries an
 uncommitted change, and a run that could not read a target exits 2; the
 script's header says what each exit status means. The rulings, and the
 incidents behind them, are DECISIONS 2026-08-05 and 2026-10-08.
+
+**A new module is compared with canon as it is made.** `bin/new-module.mjs`
+builds from the files of this tree as they stand, has the sync's `--check`
+compare the result with `origin/main`, and ends on a verdict: level, not
+level, or not checked. The script's header says what each means and what the
+run exits with. The check reads the files the sync writes. A skeleton file
+outside the manifest is in the module as the tree held it, and one that
+differs from the branch is named and not compared. `skeleton/` is the only
+thing a module starts from. The ruling is DECISIONS 2026-10-09.
 
 **`{{KEY}}` — an uppercase key in double braces — is reserved in `skeleton/`
 for scaffolder tokens.** Layer 3 greps the scaffolded module for any surviving

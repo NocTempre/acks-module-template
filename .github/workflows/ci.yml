@@ -48,14 +48,6 @@ jobs:
             cmp -s "$f" "skeleton/$f" || { echo "::error::$f differs from skeleton/$f"; exit 1; }
           done
 
-      # blank-template/ is skeleton/ as bin/make-blank.mjs copies it, and nothing
-      # else compares the two, so a skeleton change that skips the regeneration
-      # leaves the copy-me folder a version behind under a green run.
-      - name: Blank template is the skeleton as last regenerated
-        run: |
-          node bin/make-blank.mjs
-          test -z "$(git status --porcelain -- blank-template)" || { echo "::error::blank-template/ is stale; run node bin/make-blank.mjs"; git status --porcelain -- blank-template; exit 1; }
-
       # The scan's long-literal warning tokenizes source, and a tokenizer that
       # misreads fails quietly in both directions: a comment read as a literal
       # is a warning every module prints for nothing, and a literal read as a
@@ -107,11 +99,24 @@ jobs:
       - name: Toolchain sync reads a commit, holds what git cannot give back, and fails a target it did not read
         run: node bin/test-sync-toolchain.mjs
 
-      - name: Scaffold a module from the skeleton
+      # The scaffolder builds a module from this tree and has the sync compare
+      # it with canon, and what it then says differs only in a tree no run
+      # stands in by default: an edit nobody has committed, a commit nobody has
+      # pushed, a skeleton the manifest has moved past. Throwaway templates
+      # stage each one and check the module, the last line and the exit status.
+      - name: Scaffolder says whether the module it built is level with canon
+        run: node bin/test-new-module.mjs
+
+      # The checkout is the canon, so the scaffolder is told to compare the
+      # module with the files as they stand. It exits 1 where the two differ:
+      # a script the manifest enforces and skeleton/package.json lacks, a
+      # shared tree the scaffolder does not copy. Nothing else compares a new
+      # module with canon before its own first push.
+      - name: Scaffold a module from the skeleton, level with canon
         run: |
           git config --global user.email "ci@example.invalid"
           git config --global user.name "template-ci"
-          node bin/new-module.mjs acks-ci-smoke --title "CI Smoke" --desc "Scaffold smoke test."
+          node bin/new-module.mjs acks-ci-smoke --worktree --title "CI Smoke" --desc "Scaffold smoke test."
 
       - name: Build and validate the scaffolded module
         working-directory: ../acks-ci-smoke

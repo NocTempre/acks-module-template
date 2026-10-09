@@ -18,7 +18,6 @@ every downstream CI at once. Read `docs/TOOLCHAIN.md` before changing anything;
   hazard — delete it on sight.
 - `bin/` — dev harness: `sync-toolchain.mjs` (drift check + apply),
   `new-module.mjs` (scaffold), capture/test drivers.
-- `blank-template/` — frozen empty-module snapshot for manual scaffolding.
 - `docs/` — TOOLCHAIN.md (the family contract), DECISIONS.md (dated rulings,
   append-only), LICENSING.md. Not shipped anywhere.
 
