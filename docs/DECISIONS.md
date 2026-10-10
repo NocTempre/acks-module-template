@@ -742,7 +742,7 @@ Handlebars branch that opens a tag in one arm and closes it in another leaves
 an extent it cannot follow. Every one of those resolves to silence, which means
 the gate under-reports by construction; it is a floor, not an audit.
 
-## 2026-09-09 — The template's own tree was outside every gate it publishes — IN FORCE
+## 2026-09-09 — The template's own tree was outside every gate it publishes — IN FORCE except its `tools/` copies and the step that compared them (superseded 2026-10-10)
 
 **Problem.** `docs/LICENSING.md` describes two layers protecting the family
 from committing licensed material: a pre-commit quarantine armed by `npm
@@ -2164,3 +2164,146 @@ first to try; a scaffold from the shared tree itself, where the module would
 land beside the family's repos; the `not level` remedy in a module anyone
 keeps, which a case runs in a throwaway one; a check whose fetch hangs or is
 refused, which is the sync's own; and macOS.
+
+## 2026-10-10 — This repo's hook runs the quarantine in `skeleton/`, and no copy of it sits at the root — IN FORCE
+
+**Problem.** The entry above left `tools/ip-scan.mjs` and
+`tools/ip-quarantine.mjs` undecided. They were tracked copies of the
+`skeleton/tools/` files: this repo's hook ran them and a CI step compared
+them (2026-09-09). A change to canon refreshed them by copying the skeleton
+file as the tree held it. On a tree several sessions write in, that copy
+holds whatever lies in the skeleton file at that moment.
+
+**Found.**
+
+- **A peer's uncommitted hunk rode into the copy, and nothing refused it.** In
+  a scratch clone the skeleton's scanner held two uncommitted hunks, one a
+  peer's by the ledger and one the session's own, and the copy was refreshed
+  with a file copy. The commit tool listed the skeleton file as `2 hunk(s), 1
+  this change's, by the ledger`, the peer's hunk `left`. It listed the copy
+  as `2 hunk(s), 2 this change's, taken whole`, the same hunk `MINE` with no
+  writer beside it: no record names a file a copy wrote. The commit held the
+  peer's line in `tools/ip-scan.mjs` and not in the skeleton file.
+- **CI saw it at the push. A gate saw it only where its session had written
+  the step in.** This repo has no `package.json`, so the commit tool has no
+  default gate here and each session lists its own stages. With the `cmp`
+  among them the gate was red and nothing was committed. Without it the
+  commit landed and the step failed on it. The step fails the same way on a
+  commit that changes canon and leaves the copy alone. TOOLCHAIN and the
+  skills described no refresh, so that failure was what told a session to
+  make one.
+- **The copies had two readers.** The hook ran `tools/ip-quarantine.mjs`,
+  which imports the scanner beside it. The commit tool's leak scan imports
+  `tools/ip-scan.mjs` before it stages, and no case covered it. Both read the
+  disk. With the copy refreshed and not committed, a rule that only the
+  peer's pending hunk held took a file out of a hand-run commit, and refused
+  a change the commit tool had gated green.
+- **The hook was a third copy, compared with nothing.** `.githooks/pre-commit`
+  was byte for byte the file in `skeleton/.githooks/`, and the CI step
+  compared `tools/*.mjs`.
+- **A level copy could be made with the tool as it stood,** in five steps:
+  record, build, write the copy from the built tree's blob, record, ship. The
+  commit came out level, with the peer's hunk left in the tree.
+
+**Ruled by the owner, 2026-10-10.**
+
+1. **The root copies are deleted.** This repo's hook runs
+   `skeleton/tools/ip-quarantine.mjs` where it stands, and the commit tool's
+   leak scan asks the scanner that hook runs.
+2. **One template commit, pushed, then `acks-extras` synced and pushed.** The
+   commit tool is a synced skill.
+
+**Built.** `.githooks/pre-commit` is this repo's own file and runs
+`skeleton/tools/ip-quarantine.mjs`, which imports `ip-scan.mjs` from beside
+it. `skeleton/.githooks/pre-commit`, the hook every module is synced, is as
+it was. `tools/` is gone from the root, and the `cmp` step with it.
+`commit-own-hunks.mjs` asks the scanner in `tools/`, and the one in
+`skeleton/tools/` where `tools/` holds none. `bin/test-pre-commit.mjs` arms
+the hook in throwaway repositories: four cases, with a CI step in the place
+the `cmp` had. `bin/test-commit-own-hunks.mjs` gains the leak scan's first
+three cases. `docs/LICENSING.md` says which file reads a commit made here.
+
+**Found while building.**
+
+1. *Deleting the copies alone moves the refusal to after the commit.* With no
+   scanner in `tools/` the leak scan returned without asking. The hook then
+   took the flagged file out, and the tool reported `the commit is NOT the
+   gated tree on its base` over a commit already made. With the second place
+   to look it refuses before anything is staged.
+2. *A hook's exit status is half of what it does.* A hook that ran the
+   quarantine and then exited 0 passed every case that watched a file leave
+   a commit. The quarantine also refuses outright, where HEAD already holds
+   the banned file, and only a case that stages one fails such a hook.
+3. *Git starts a hook at the top of the work tree.* The hook's path is from
+   there, and a commit run in `docs/` finds the quarantine. One case commits
+   from a subdirectory, and a hook that first changes to the directory git
+   was run in fails it.
+4. *The hook's file is not executable as tracked.* The index holds mode
+   100644 for it, here and in `skeleton/`. Git on Windows runs it. Git's
+   manual asks for an executable file, so the suite sets the mode on its
+   copy before arming it. What a clone on Linux or macOS does with the
+   tracked mode is left open below.
+
+**Rejected — files at the root paths that forward to the skeleton's.** No
+synced file changes and no module is synced. `node tools/ip-scan.mjs` then
+exits 0 and prints nothing in a tree where the skeleton's scanner exits 1:
+the scanner runs as a command only when it is the file node was given. The
+hook stays a copy, and two files stay that are not what their names say.
+
+**Rejected — keeping the copies and writing them from the built tree.** It
+keeps committed canon as the gate here, as it is in every module. It is the
+five steps above for each change to the scanner, or a script and a suite to
+wrap them, and it stays a step a session can leave out. The copy cannot come
+from `HEAD`: CI compares the two files of one commit.
+
+**Rejected — keeping the copies under a rule that every gate list repeats
+the `cmp`.** Nothing is built and nothing is pinned. A session that leaves
+the stage out learns from a red `main`, as before.
+
+**Rejected — running `HEAD`'s blobs.** The hook and the commit tool would
+write `HEAD:skeleton/tools/` into a scratch directory at each commit and run
+that: no copy, and no uncommitted canon in the gate. It needs a hook script,
+a fallback for a first commit and the same reader in the commit tool, and a
+fix to the scanner is judged by the scanner before it.
+
+**Not decided here.** The tracked mode of `.githooks/pre-commit`, here and in
+`skeleton/`, and with it whether a clone on Linux or macOS runs the hook at
+all: no run was made there. `ip-quarantine.mjs` has no suite of its own. The
+hook's cases run three of its paths, and the commit it abandons when a
+banned file was all that was staged is not one of them. The commit tool's
+default `tooling` pattern names `tools/ip-*.mjs` at a root, so a base carried
+here counts a landed change to `skeleton/tools/` as gate tooling only where
+the change's own `tooling` says so.
+
+**Cost.** The gate a commit meets here is canon as the working tree holds
+it. A session's uncommitted edit to the scanner or the quarantine gates every
+commit made in this repo for as long as it is open, where a copy took one in
+only between a refresh and its commit. One that does not parse stops every
+commit here until it does: a hand-run commit exits 1, and the commit tool
+stops after its gate with nothing staged. One that weakens a rule is seen by
+nothing at commit time, and CI's scan of the pushed tree with the committed
+scanner is what is left. The commit tool looks in a second directory that no
+module repo has. `node tools/ip-scan.mjs` at this root finds no file. The
+hook here and the synced one are two files, and a change meant for both is
+made twice.
+
+**Checked before this commit, and not.** In scratch clones on this base, on
+Windows. Before the build: the listing and the commit under "Found"; the gate
+with the `cmp` stage and without it; a hand-run commit and a commit-tool
+change each met by a rule that only a pending hunk held; the five-step copy;
+and, with the copies deleted, the tool as it stood committing short of its
+gated tree. After it: `test-pre-commit: 4 cases … 0 failed` and
+`test-commit-own-hunks: 34 cases … 0 failed`, where the tool as it stood
+fails the one case that keeps the scanner in `skeleton/tools/`. 19 single
+breaks, 10 of the leak scan and 9 of the hook and the tree around it, each
+turned a case red. A replay of this repo's CI steps passed its thirteen
+stages on the built tree; one comment in the commit tool was reworded after
+it, and that tool's suite was run again. In a clone of the built tree the
+commit tool refused a change holding a banned path before it staged
+anything and committed the same change without the path, and a hand-run
+commit from `docs/` had the path taken out of it.
+
+Not checked: either suite on the Linux runner, which this commit's CI run is
+the first to try, and which is the first to arm a hook there; a clone on
+Linux or macOS with the hook at its tracked mode; a commit by another
+session through this hook; and macOS.

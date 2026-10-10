@@ -1,6 +1,10 @@
 #!/bin/sh
-# Synced from acks-module-template; do not hand-edit.
 # Keeps licensed ACKS II material out of git history by quarantining flagged
-# files at commit time — the last moment a .gitignore can still prevent it.
-# Enabled by `npm install` (the prepare script sets core.hooksPath=.githooks).
-exec node tools/ip-quarantine.mjs
+# files at commit time, the last moment a .gitignore can still prevent it.
+# This repo's own hook, not the synced one: skeleton/.githooks/pre-commit runs
+# the quarantine a module keeps in tools/. This repo keeps no copy of it, so
+# the canonical file in skeleton/tools/ is the one that runs. Git starts a
+# hook at the top of the work tree, and the path below is from there.
+# Armed by hand with `git config core.hooksPath .githooks`: this repo has no
+# package.json whose prepare script would do it.
+exec node skeleton/tools/ip-quarantine.mjs

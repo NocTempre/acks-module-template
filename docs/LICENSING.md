@@ -133,6 +133,13 @@ by hand, and its backstop is the CI step that scans this tree with the
 skeleton's scanner. The module-repo backstop in `release-module.yml` scans the
 caller and never sees this repo.
 
+Its `.githooks/pre-commit` is a file of its own, where a module's is the synced
+one. It runs `skeleton/tools/ip-quarantine.mjs`, which reads the scanner beside
+it. Those canonical files are the only copies this repo holds, so the gate a
+commit meets here is canon as the working tree holds it, an uncommitted edit to
+either file included. `bin/test-pre-commit.mjs` drives the hook in a throwaway
+repository.
+
 ### CI backstop
 
 CI re-runs the scan and, on a leak, takes the repo **private** rather than

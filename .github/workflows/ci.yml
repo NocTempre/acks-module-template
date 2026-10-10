@@ -32,21 +32,19 @@ jobs:
       # SIBLING directory, so its ip-scan can never see this tree. This repo is
       # where canon is authored and the one whose pre-commit hook cannot arm
       # itself (no package.json, so `prepare` never runs), which makes a scan of
-      # its own tree the only backstop it has. Run the SKELETON copy: canon is
-      # what every other repo gets, and using it here keeps this gate honest
-      # even while tools/ is being refreshed.
+      # its own tree the only backstop it has. The scanner in skeleton/ is the
+      # only one this repo holds, and the one its hook runs.
       - name: Scan this repo's own tree for licensed material
         run: node skeleton/tools/ip-scan.mjs .
 
-      # tools/ holds this repo's copies of the IP gate, which the pre-commit
-      # hook imports by relative path. They are the skeleton files and nothing
-      # else syncs or compares them, so a canon change lands in skeleton/ and
-      # leaves the gate this repo actually runs a version behind.
-      - name: Gate copies in tools/ match canon
-        run: |
-          for f in tools/*.mjs; do
-            cmp -s "$f" "skeleton/$f" || { echo "::error::$f differs from skeleton/$f"; exit 1; }
-          done
+      # This repo's hook is a file of its own. It runs the quarantine in
+      # skeleton/tools/ and the hook every module is synced runs the one in
+      # tools/, so this repo holds no copy of canon at its root for a canon
+      # change to leave behind. Nothing runs a hook until a commit does, and
+      # a hook that names a file that is not there stops every commit made
+      # here. A throwaway repository arms this one and commits through it.
+      - name: This repo's pre-commit hook runs the quarantine in skeleton/
+        run: node bin/test-pre-commit.mjs
 
       # The scan's long-literal warning tokenizes source, and a tokenizer that
       # misreads fails quietly in both directions: a comment read as a literal

@@ -368,6 +368,49 @@ try {
     check("nothing is recorded there", !fs.existsSync(path.join(f.repo, "scratch", "record.json")));
   });
 
+  // --- the leak scanner ---
+
+  /** A leak scanner as the commit tool calls one. It flags a path whose name holds `word`. */
+  const scannerFor = (word) => `export function scanPaths(root, paths) {\n  return { errors: paths.filter((p) => p.includes("${word}")).map((p) => p + " — flagged by the fixture's scanner"), warnings: [] };\n}\n`;
+  /** Commit a scanner into the fixture's `dir`, as the repository's own. */
+  const scanner = (f, dir, word) => {
+    fs.mkdirSync(path.join(f.repo, dir), { recursive: true });
+    f.land(`${dir}/ip-scan.mjs`, scannerFor(word));
+  };
+  const TWO_NEW = { added: ["leak.txt", "fine.txt"] };
+  const twoNew = (f) => {
+    f.write("leak.txt", "a file the scanner flags\n");
+    f.write("fine.txt", "a file it does not\n");
+  };
+
+  for (const [dir, where] of [
+    ["tools", "tools/, where a module keeps it,"],
+    ["skeleton/tools", "skeleton/tools/, where tools/ holds none,"],
+  ]) {
+    test(`a change the leak scanner in ${where} flags is refused with nothing staged`, (check) => {
+      const f = fixture(`leak-${dir.replace("/", "-")}`, TWO_NEW);
+      scanner(f, dir, "leak");
+      twoNew(f);
+      const base = f.head();
+      const r = f.ship();
+      check("the gate is green and ship exits 1", r.status === 1 && /GREEN: recorded/.test(r.out), r.out);
+      check("it names the flagged path and no other", /the leak scanner flags the change set:\nleak\.txt — /.test(r.out) && !/fine\.txt — /.test(r.out), r.out);
+      check("no commit is made", f.head() === base);
+      check("nothing is left staged", f.git("diff", "--cached", "--name-only").trim() === "");
+    });
+  }
+
+  test("where tools/ and skeleton/tools/ each hold a scanner, the one in tools/ is asked", (check) => {
+    const f = fixture("leak-both", TWO_NEW);
+    scanner(f, "tools", "no path holds this");
+    scanner(f, "skeleton/tools", "leak");
+    twoNew(f);
+    const r = f.ship();
+    check("ship exits 0", r.status === 0, r.out);
+    const names = f.git("diff", "--name-only", "HEAD~1", "HEAD").trim().split("\n").sort().join(",");
+    check("the commit writes both files", names === "fine.txt,leak.txt", names);
+  });
+
   // --- the edit ledger ---
 
   const ledgerCase = (name, body) => test(name, body, "ledger");

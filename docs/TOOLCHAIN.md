@@ -659,6 +659,7 @@ Three layers keep the family consistent, by mechanism rather than discipline:
    from the skeleton, fails where that module is not level with canon, and
    runs the canonical build + validate, then runs
    `bin/test-validate.mjs` (and `bin/test-ip-scan.mjs` for the IP scanner,
+   `bin/test-pre-commit.mjs` for this repo's own hook,
    `bin/test-foundry-capture.mjs` for the capture driver,
    `bin/test-sync-toolchain.mjs` for the sync itself,
    `bin/test-new-module.mjs` for the scaffolder), so canon itself
