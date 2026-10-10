@@ -4,6 +4,13 @@
  * quarantine in skeleton/tools/, with the scanner beside it as the tree holds
  * it, and what the quarantine refuses is not committed.
  *
+ * Git on Linux and macOS runs a hook only where its file is executable, so a
+ * case's copy of the hook is made executable before it is armed. The last
+ * case's copy is left at the mode the index holds for the hook: the case
+ * commits a banned path through it and prints what git did on `note` lines,
+ * and it fails only where git did neither of the two things it can do with a
+ * hook.
+ *
  * Usage:  node bin/test-pre-commit.mjs [--root <dir>]
  *         (`--root` is the template tree whose hook is tested and defaults to
  *         this one; pass a modified copy to confirm a case fails when the
@@ -45,12 +52,34 @@ const PROBE_SCANNER = `export function scanPaths(root, paths) {
 const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "acks-pre-commit-test-"));
 const results = [];
 
+/** Whether two paths are one directory, through links, short names and letter case. */
+function samePath(a, b) {
+  const real = (p) => fs.realpathSync.native(p);
+  const fold = (p) => (process.platform === "win32" ? p.toLowerCase() : p);
+  return fold(real(a)) === fold(real(b));
+}
+
+/**
+ * The mode the index of the tree under test holds for a path, as git prints
+ * one, or null where that tree is not the top of a repository of its own: a
+ * copy with no history answers nothing, and one inside another repository
+ * would answer for that one.
+ */
+function trackedMode(rel) {
+  const git = (...args) => spawnSync("git", ["-C", ROOT, ...args], { encoding: "utf8", env: ENV });
+  const top = git("rev-parse", "--show-toplevel");
+  if (top.status !== 0 || !samePath(top.stdout.trim(), ROOT)) return null;
+  return git("ls-files", "-s", "--", rel).stdout.split(" ")[0] || null;
+}
+
 /**
  * A repository that holds the hook and the tools of the tree under test, with
  * the hook armed as this repository arms it. `before` writes what the first
  * commit holds beside them; that commit is made before the hook is armed.
+ * `mode` is the mode the hook's file is given before that, as git prints one,
+ * and null leaves the file as the copy made it.
  */
-function fixture(name, before = () => {}) {
+function fixture(name, before = () => {}, { mode = "100755" } = {}) {
   const dir = path.join(tmp, name);
   const git = (...args) => spawnSync("git", args, { cwd: dir, encoding: "utf8", env: ENV });
   const write = (rel, text) => {
@@ -67,7 +96,7 @@ function fixture(name, before = () => {}) {
   git("commit", "-q", "-m", "base");
   // Git on Linux and macOS runs a hook only where its file is executable, and
   // a checkout there gives this one the mode the index holds for it.
-  if (fs.existsSync(path.join(dir, HOOK))) fs.chmodSync(path.join(dir, HOOK), 0o755);
+  if (mode && fs.existsSync(path.join(dir, HOOK))) fs.chmodSync(path.join(dir, HOOK), mode === "100755" ? 0o755 : 0o644);
   git("config", "core.hooksPath", ".githooks");
   /** Stage the paths and commit them, with git run in `sub`. */
   const commit = (sub, ...paths) => {
@@ -140,6 +169,24 @@ try {
     check("skeleton/tools/ holds the quarantine and its scanner", ["ip-quarantine.mjs", "ip-scan.mjs"].every((name) => canon.includes(name)), canon.join(", "));
     // The commit tool asks a scanner in tools/ ahead of the one this hook runs.
     check("tools/ holds none of them", copies.length === 0, copies.map((name) => `tools/${name}`).join(", "));
+  });
+
+  test("a hook left at the mode the index holds for it reads the commit or is passed over whole, and the run says which", (check) => {
+    const tracked = trackedMode(HOOK);
+    const f = fixture("as-tracked", () => {}, { mode: tracked });
+    const onDisk = (fs.statSync(path.join(f.dir, HOOK)).mode & 0o777).toString(8);
+    f.write("ruledata/table.json", "{}\n");
+    f.write("docs/note.txt", "clean\n");
+    const made = f.commit("", "ruledata/table.json", "docs/note.txt");
+    const read = /LEAK {2}ruledata\/table\.json/u.test(made.out) && f.written() === "docs/note.txt";
+    const passedOver = !/ip-quarantine/u.test(made.out) && f.written() === "docs/note.txt, ruledata/table.json";
+    const version = spawnSync("git", ["--version"], { encoding: "utf8" }).stdout.trim();
+    console.log(`note ${HOOK} is tracked ${tracked ?? "by no index this run can read"}, and skeleton/${HOOK} ${trackedMode(`skeleton/${HOOK}`) ?? "likewise"}; the fixture's is ${onDisk} on disk`);
+    console.log(`note on ${process.platform}, ${version}: git commit exited ${made.status}, the hook ${read ? "read the commit" : passedOver ? "was passed over" : "did neither"}, and the commit writes ${f.written()}`);
+    for (const line of made.out.split("\n").filter((each) => /hook/iu.test(each))) console.log(`note git: ${line.trim()}`);
+    check("git commit exits 0", made.status === 0, made.out);
+    check("the quarantine took the banned path out, or git passed the hook over and committed both files", read !== passedOver, `${f.written()}\n${made.out}`);
+    check("git on Windows runs a hook whatever mode the index holds for it", process.platform !== "win32" || read, made.out);
   });
 } finally {
   // A git that was still exiting may hold its directory for a moment.

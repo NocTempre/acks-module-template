@@ -138,3 +138,49 @@ jobs:
       # this repo has no package.json to install one of its own.
       - name: Validator gates fail what they exist to catch
         run: node bin/test-validate.mjs ../acks-ci-smoke/node_modules
+
+      # The hook suite reports what git does with a hook at the mode the index
+      # holds for it, in a fixture. This step reports the things that fixture
+      # stands in for, each with its hook as git gave it: a clone of this
+      # repository armed by hand, and the module scaffolded above, armed by its
+      # own `npm install`. The module then commits once more with its hook made
+      # executable, which tells the mode apart from everything else a hook
+      # needs. Last, a module is scaffolded from a skeleton whose hook is
+      # executable on disk, as a checkout of an entry tracked 100755 leaves it.
+      # The step runs last, because it commits in the scaffold and changes a
+      # mode in this checkout, and it asserts nothing: errors are not fatal and
+      # it ends on `exit 0`.
+      - name: Report what a commit does with a hook at the mode git gave it
+        run: |
+          set +e
+          modes() {
+            echo "tracked $(git -C "$1" ls-files -s "$2" | cut -d' ' -f1), $(stat -c %a "$1/$2") on disk"
+          }
+          commit_through() {
+            echo "== $1"
+            cd "$2" || return
+            echo "$(modes . .githooks/pre-commit), core.hooksPath=$(git config --get core.hooksPath), core.fileMode=$(git config --get core.fileMode)"
+            mkdir -p ruledata probe
+            echo '{}' > "ruledata/$3.json"
+            echo clean > "probe/$3.txt"
+            git add "ruledata/$3.json" "probe/$3.txt"
+            git commit -m "a banned path beside a clean file" > ../commit.out 2>&1
+            echo "git commit exited $?"
+            sed 's/^/  | /' ../commit.out
+            echo "the commit writes: $(git show --name-only --format= HEAD | tr '\n' ' ')"
+            cd "$GITHUB_WORKSPACE" || exit 0
+          }
+          git --version
+          echo "umask $(umask); hook settings this git knows: $(git help -c | grep -E '^(hook\.|core\.hooksPath|advice\.ignoredHook)' | tr '\n' ' ')"
+          echo "this checkout's hook: $(modes . .githooks/pre-commit); the skeleton's: $(modes . skeleton/.githooks/pre-commit)"
+          git clone -q "file://$GITHUB_WORKSPACE" ../acks-ci-clone
+          git -C ../acks-ci-clone config core.hooksPath .githooks
+          commit_through "a clone of this repository, armed by hand" ../acks-ci-clone first
+          commit_through "the scaffolded module, armed by npm install" ../acks-ci-smoke first
+          chmod +x ../acks-ci-smoke/.githooks/pre-commit
+          commit_through "the same module, its hook made executable" ../acks-ci-smoke second
+          chmod +x skeleton/.githooks/pre-commit
+          echo "== a module scaffolded from a skeleton whose hook is $(stat -c %a skeleton/.githooks/pre-commit) on disk"
+          node bin/new-module.mjs acks-ci-exec --worktree --title "CI Exec" --desc "Scaffolded from an executable hook." | tail -n 1
+          modes ../acks-ci-exec .githooks/pre-commit
+          exit 0
