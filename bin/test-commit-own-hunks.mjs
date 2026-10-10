@@ -411,6 +411,39 @@ try {
     check("the commit writes both files", names === "fine.txt,leak.txt", names);
   });
 
+  // The notice is assembled so this file never holds one whole.
+  const NOTICE = ["All", "rights", "reserved."].join(" ");
+  const LANG = `{\n${BODY.map((line, n) => `  "k${n + 1}": "${line}"`).join(",\n")}\n}\n`;
+  const OWN_LANG = { files: { "lang/en.json": { own: "MINE", count: 1 } } };
+  /** A fixture that holds the canonical scanner where a module keeps it, and a data file the scanner reads. */
+  const withCanonScanner = (name) => {
+    const f = fixture(name, OWN_LANG);
+    f.land("tools/ip-scan.mjs", fs.readFileSync(path.join(TEMPLATE_ROOT, "skeleton", "tools", "ip-scan.mjs"), "utf8"));
+    fs.mkdirSync(path.join(f.repo, "lang"));
+    f.land("lang/en.json", LANG);
+    return f;
+  };
+
+  test("a notice in a peer's uncommitted hunk does not stop a change whose own hunk holds none", (check) => {
+    const f = withCanonScanner("leak-peer-hunk");
+    f.edit("lang/en.json", { 4: '  "k3": "line 3 MINE",', 21: `  "k20": "Invented Press. ${NOTICE}",` });
+    const shipped = f.ship();
+    check("ship exits 0", shipped.status === 0, shipped.out);
+    check("HEAD holds this change's line and no notice", f.show("lang/en.json").includes("line 3 MINE") && !f.show("lang/en.json").includes(NOTICE), f.show("lang/en.json"));
+    check("the peer's hunk is still in the working tree", fs.readFileSync(path.join(f.repo, "lang", "en.json"), "utf8").includes(NOTICE));
+  });
+
+  test("a notice in this change's own hunk is refused with nothing staged, though HEAD holds the file clean", (check) => {
+    const f = withCanonScanner("leak-own-hunk");
+    f.edit("lang/en.json", { 4: `  "k3": "MINE. Invented Press. ${NOTICE}",` });
+    const base = f.head();
+    const r = f.ship();
+    check("the gate is green and ship exits 1", r.status === 1 && /GREEN: recorded/.test(r.out), r.out);
+    check("it names the file and the key that holds the notice", /the leak scanner flags the change set:\nlang\/en\.json: k3 contains a copyright notice/.test(r.out), r.out);
+    check("no commit is made", f.head() === base);
+    check("nothing is left staged", f.git("diff", "--cached", "--name-only").trim() === "");
+  });
+
   // --- the edit ledger ---
 
   const ledgerCase = (name, body) => test(name, body, "ledger");

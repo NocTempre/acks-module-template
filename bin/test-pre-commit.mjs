@@ -45,7 +45,8 @@ const ENV = {
 
 /** A scanner as the quarantine calls one. It flags a path that ends in /probe.txt, which the real one does not. */
 const PROBE_SCANNER = `export function scanPaths(root, paths) {
-  return { errors: paths.filter((p) => p.endsWith("/probe.txt")).map((p) => p + " — flagged by a scanner this case wrote"), warnings: [] };
+  const flagged = paths.filter((p) => p.endsWith("/probe.txt"));
+  return { errors: flagged.map((p) => p + " — flagged by a scanner this case wrote"), warnings: [], flagged };
 }
 `;
 
@@ -136,7 +137,8 @@ try {
     check("the quarantine names the path it took out", /LEAK {2}ruledata\/table\.json/u.test(made.out) && /Quarantined 1 file\(s\)/u.test(made.out), made.out);
     check("a commit is made, and it writes the clean file alone", f.head() !== base && f.written() === "docs/note.txt", f.written());
     check("the banned file is still on disk", fs.existsSync(path.join(f.dir, "ruledata", "table.json")));
-    check("git ignores it from here on, by the list no commit carries", f.exclude().split("\n").includes("ruledata/table.json"), f.exclude());
+    const ignoredBy = f.git("check-ignore", "-v", "--", "ruledata/table.json").stdout;
+    check("git ignores it from here on, by the list no commit carries", ignoredBy.startsWith(".git/info/exclude:"), `${ignoredBy}\n${f.exclude()}`);
   });
 
   test("the scanner that reads a commit is skeleton/tools/ip-scan.mjs as the tree holds it", (check) => {

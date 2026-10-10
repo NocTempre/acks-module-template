@@ -86,12 +86,17 @@ What it flags:
 - **Extraction-pipeline state** (`_proposals/`, `_manifest/`, `_ledger.json`) —
   holds raw fragments lifted from the user's own PDFs.
 - **Publisher attribution inside data files** — in a pack source or cookbook it
-  means text was copied in wholesale rather than authored.
+  means text was copied in wholesale rather than authored. A data file that
+  does not parse is read as text for the same notice.
 - **Warning only:** very long string leaves in data files, and very long string
   or template literals in `scripts/` and `tools/` source, so transcribed prose
   gets a second look. Macro `command` bodies in data files are exempt
   (authored JS). Source is tokenized rather than scanned for quote marks, and
   `bin/test-ip-scan.mjs` pins that reading: run it after editing the scanner.
+
+A path is matched in any letter case, a banned directory and a directory whose
+files are read alike. A filesystem that folds case opens `RuleData/` as
+`ruledata/`, and git tracks the spelling it was handed.
 
 It scans **git-tracked files** in a work tree and **everything** elsewhere. An
 ignored, untracked file is not in the repo and never reaches the remote — the
@@ -108,18 +113,40 @@ remove it from history, and the repo has to be purged and force-pushed (as
 acks-formation was, 2026-07-17). CI is far too late — by the time it runs, the
 content is already on the remote.
 
-`.githooks/pre-commit` runs `tools/ip-quarantine.mjs` over the **staged** set.
-On a flagged file it:
+`.githooks/pre-commit` runs `tools/ip-quarantine.mjs` over the **staged** set,
+and what it judges is what the commit would hold: the content in the index git
+is making the commit from, never the file on disk. A file edited, deleted or
+left half-written after it was staged is judged as it was staged, and a notice
+on disk that was never staged is not that commit's. On a flagged file that
+HEAD does not hold it:
 
 1. **unstages it** — the file stays on disk, nothing you wrote is lost;
 2. **appends it to `.git/info/exclude`**, a local-only ignore that is never
-   committed, so it cannot leak the filename or reach a teammate;
-3. **lets the commit proceed** with everything else.
+   committed, so it cannot leak the filename or reach a teammate. The line is
+   that file's path and matches no other;
+3. **lets the commit proceed** with everything else. Where the flagged files
+   were the whole staged set, nothing is left and the commit is abandoned.
 
 The commit lands, the push lands, your work is saved, and the licensed material
-never leaves the machine. No repo visibility change is needed. If a flagged
-path is **already in HEAD**, quarantine cannot help — history is contaminated —
-so that is a hard stop with instructions to purge before pushing.
+never leaves the machine. No repo visibility change is needed.
+
+A flagged file that **HEAD already holds** cannot be quarantined: git does not
+ignore a tracked file, and unstaging one would commit its removal. That is a
+hard stop, and the stop says which of two things it met. Where HEAD's own copy
+is flagged, history is contaminated, and the instruction is to purge it before
+pushing. Where HEAD's copy is clean, the staged change is what brings the
+material in, and the instruction is to take it out and stage the file again.
+
+The commit goes ahead only where what is left staged scans clean. A leak the
+scanner names no staged path for stops it, and so does a scanner that cannot
+be loaded.
+
+The commit tool (`.claude/skills/acks-commit/`) asks the same scanner before
+it stages anything, about the tree it is about to commit. A peer's uncommitted
+lines in the same file are in neither that tree nor the verdict.
+`bin/test-ip-quarantine.mjs` drives the hook a module runs through each of
+these in throwaway repositories: run it after editing the quarantine or the
+scanner.
 
 The hook is armed by `npm install` (the canonical `prepare` script sets
 `core.hooksPath=.githooks`). Hooks are not committed, so a fresh clone that has
@@ -144,7 +171,9 @@ repository.
 
 CI re-runs the scan and, on a leak, takes the repo **private** rather than
 publishing. This should now never fire; it exists to catch `--no-verify`, an
-unarmed clone, or a scan rule added after something was already committed.
+unarmed clone, a commit made by a merge, a cherry-pick or a rebase, which the
+hook is not asked about, or a scan rule added after something was already
+committed.
 
 > **Setup required:** the auto-private step needs a PAT with `admin:repo` in the
 > repo secret **`IP_GATE_TOKEN`**, because `GITHUB_TOKEN` cannot change repo

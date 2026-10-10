@@ -2307,3 +2307,219 @@ Not checked: either suite on the Linux runner, which this commit's CI run is
 the first to try, and which is the first to arm a hook there; a clone on
 Linux or macOS with the hook at its tracked mode; a commit by another
 session through this hook; and macOS.
+
+## 2026-10-10 — The commit-time gate judges what the commit would hold, and the quarantine has a suite — IN FORCE
+
+**Problem.** The entry above left `ip-quarantine.mjs` with no suite of its
+own; the hook's cases ran three of its paths. Nothing had ruled on what the
+gate reads, either. The quarantine listed the staged paths and the scanner
+opened each one in the work tree, and the commit tool's leak scan asked the
+same way. A commit is made from the index, and the commit tool's from a tree
+built of one session's hunks, so the file judged and the content committed
+could differ.
+
+**Found.** In scratch clones at `166366f`, on Windows, every path the entry
+above named was walked, with the commits around them.
+
+- **What held.** A banned file that was the whole staged set was taken out
+  and the commit abandoned, on a repository's first commit as on a later
+  one. The ignore list got its header once and a path once, and a last line
+  with no line end was kept whole. A banned path deleted from disk after it
+  was staged was still taken out, since its name is what is judged. A file
+  moved into a banned directory was taken out at its new path.
+- **A flagged file was committed, six ways.** A notice staged and then
+  taken out on disk, or its file deleted or left half-written there: the
+  commit held the notice. A name with ` — ` in it: the path was read back
+  out of the error line by splitting at the first `:` or ` — `, came back
+  short, matched nothing staged, and the file was committed, as the whole
+  staged set too. A change of type, which the staged listing left out: a
+  path HEAD held as a link, staged as a file with a notice. A file under
+  `RuleData/` in a repository with no `ruledata/` yet. A notice in a data
+  file under `Lang/`. A notice in a data file that does not parse.
+- **A commit deleted a clean tracked file.** The quarantine unstaged with
+  `git rm --cached -- <name>`, and git reads the name as a pattern. With
+  `lang/[ab].json` flagged, the commit removed `lang/a.json`, which HEAD
+  held and the same commit had changed.
+- **A commit was stopped for nothing it held, or the hook died.** A flagged
+  new file edited after it was staged: `git rm --cached` refuses an entry
+  that differs from both the file and HEAD, the hook ended on a stack
+  trace, and every retry did the same. A new file staged clean, with a
+  notice written into it afterwards, met the same refusal. In a linked
+  worktree `.git` is a file, and making `.git/info` under it threw.
+- **The stop said the wrong thing.** `ALREADY COMMITTED … Purge them from
+  history` was printed for a file HEAD held clean: where the staged change
+  was what brought the notice in, and where the notice was on disk and in
+  neither.
+- **An ignore-list line was the path as it stood.** Git reads it as a
+  pattern. `RULES.md` also ignored `docs/RULES.md`. A name with `[` in it,
+  or a leading `!` or `#`, was not ignored by its own line, and one ending
+  in a space lost it.
+- **The commit tool refused a change for a peer's line.** Its leak scan
+  read the disk as well. With a notice in a peer's uncommitted hunk of the
+  same file, that reading refuses a change that does not hold it.
+
+A name with a `:` in it breaks at the same split as ` — `. No run was made:
+git on Windows holds no index entry for such a name.
+
+**Ruled by the owner, 2026-10-10.**
+
+1. **The gate judges the staged content.** The quarantine reads the index
+   git is making the commit from, and the commit tool's leak scan reads the
+   tree it is about to commit.
+2. **Every defect found is repaired in canon in this change,** and the suite
+   pins the repaired behaviour.
+3. **Two scanner gaps are closed with it.** A path is matched in any letter
+   case, and a data file that does not parse is read as text for a notice.
+4. **One template commit, pushed, then `acks-extras` synced and pushed.**
+   Three synced files change.
+
+**Built.** `scanPaths(root, paths, { from })` in `skeleton/tools/ip-scan.mjs`
+reads each path's text from the index git is using or from a tree, and with
+no `from` from the work tree as before. It makes two git calls whatever the
+count, one that lists what is held and one that prints every blob wanted,
+and none where no path given is one whose text is read. It returns
+`flagged`, the paths it raised an error for. Its path patterns are matched
+in any letter case, and a data file that does not parse is searched as
+text. The scan run as a command, which `validate`, the nightly run and CI
+use, reads the work tree as it did.
+
+`skeleton/tools/ip-quarantine.mjs` lists every staged path that is not a
+removal, a change of type included, and asks the scanner about the index.
+It acts on `flagged` and reads no path out of an error's text. A flagged
+file HEAD holds stops the commit, and a second question, about `HEAD`, says
+which stop it is: history holds the material, or the staged change brings it
+in. The rest leave the index through `git update-index --force-remove`,
+which takes each name as it is written and refuses none for an edit. The
+list is the file `git rev-parse --git-path info/exclude` names. A line is
+anchored at the top of the work tree and escaped, so it matches its own path
+and no other, and a name with a line break in it gets none. What is left
+staged is scanned again before the commit goes on, and a leak the scanner
+names no staged path for stops it.
+
+`commit-own-hunks.mjs` hands its leak scan the tree it built.
+`bin/test-ip-quarantine.mjs` is the suite: 28 cases through the hook a
+module runs, with `--root` for a broken copy, and a CI step.
+`bin/test-ip-scan.mjs` goes from 6 cases to 12 and counts a scan that throws
+as a failed case. `bin/test-commit-own-hunks.mjs` gains two cases, a notice
+in a peer's hunk and one in the change's own. `bin/test-pre-commit.mjs`'s
+stub scanner returns `flagged`, and its first case asks git which list
+ignores the file. `docs/LICENSING.md` Rule 3 says what the gate reads, what
+each stop means, and which commits the hook is not asked about.
+
+**Found while building.**
+
+1. *The index a hook must read is not always `.git/index`.* Under `git
+   commit -a` it is `.git/index.lock`, and under `git commit -- <paths>` a
+   `next-index-<pid>.lock`. Git names it in `GIT_INDEX_FILE` and the hook's
+   own git calls inherit that, so the scanner asks git and opens no index
+   file itself. A case commits each way. After `git commit -- <paths>` the
+   file taken out is still staged in the index git keeps, and the next
+   commit takes it out again.
+2. *A staged list over a megabyte killed the hook.* Node gives a child's
+   output one megabyte unless told otherwise. 6,000 staged paths of about
+   190 characters ended the quarantine as `166366f` held it on `spawnSync
+   git ENOBUFS`. Both files name their bound, and one case commits that
+   many paths and then commits over them.
+3. *Git makes the commit a hook has emptied.* With the quarantine's last
+   stop taken out, a commit whose whole staged set was flagged was written
+   with no file in it: an ordinary one, an amended one and a repository's
+   first. The stop is the quarantine's alone, and four cases fail without
+   it.
+4. *Git on Windows holds no index entry for six of the thirteen awkward
+   names:* one with a `:`, a `*`, a `?`, a backslash, a trailing space or a
+   line break. `git update-index` prints `Ignoring path` and exits 0. The
+   suite asks git which names it will hold, leaves the rest out, says so on
+   a `note` line, and fails off Windows if any is left out. The Linux
+   runner is the first to stage them. Their ignore-list lines were checked
+   on Windows by asking `git check-ignore` about paths never staged, all
+   but the backslash's, which was not asked.
+5. *The second scan needed a case for where it reads.* A break that turned
+   it to the disk passed every case until one staged a file clean and wrote
+   a notice into it afterwards.
+6. *A scanner that returns no `flagged` stops every commit it flags.* Two of
+   the four cases in `bin/test-pre-commit.mjs` went red against the repaired
+   quarantine: its stub scanner returned none, and one case looked for the
+   list's line as the old quarantine wrote it. A module that held the new
+   quarantine beside the old scanner would meet the same stop, and one sync
+   writes both.
+7. *The scanner's exclusion of its own file follows its patterns.* With the
+   patterns matched in any letter case, `Tools/IP-Scan.MJS` is that file
+   wherever case is folded, so the exclusion matches the same way, and a
+   case gives it that name.
+8. *`git check-ignore` takes no `--literal-pathspecs`,* and exits 128. It
+   reads each argument as a path, which is what the suite gives it.
+
+**Rejected — leaving the disk reading and saying so in LICENSING.** No
+synced file changes and no module is synced. The gate goes on judging a file
+the commit may not hold: a staged notice is committed once it is gone from
+disk, and a commit is stopped for a notice it does not carry. In a tree
+several sessions write, the commit tool meets the second by construction.
+
+**Rejected — reading both.** It closes the leak and keeps the wrong stop: a
+commit is refused for a notice in the working copy that it does not hold,
+and a session whose change is clean has nothing of its own to fix. The
+notice on disk is judged when it is staged.
+
+**Rejected — keeping the error line as the source of paths, under a stricter
+pattern.** A file's name can hold any mark the scanner's messages are
+written with, so every pattern has a name that breaks it. Returning the
+paths costs the scanner one array.
+
+**Rejected — `git rm --cached -f`.** It takes out an entry edited after
+staging. It still reads each name as a pattern, which is the deleted file
+under "Found". One break in the mutation run is this command, and one case
+fails it.
+
+**Rejected — taking a flagged change to a tracked file out of the index and
+committing the rest.** Git does not ignore a tracked file, so the next `git
+add` stages the change again and the next commit meets the same gate. The
+commit made in between would lack a change its author staged, with a line on
+stderr to say so. The stop is made once, at the file that needs the fix.
+
+**Not decided here.** A merge, a cherry-pick and a rebase make commits the
+hook is not asked about. In a scratch repository each brought a banned path
+from a side branch into HEAD with nothing said; `git merge --no-commit`
+followed by `git commit` had it taken out. CI's scan of the pushed tree is
+what reads those commits. A name with a line break in it cannot be put on
+the ignore list, so it is taken out of each commit that stages it. The
+scan's warnings are not shown at commit time. The lines an earlier
+quarantine wrote stay on each machine's list as they are. The commit tool's
+default `tooling` pattern still names no file under `skeleton/tools/`.
+
+**Cost.** A commit that stages a file whose text is read makes two more git
+calls. On Windows, in a tree of 2,000 pack sources, a commit of one data
+file, one source file and a note took a median 660 ms where it took 520 ms,
+against 193 ms with no hook armed. A notice in the working copy is seen by
+no commit until it is staged; `npm run validate` still reads the disk. A
+flagged change to a file HEAD holds stops the whole commit, as it did. A
+path under `Lang/` or `RuleData/` is flagged where the filesystem tells
+those from `lang/` and `ruledata/` as well. A scanner must return `flagged`
+for a file to be taken out. The suite adds about a minute to a gate on
+Windows.
+
+**Checked before this commit, and not.** In scratch clones, on Windows. With
+the quarantine and scanner as `166366f` held them: every bullet under
+"Found" but the last, the name with a `:` apart; the list line of a name
+that ends in a space was written by hand, as that quarantine writes one. The
+last is the commit tool's reading put back, which is one of the breaks
+below. With the build, on this base: `test-ip-quarantine: 28 cases … 0
+failed`, and `19 failed` against the quarantine and scanner as `166366f`
+held them; `test-ip-scan: 12 cases … 0 failed`, and `6 failed` against that
+scanner; `test-commit-own-hunks: 36 cases … 0 failed`; `test-pre-commit: 5
+cases … 0 failed`. Of 47 single breaks, 22 of the scanner, 23 of the
+quarantine and 2 of the commit tool, 43 turned a case red. The other 4 did
+not, each for a reason the run states: two are caught only by names git on
+Windows cannot stage, one is a flag that changes what a listing costs and
+not what it holds, and one reads the index entries of a merge in progress,
+which git does not commit. The repaired scanner, run as a command over this
+repository and over `acks-extras`, printed what the scanner before it
+printed. The commit tool made this commit behind a replay of this repo's CI
+steps, 14 stages on the tree it holds; the step left out is the last, which
+asserts nothing.
+
+Not checked: any of it on Linux, where this commit's CI run is the first to
+run the suite, to stage the six names and to commit through a linked
+worktree there; a backslash in a name against its ignore-list line; a peer's
+real hunk through the commit tool in the shared tree, which a case stands in
+for; the hook's cost in a module; and macOS, where git may hand a name back
+in another Unicode form than it was staged in.

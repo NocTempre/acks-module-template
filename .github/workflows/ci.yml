@@ -46,11 +46,24 @@ jobs:
       - name: This repo's pre-commit hook runs the quarantine in skeleton/
         run: node bin/test-pre-commit.mjs
 
+      # The quarantine is the one gate that runs before history exists, and
+      # most of its paths are taken only by a commit nobody makes on purpose:
+      # a flagged file edited after it was staged, a name that breaks an error
+      # line in two, a file HEAD already holds, a checkout whose .git is a
+      # file. Throwaway repositories commit through the hook a module runs and
+      # check what each commit holds and what the ignore list then says. Git
+      # on Windows holds no index entry for some of the names, so this run is
+      # the one that stages them.
+      - name: Quarantine judges what a commit would hold, and takes out or stops what it flags
+        run: node bin/test-ip-quarantine.mjs
+
       # The scan's long-literal warning tokenizes source, and a tokenizer that
       # misreads fails quietly in both directions: a comment read as a literal
       # is a warning every module prints for nothing, and a literal read as a
       # comment is a paste nobody is told about. Invented sources pin both.
-      - name: IP scan measures literals, not what lies between quote marks
+      # The same suite pins what the scan reads: a path in any letter case,
+      # and the text git holds for it where the hook or the commit tool asks.
+      - name: IP scan measures literals, and reads what git holds for a path
         run: node bin/test-ip-scan.mjs
 
       # The capture driver's guards run only when a live page stops answering
