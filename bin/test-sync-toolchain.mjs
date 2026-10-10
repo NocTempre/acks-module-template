@@ -2,8 +2,9 @@
  * Drives bin/sync-toolchain.mjs in throwaway repositories and checks what the
  * sync exists to guarantee: canon is the commit a run names and no edit lying
  * beside it, `--apply` writes nothing but the pushed branch and destroys
- * nothing git cannot give back, and a run that could not read a target does
- * not end as a level one does.
+ * nothing git cannot give back, a file the manifest lists as executable is
+ * level by the mode the module's index holds and no run writes that index,
+ * and a run that could not read a target does not end as a level one does.
  *
  * Usage:  node bin/test-sync-toolchain.mjs [--script <file>]
  *         (`--script` is the sync to test and defaults to
@@ -34,6 +35,7 @@ export const APPEND_OK = [".gitignore"];
 export const COPY_DIRS = [".claude/skills", ".claude/rules"];
 export const COPY_IF_PACK_DATA = ["tools/build-packs.mjs"];
 export const RENDER = ["CLAUDE.md"];
+export const EXECUTABLE = [];
 export const CANONICAL_DEV_DEPS = { "left-pad": "^1.3.0" };
 export const CANONICAL_SCRIPTS = { validate: "node tools/validate.mjs" };
 export const DEFAULT_TARGETS = ["module-one"];
@@ -52,6 +54,13 @@ const CANON = {
 };
 const VALIDATE = "tools/validate.mjs";
 const SKILL = ".claude/skills/alpha/SKILL.md";
+const HOOK = ".githooks/pre-commit";
+/** The canon again, with a hook it copies and lists as executable. */
+const HOOKED = {
+  ...CANON,
+  "manifest.mjs": MANIFEST.replace(`"${VALIDATE}"]`, `"${VALIDATE}", "${HOOK}"]`).replace("EXECUTABLE = []", `EXECUTABLE = ["${HOOK}"]`),
+  [`skeleton/${HOOK}`]: "#!/bin/sh\nexit 0\n",
+};
 
 const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "acks-sync-test-"));
 const results = [];
@@ -75,7 +84,14 @@ function repoAt(dir) {
     git("commit", "-q", "--allow-empty", "-m", message);
     return git("rev-parse", "HEAD").trim();
   };
-  return { dir, git, write, read, identify, commit };
+  /** Give tracked paths the executable mode: in the index, and on the file where the file system keeps one. */
+  const executable = (...rels) => {
+    for (const rel of rels) fs.chmodSync(path.join(dir, rel), 0o755);
+    git("update-index", "--chmod=+x", "--", ...rels);
+  };
+  /** The mode the index holds for a path. */
+  const mode = (rel) => git("ls-files", "-s", "--", rel).split(" ")[0];
+  return { dir, git, write, read, identify, commit, executable, mode };
 }
 
 /**
@@ -470,7 +486,51 @@ try {
     check("and the caller's repository is as it was", caller.git("status", "--porcelain").trim() === "" && caller.read("LICENSE") === null);
   });
 
-  await test("this repository's own manifest and skeleton sync into a bare module and read level", async (check) => {
+  await test("a file the manifest lists as executable is level only where the module's index holds it as 100755, and no run writes that index", (check) => {
+    const f = fixture("mode", { files: HOOKED });
+    const index = path.join(f.module.dir, ".git", "index");
+    const first = f.sync(["--apply"]);
+    check("--apply writes the file, names the mode it leaves to the commit and exits 1", first.status === 1 && /created\s+\.githooks\/pre-commit\n/u.test(first.out) && /mode\s+\.githooks\/pre-commit {2}\(not in the index; canon is 100755\)/u.test(first.out) && /done: \d+ file\(s\) written in 1 repo\(s\) read, 1 mode\(s\) left to the commit/u.test(first.out), first.out);
+    f.module.commit("sync, with no word about a mode");
+    check("a commit made with no word about the mode holds the file as 100644", f.module.mode(HOOK) === "100644", f.module.mode(HOOK));
+    const staged = fs.readFileSync(index);
+    const seen = f.sync(["--check", "--pushed"]);
+    check("--check names the mode and exits 1", seen.status === 1 && /mode\s+\.githooks\/pre-commit {2}\(the index holds 100644; canon is 100755\)/u.test(seen.out) && /done: 1 file\(s\) drifted from canon in 1 repo\(s\) read/u.test(seen.out), seen.out);
+    f.canon({ [`skeleton/${HOOK}`]: "#!/bin/sh\nexit 1\n" });
+    const both = f.sync(["--check", "--pushed"]);
+    check("a file whose text and mode both differ is named for each and counted once", both.status === 1 && /drift\s+\.githooks\/pre-commit\n/u.test(both.out) && /mode\s+\.githooks\/pre-commit {2}\(/u.test(both.out) && /done: 1 file\(s\) drifted from canon/u.test(both.out), both.out);
+    const again = f.sync(["--apply"]);
+    check("--apply writes the text, says who gives the mode and exits 1", again.status === 1 && f.module.read(HOOK) === "#!/bin/sh\nexit 1\n" && /the commit that lands this sync names each under "mode"/u.test(again.out) && /done: 1 file\(s\) written in 1 repo\(s\) read, 1 mode\(s\) left to the commit/u.test(again.out), again.out);
+    const forced = f.sync(["--apply", "--force"]);
+    check("--force does not give the mode either", forced.status === 1 && f.module.mode(HOOK) === "100644" && /done: 0 file\(s\) written/u.test(forced.out), forced.out);
+    check("no run rewrites the module's index, which a peer may be staging in", fs.readFileSync(index).equals(staged));
+
+    f.module.executable(HOOK);
+    f.module.commit("sync, the hook executable");
+    const level = f.sync(["--check", "--pushed"]);
+    check("once a commit holds the mode the module reads level", level.status === 0 && /ok\s+\.githooks\/pre-commit \(mode 100755\)\n/u.test(level.out) && /done: 0 file\(s\) drifted from canon/u.test(level.out), level.out);
+    check("and --apply has nothing left to say", f.sync(["--apply"]).status === 0);
+    f.canon({ [`skeleton/${HOOK}`]: "#!/bin/sh\nexit 0\n" });
+    const rewritten = f.sync(["--apply"]);
+    f.module.commit("sync");
+    check("canon's next text for the file is written, and the mode the index holds is kept", rewritten.status === 0 && f.module.read(HOOK) === "#!/bin/sh\nexit 0\n" && f.module.mode(HOOK) === "100755", rewritten.out);
+
+    // A module that is a directory of a larger repository: the mode is that
+    // repository's index's, asked for from the module's own directory.
+    const outer = repoAt(path.join(f.root, "outer"));
+    outer.git("init", "-q", "-b", "main");
+    outer.identify();
+    const nested = path.join(outer.dir, "vendor", "module-one");
+    fs.cpSync(f.module.dir, nested, { recursive: true, filter: (src) => path.basename(src) !== ".git" });
+    outer.commit("a module, vendored");
+    outer.git("update-index", "--chmod=-x", "--", `vendor/module-one/${HOOK}`);
+    const plain = f.sync(["--check", "--pushed", "--repo-path", nested]);
+    check("a module inside a larger repository is read by that repository's index", plain.status === 1 && /mode\s+\.githooks\/pre-commit {2}\(the index holds 100644; canon is 100755\)/u.test(plain.out), plain.out);
+    outer.git("update-index", "--chmod=+x", "--", `vendor/module-one/${HOOK}`);
+    check("and reads level once that index holds the mode", f.sync(["--check", "--pushed", "--repo-path", nested]).status === 0);
+  });
+
+  await test("this repository's own manifest and skeleton sync into a bare module, which reads level once a commit holds the modes", async (check) => {
     const real = await import(url.pathToFileURL(path.join(TEMPLATE_ROOT, "manifest.mjs")).href);
     const f = fixture("real", {
       target: real.DEFAULT_TARGETS[0],
@@ -482,11 +542,14 @@ try {
     });
     const first = f.level();
     const named = [...real.COPY, ...real.APPEND_OK, ...real.RENDER];
-    check("--apply exits 0 and creates every file the manifest names", first.status === 0 && named.every((rel) => f.module.read(rel) !== null), first.out);
+    check("--apply creates every file the manifest names", named.every((rel) => f.module.read(rel) !== null), first.out);
+    check("and exits 1 for the modes it leaves to the commit, one for each file the manifest lists as executable", real.EXECUTABLE.length > 0 && first.status === 1 && first.out.includes(`${real.EXECUTABLE.length} mode(s) left to the commit`), first.out);
+    f.module.executable(...real.EXECUTABLE);
+    f.module.commit("the modes the manifest lists");
     const again = f.sync(["--check", "--worktree"]);
     const pushed = f.sync(["--check", "--pushed"]);
-    check("the module then reads level from the tree and from the branch", again.status === 0 && pushed.status === 0 && /done: 0 file\(s\) drifted from canon in 1 repo\(s\) read/u.test(pushed.out), `${again.out}\n${pushed.out}`);
-    check("and every line is a file read level", pushed.out.split("\n").filter((l) => /^ {2}ok /u.test(l)).length >= named.length + real.COPY_DIRS.length, pushed.out);
+    check("with those in a commit the module reads level from the tree and from the branch", again.status === 0 && pushed.status === 0 && /done: 0 file\(s\) drifted from canon in 1 repo\(s\) read/u.test(pushed.out), `${again.out}\n${pushed.out}`);
+    check("and every line is a file read level", pushed.out.split("\n").filter((l) => /^ {2}ok /u.test(l)).length >= named.length + real.COPY_DIRS.length + real.EXECUTABLE.length, pushed.out);
   });
 } finally {
   // A sync that was still writing may hold its scratch directory for a moment.

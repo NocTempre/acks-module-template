@@ -6,10 +6,10 @@
  *
  * Git on Linux and macOS runs a hook only where its file is executable, so a
  * case's copy of the hook is made executable before it is armed. The last
- * case's copy is left at the mode the index holds for the hook: the case
- * commits a banned path through it and prints what git did on `note` lines,
- * and it fails only where git did neither of the two things it can do with a
- * hook.
+ * case's copy is left at the mode the index holds for the hook, which is the
+ * mode a checkout gives the file: the index holds this hook and the
+ * skeleton's as 100755, and at that mode the hook reads a commit wherever git
+ * runs it.
  *
  * Usage:  node bin/test-pre-commit.mjs [--root <dir>]
  *         (`--root` is the template tree whose hook is tested and defaults to
@@ -173,22 +173,17 @@ try {
     check("tools/ holds none of them", copies.length === 0, copies.map((name) => `tools/${name}`).join(", "));
   });
 
-  test("a hook left at the mode the index holds for it reads the commit or is passed over whole, and the run says which", (check) => {
+  test("the index holds this hook and the skeleton's as executable, and a hook left at that mode reads the commit", (check) => {
     const tracked = trackedMode(HOOK);
+    if (tracked === null) console.log("note this tree is not the top of a repository of its own, so no index says what mode its hooks are tracked at");
+    else check("both are tracked as 100755", tracked === "100755" && trackedMode(`skeleton/${HOOK}`) === "100755", `${HOOK} is tracked ${tracked}, and skeleton/${HOOK} ${trackedMode(`skeleton/${HOOK}`)}`);
     const f = fixture("as-tracked", () => {}, { mode: tracked });
     const onDisk = (fs.statSync(path.join(f.dir, HOOK)).mode & 0o777).toString(8);
     f.write("ruledata/table.json", "{}\n");
     f.write("docs/note.txt", "clean\n");
     const made = f.commit("", "ruledata/table.json", "docs/note.txt");
-    const read = /LEAK {2}ruledata\/table\.json/u.test(made.out) && f.written() === "docs/note.txt";
-    const passedOver = !/ip-quarantine/u.test(made.out) && f.written() === "docs/note.txt, ruledata/table.json";
-    const version = spawnSync("git", ["--version"], { encoding: "utf8" }).stdout.trim();
-    console.log(`note ${HOOK} is tracked ${tracked ?? "by no index this run can read"}, and skeleton/${HOOK} ${trackedMode(`skeleton/${HOOK}`) ?? "likewise"}; the fixture's is ${onDisk} on disk`);
-    console.log(`note on ${process.platform}, ${version}: git commit exited ${made.status}, the hook ${read ? "read the commit" : passedOver ? "was passed over" : "did neither"}, and the commit writes ${f.written()}`);
-    for (const line of made.out.split("\n").filter((each) => /hook/iu.test(each))) console.log(`note git: ${line.trim()}`);
     check("git commit exits 0", made.status === 0, made.out);
-    check("the quarantine took the banned path out, or git passed the hook over and committed both files", read !== passedOver, `${f.written()}\n${made.out}`);
-    check("git on Windows runs a hook whatever mode the index holds for it", process.platform !== "win32" || read, made.out);
+    check("the quarantine took the banned path out of the commit", /LEAK {2}ruledata\/table\.json/u.test(made.out) && f.written() === "docs/note.txt", `the fixture's hook is ${onDisk} on disk, and the commit writes ${f.written()}\n${made.out}`);
   });
 } finally {
   // A git that was still exiting may hold its directory for a moment.

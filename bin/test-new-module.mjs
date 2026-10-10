@@ -1,9 +1,10 @@
 /**
  * Drives bin/new-module.mjs in throwaway templates and checks what the
  * scaffolder exists to guarantee: the module it builds holds every tree the
- * template hands a module, its last line says whether that module is level
- * with canon, and a module that differs, or one nobody compared, does not end
- * as a level one does.
+ * template hands a module, its first commit holds as executable each file the
+ * manifest lists so, its last line says whether that module is level with
+ * canon, and a module that differs, or one nobody compared, does not end as a
+ * level one does.
  *
  * Usage:  node bin/test-new-module.mjs [--script <file>]
  *         (`--script` is the scaffolder to test and defaults to
@@ -38,12 +39,14 @@ const ENV = {
 };
 
 const PREPARE = "git config core.hooksPath .githooks";
+const HOOK = ".githooks/pre-commit";
 /** A manifest with one entry of each class the scaffolder's check reads, and one script a skeleton can lack. */
-const MANIFEST = `export const COPY = ["LICENSE"];
+const MANIFEST = `export const COPY = ["LICENSE", "${HOOK}"];
 export const APPEND_OK = [".gitignore"];
 export const COPY_DIRS = [".claude/skills", ".claude/hooks"];
 export const COPY_IF_PACK_DATA = [];
 export const RENDER = ["CLAUDE.md"];
+export const EXECUTABLE = ["${HOOK}"];
 export const CANONICAL_DEV_DEPS = { "left-pad": "^1.3.0" };
 export const CANONICAL_SCRIPTS = { validate: "node tools/validate.mjs", prepare: "${PREPARE}" };
 export const DEFAULT_TARGETS = [];
@@ -55,6 +58,7 @@ const CANON = {
   ".gitattributes": "* text=auto eol=lf\n",
   "manifest.mjs": MANIFEST,
   "skeleton/LICENSE": "licence 1\n",
+  [`skeleton/${HOOK}`]: "#!/bin/sh\nexit 0\n",
   "skeleton/.gitignore": "node_modules/\n",
   "skeleton/CLAUDE.md": "# {{MODULE_TITLE}} ({{MODULE_ID}})\nrepo {{REPO_DIR}}, lang {{LANG_PREFIX}}\n",
   "skeleton/README.md": "# ACKS II — {{MODULE_TITLE}}\n\n{{MODULE_DESCRIPTION}}\n",
@@ -82,6 +86,9 @@ function repoAt(dir) {
   };
   return { dir, git, write, read, commit };
 }
+
+/** The mode a module's last commit holds for a path. */
+const modeOf = (module, rel) => module.git("ls-tree", "HEAD", "--", rel).split(/\s+/u)[0];
 
 /** The hook files a module's settings start, as paths from the module's root. */
 const hooksCalled = (module) => [...new Set([...module.read(".claude/settings.json").matchAll(/\.claude\/hooks\/[\w.-]+/gu)].map((hit) => hit[0]))];
@@ -157,7 +164,8 @@ try {
     check("the shared trees come from the template's root, as they are", m.read(".claude/skills/alpha/SKILL.md") === "alpha 1\n" && m.read(".claude/hooks/guard.mjs") === "// guard 1\n");
     const called = hooksCalled(m);
     check("every hook the module's settings start is a file in the module", called.length === 1 && called.every((rel) => m.read(rel) !== null), called.join(", "));
-    check("the module is a repository with its first commit and nothing uncommitted", m.git("rev-list", "--count", "HEAD").trim() === "1" && m.git("status", "--porcelain").trim() === "");
+    check("the module is a repository with its first commit and nothing uncommitted", m.git("rev-list", "--count", "HEAD").trim() === "1" && m.git("status", "--porcelain").trim() === "", m.git("status", "--porcelain"));
+    check("that commit holds the hook as executable, and the file beside it as a plain one", modeOf(m, HOOK) === "100755" && modeOf(m, "LICENSE") === "100644", m.git("ls-tree", "-r", "HEAD"));
     check("the rules stub is seeded beside the module", fs.existsSync(path.join(f.root, "acks-rules", "acks-one", "RULES.md")));
     check("the check's scratch directory is gone", fs.readdirSync(f.scratch).length === 0, fs.readdirSync(f.scratch).join(", "));
   });
@@ -169,6 +177,14 @@ try {
     check("the file is named with what it lacks", /drift\s+package\.json \(scripts\.prepare\)/u.test(r.out), r.out);
     check("the last line says the module was made and is not level", /^not level: .*acks-one was made/u.test(r.last), r.last);
     check("and the module is there", f.module("acks-one").read("module.json") !== null);
+  });
+
+  await test("a skeleton that lacks a file the manifest lists as executable builds a module that is not level, and the run names the file", (check) => {
+    const rest = Object.fromEntries(Object.entries(CANON).filter(([rel]) => rel !== `skeleton/${HOOK}`));
+    const f = fixture("no-hook", { files: { ...rest, "manifest.mjs": MANIFEST.replace(`, "${HOOK}"]`, "]") } });
+    const r = f.scaffold(["acks-one", "--title", "One"]);
+    check("the run exits 1 and the module is made", r.status === 1 && f.module("acks-one").read("module.json") !== null, r.out);
+    check("the file is named as one the index does not hold", /mode\s+\.githooks\/pre-commit {2}\(not in the index; canon is 100755\)/u.test(r.out) && /^not level: /u.test(r.last), r.out);
   });
 
   await test("an edit of canon that is not committed is in the module, and the module is not level with the pushed branch", (check) => {
@@ -287,6 +303,7 @@ try {
     check("every hook the module's settings start is a file in the module", called.length > 0 && called.every((rel) => m.read(rel) !== null), called.filter((rel) => m.read(rel) === null).join(", "));
     const scripts = JSON.parse(m.read("package.json")).scripts ?? {};
     check("every script the manifest enforces is in the module's package.json", Object.entries(real.CANONICAL_SCRIPTS).every(([script, command]) => scripts[script] === command), m.read("package.json"));
+    check("every file the manifest lists as executable is one in the module's first commit, with nothing uncommitted", real.EXECUTABLE.length > 0 && real.EXECUTABLE.every((rel) => modeOf(m, rel) === "100755") && m.git("status", "--porcelain").trim() === "", `${m.git("ls-tree", "-r", "HEAD", "--", ...real.EXECUTABLE)}\n${m.git("status", "--porcelain")}`);
   });
 } finally {
   // A check that was still writing may hold its scratch directory for a moment.

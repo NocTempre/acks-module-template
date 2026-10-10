@@ -704,6 +704,18 @@ which `new-module.mjs` does not render (it knows only `MODULE_ID`,
 `MODULE_TITLE`, `MODULE_DESCRIPTION`, `LANG_PREFIX`, `MODULE_KEY`,
 `MODULE_NAMESPACE`), and broke template CI for three runs.
 
+**The pre-commit hook is committed as an executable file, and each copy is
+held to it.** `manifest.mjs` lists the hook as `EXECUTABLE` and says what git
+does with one that is not. The sync's `--check` reads the mode a module's
+index holds and reports `mode` where it is not 100755, which is what a
+module's CI then fails on; `bin/new-module.mjs` gives the mode to a new
+module's first commit; and `bin/test-pre-commit.mjs` holds this repo's own
+hook and the skeleton's to it. The sync writes a module's files and never its
+index, so `--apply` names the path and exits 1, and the commit that lands the
+sync gives the mode: git on Windows reads none from a file, so the commit
+tool takes it from the change's `mode` key (`acks-commit`). The ruling is
+DECISIONS 2026-10-10.
+
 Possible later: publish the harness as a git-dependency npm package
 (`acks-tools`) with bin entries, replacing the vendored `tools/*.mjs`.
 

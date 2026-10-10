@@ -35,7 +35,7 @@ import { execFileSync, spawnSync } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
 import url from "node:url";
-import { COPY_DIRS } from "../manifest.mjs";
+import { COPY_DIRS, EXECUTABLE } from "../manifest.mjs";
 
 const TEMPLATE_ROOT = path.dirname(path.dirname(url.fileURLToPath(import.meta.url)));
 const SKELETON = path.join(TEMPLATE_ROOT, "skeleton");
@@ -152,8 +152,16 @@ try {
     );
   }
 
+  // The module's first commit holds these paths as executable. The index is
+  // given the mode by name, because git on Windows reads none from a file, and
+  // the file is given it too, because git elsewhere does and would read the
+  // module as modified from its first commit on.
+  const executable = EXECUTABLE.filter((rel) => fs.existsSync(path.join(target, rel)));
+  for (const rel of executable) fs.chmodSync(path.join(target, rel), 0o755);
+
   git("init", "-b", "main");
   git("add", "-A");
+  if (executable.length) git("update-index", "--chmod=+x", "--", ...executable);
   git("commit", "-q", "-m", `Scaffold ${id} from acks-module-template`);
 } catch (error) {
   console.error(`new-module: ${error.message}`);

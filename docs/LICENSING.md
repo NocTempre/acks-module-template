@@ -150,7 +150,10 @@ scanner.
 
 The hook is armed by `npm install` (the canonical `prepare` script sets
 `core.hooksPath=.githooks`). Hooks are not committed, so a fresh clone that has
-never run `npm install` is ungated — this is why CI still backstops.
+never run `npm install` is ungated — this is why CI still backstops. Armed is
+not the whole of it on Linux and macOS, where git runs a hook only as an
+executable file, so the hook's file is tracked as mode 100755. TOOLCHAIN §9
+says what holds each copy to that.
 
 **This repo is the exception and arms differently.** acks-module-template has
 no `package.json` — it GENERATES one for module repos rather than carrying one

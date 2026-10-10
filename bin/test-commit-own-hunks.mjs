@@ -6,7 +6,9 @@
  * others. Each case is a fresh repository with a gate that fails on a peer's
  * line, so a gate that read the working tree in place of the built tree is
  * red. The ledger cases write through the edit-ledger hook as two sessions
- * and check that a line is taken by its writer and by nobody else.
+ * and check that a line is taken by its writer and by nobody else. The mode
+ * cases check that a commit holds the mode change.json gives a file, with the
+ * content HEAD holds where the change names the file for nothing else.
  *
  * Usage:  node bin/test-commit-own-hunks.mjs [<commit-own-hunks.mjs>] [--group tree|ledger]
  *         (defaults to .claude/skills/acks-commit/commit-own-hunks.mjs; pass a
@@ -368,6 +370,96 @@ try {
     check("nothing is recorded there", !fs.existsSync(path.join(f.repo, "scratch", "record.json")));
   });
 
+  // --- a file's mode ---
+
+  /** The mode a commit holds for a path. */
+  const modeAt = (f, rel) => f.git("ls-tree", "HEAD", "--", rel).split(/\s+/)[0];
+  /**
+   * Whether a working copy reads as a mode change. Where git reads a mode from
+   * the file it does until the copy is given the mode the commit holds; where
+   * git reads none it never does.
+   */
+  const modeDrift = (f) => /^(old|new) mode /m.test(f.git("diff"));
+
+  test("a mode named alone is committed with the content HEAD holds, once its listing is read", (check) => {
+    const f = fixture("mode-only", { mode: { "other.txt": "100755" } });
+    f.write("other.txt", "untouched\na PEER line in the working copy\n");
+    f.edit("a.txt", { 20: "line 20 PEER" });
+    const base = f.head();
+    const blob = f.git("rev-parse", "HEAD:other.txt").trim();
+    const bare = f.kit("ship");
+    check("ship with no record lists the mode and exits 1", bare.status === 1 && /== other\.txt: mode 100644 to 100755, with the content HEAD holds/.test(bare.out) && /read it, then run `ship` again/.test(bare.out), bare.out);
+    check("no commit is made by it", f.head() === base);
+    const shipped = f.kit("ship");
+    check("ship exits 0 on the record that listing left", shipped.status === 0, shipped.out);
+    check("the commit's parent is the base", f.git("rev-parse", "HEAD~1").trim() === base);
+    check("HEAD holds the file as executable", modeAt(f, "other.txt") === "100755", f.git("ls-tree", "HEAD", "--", "other.txt"));
+    check("HEAD holds the content it held", f.git("rev-parse", "HEAD:other.txt").trim() === blob);
+    const names = f.git("diff", "--name-only", "HEAD~1", "HEAD").trim();
+    check("the commit writes that path alone", names === "other.txt", names);
+    check("the peer's lines are still in the working tree, in both files", f.git("diff", "--name-only").trim().split("\n").sort().join(",") === "a.txt,other.txt" && f.git("diff", "-U0", "HEAD", "--", "other.txt").includes("+a PEER line"), f.git("status", "--porcelain"));
+    check("the working copy does not read as a mode change", !modeDrift(f), f.git("diff", "--", "other.txt"));
+    check("nothing is left staged", f.git("diff", "--cached", "--name-only").trim() === "");
+  });
+
+  test("a mode rides with a file's hunks, and an added file takes the mode it is given", (check) => {
+    const f = fixture("mode-with", { files: { "a.txt": { own: "MINE", count: 1 } }, added: ["new.txt"], mode: { "a.txt": "100755", "new.txt": "100755" } });
+    f.edit("a.txt", { 3: "line 3 MINE", 20: "line 20 PEER" });
+    f.write("new.txt", "a new file\n");
+    const shipped = f.ship();
+    check("ship exits 0", shipped.status === 0, shipped.out);
+    check("the listing names both modes, and neither as HEAD's content", /== a\.txt: mode 100644 to 100755\n/.test(shipped.out) && /== new\.txt: mode 100644 to 100755\n/.test(shipped.out), shipped.out);
+    check("HEAD holds both as executable", modeAt(f, "a.txt") === "100755" && modeAt(f, "new.txt") === "100755", f.git("ls-tree", "HEAD"));
+    check("HEAD holds the change's line and no peer line", f.show("a.txt").includes("line 3 MINE") && !f.show("a.txt").includes("PEER"));
+    check("the peer's hunk alone is left in the working tree", f.git("diff", "-U0", "HEAD").includes("+line 20 PEER") && !f.git("diff", "-U0", "HEAD").includes("MINE") && !modeDrift(f), f.git("diff", "HEAD"));
+  });
+
+  test("a mode that is not a file's, one HEAD already holds, and one for a path the commit cannot hold are each refused", (check) => {
+    const odd = fixture("mode-odd", { mode: { "other.txt": "755" } }).kit("record");
+    check("a mode that is not a file's exits 2", odd.status === 2 && /"mode" gives other\.txt "755"/.test(odd.out), odd.out);
+    const held = fixture("mode-held", { mode: { "other.txt": "100644" } }).kit("record");
+    check("the mode HEAD holds exits 1", held.status === 1 && /other\.txt: "mode" gives 100644, the mode the commit holds for it with no word/.test(held.out), held.out);
+    const gone = fixture("mode-gone", { removed: ["gone.txt"], mode: { "gone.txt": "100755" } }).kit("record");
+    check("a mode for a removed path exits 2", gone.status === 2 && /"mode" names gone\.txt, and "removed" lists it/.test(gone.out), gone.out);
+    const f = fixture("mode-untracked", { mode: { "new.txt": "100755" } });
+    f.write("new.txt", "a new file\n");
+    const untracked = f.kit("record");
+    check("a mode for a path HEAD does not track exits 1", untracked.status === 1 && /new\.txt: "mode" names it, and HEAD does not track it/.test(untracked.out), untracked.out);
+    // An entry that is a link, made in the index: no file system here is asked for one.
+    const g = fixture("mode-link", { mode: { "link.txt": "100755" } });
+    g.git("update-index", "--add", "--cacheinfo", `120000,${g.git("rev-parse", "HEAD:other.txt").trim()},link.txt`);
+    g.git("commit", "-q", "-m", "a link");
+    const linked = g.kit("record");
+    check("a mode for a path HEAD holds as a link exits 1", linked.status === 1 && /link\.txt: HEAD holds it as 120000, which is not a file's mode/.test(linked.out), linked.out);
+    check("none of them leaves a record", !fs.existsSync(path.join(f.change, "record.json")) && !fs.existsSync(path.join(g.change, "record.json")));
+  });
+
+  test("a mode named after the listing was read stops the run", (check) => {
+    const f = fixture("mode-pin", { mode: { "other.txt": "100755" } });
+    check("record is green", f.kit("record").status === 0);
+    f.rechange({ mode: { "other.txt": "100755", "b.txt": "100755" } });
+    const base = f.head();
+    const built = f.kit("build");
+    check("build exits 1 and says the mode is not the recorded one", built.status === 1 && /"mode" is not what `record` listed/.test(built.out), built.out);
+    const r = f.kit("ship");
+    check("ship exits 1 and says the mode is not the listed one", r.status === 1 && /"mode" is not what the last `record` listed/.test(r.out), r.out);
+    check("no commit is made", f.head() === base);
+    check("nothing is left staged", f.git("diff", "--cached", "--name-only").trim() === "");
+  });
+
+  test("a moved base is not carried over a commit that gives the change's file its mode", (check) => {
+    const f = fixture("mode-carry", { mode: { "other.txt": "100755" } });
+    check("record and gate are green", f.kit("record").status === 0 && f.kit("gate").status === 0);
+    f.git("update-index", "--chmod=+x", "--", "other.txt");
+    f.git("commit", "-q", "-m", "peer gives other.txt the mode");
+    const moved = f.head();
+    const r = f.kit("commit", "--carry");
+    check("commit --carry exits 3 and names the file", r.status === 3 && /a commit that landed writes this change's files \(other\.txt\)/.test(r.out), r.out);
+    check("no commit is made", f.head() === moved);
+    const again = f.kit("record");
+    check("record then says the commit would hold that mode anyway", again.status === 1 && /other\.txt: "mode" gives 100755, the mode the commit holds for it with no word/.test(again.out), again.out);
+  });
+
   // --- the leak scanner ---
 
   /** A leak scanner as the commit tool calls one. It flags a path whose name holds `word`. */
@@ -613,6 +705,24 @@ try {
     f.rechange({});
     const none = f.kit("record");
     check("so is a change that names no path", none.status === 2 && /change\.json names no path, and no session id/.test(none.out), none.out);
+  });
+
+  ledgerCase("a mode named alone takes none of this session's hunks, and beside `mine` it rides with them", (check) => {
+    const f = fixture("ledger-mode", { mode: { "other.txt": "100755" } }, { session: ME });
+    f.as(ME).edit("a.txt", { 3: "line 3 by me" });
+    const alone = f.ship();
+    check("ship exits 0", alone.status === 0, alone.out);
+    const names = f.git("diff", "--name-only", "HEAD~1", "HEAD").trim();
+    check("the commit writes the mode's path alone", names === "other.txt" && modeAt(f, "other.txt") === "100755", names);
+    check("this session's hunk is still in the working tree", working(f).includes("+line 3 by me"), working(f));
+    const g = fixture("ledger-mode-mine", { mine: true, mode: { "other.txt": "100755" } }, { session: ME });
+    g.as(ME).edit("a.txt", { 3: "line 3 by me" });
+    g.as(PEER).edit("b.txt", { 5: "line 5 PEER" });
+    const both = g.ship();
+    check("beside `mine`, ship exits 0", both.status === 0, both.out);
+    const written = g.git("diff", "--name-only", "HEAD~1", "HEAD").trim().split("\n").sort().join(",");
+    check("that commit writes this session's file and the mode's path", written === "a.txt,other.txt" && modeAt(g, "other.txt") === "100755" && g.show("a.txt").includes("line 3 by me"), written);
+    check("the peer's file is as it was", g.git("status", "--porcelain").trim() === "M b.txt", g.git("status", "--porcelain"));
   });
 
   ledgerCase("a session with nothing of its own in the working tree has nothing to commit", (check) => {

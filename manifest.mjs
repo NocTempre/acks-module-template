@@ -14,6 +14,10 @@
  * RENDER          — re-rendered per repo from its module.json (placeholders).
  * package.json    — special-cased MERGE in sync-toolchain.mjs (enforces
  *                   scripts/engines/devDependencies, preserves the rest).
+ * EXECUTABLE      — paths a module repo's commits hold as mode 100755, beside
+ *                   whatever class gives them their bytes. The sync compares
+ *                   the mode a repo's index holds and never writes it; the
+ *                   scaffolder gives it to a new module's first commit.
  * Everything else in skeleton/ is scaffold-only: it seeds new modules and is
  * never pushed into existing ones.
  */
@@ -47,6 +51,13 @@ export const COPY_DIRS = [".claude/skills", ".claude/rules", ".claude/hooks", ".
 export const COPY_IF_PACK_DATA = ["tools/build-packs.mjs"];
 
 export const RENDER = ["CLAUDE.md"];
+
+/**
+ * Git on a POSIX system runs a hook only where the file is executable, and
+ * passes over one that is not with a hint and nothing else, so a hook
+ * committed as 100644 gates no commit made there.
+ */
+export const EXECUTABLE = [".githooks/pre-commit"];
 
 export const CANONICAL_DEV_DEPS = {
   "@foundryvtt/foundryvtt-cli": "^1.0.0",

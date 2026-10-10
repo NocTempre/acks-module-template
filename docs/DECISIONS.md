@@ -2523,3 +2523,173 @@ worktree there; a backslash in a name against its ignore-list line; a peer's
 real hunk through the commit tool in the shared tree, which a case stands in
 for; the hook's cost in a module; and macOS, where git may hand a name back
 in another Unicode form than it was staged in.
+
+## 2026-10-10 — The pre-commit hook is committed as an executable file, and the commit tool, the sync and the scaffolder each hold it there — IN FORCE
+
+**Problem.** The entry of this date that has this repo's hook run the
+quarantine in `skeleton/` left the tracked mode of `.githooks/pre-commit`
+undecided. The index held mode 100644 for it here, in `skeleton/` and in
+`acks-extras`, and git's manual asks for an executable file. Every commit to
+the family is made on Windows, where git runs a hook whatever its mode and
+`core.fileMode` is false, so no `git add` there gives a file a mode and
+nothing had ever asked for one. No run had been made on Linux.
+
+**Found.**
+
+- **Git on Linux passes the hook over at the tracked mode, and says so in a
+  hint.** A probe commit (`9611763`) had the hook suite and a CI step report
+  what the runner did and assert nothing (run 38059281180: ubuntu-24.04, git
+  2.55.0, `core.fileMode` true). The checkout gave both hooks mode 644. A
+  clone of this repo armed by hand, and the scaffolded module armed by its
+  own `npm install`, each committed a banned path beside a clean file: `git
+  commit` exited 0, printed `hint: The '.githooks/pre-commit' hook was
+  ignored because it's not set as executable.`, and the commit held both
+  files. The same module with its hook made executable had the banned path
+  taken out of its next commit. The mode was all that was missing.
+- **The scaffolder drops a mode.** It writes each skeleton file from its
+  rendered text. A module scaffolded on the runner from a skeleton whose
+  hook was 755 on disk came out tracked 100644, and 644 on disk.
+- **The commit tool could not carry one.** It gave every entry the mode HEAD
+  held. A change of mode alone was refused: listed whole, as a working copy
+  that is what HEAD holds, and listed by the ledger, as a file the ledger
+  gives the session no hunk of. `git update-index --chmod=+x` is how a mode
+  reaches an index where git reads none from a file. The guard passes that
+  command and refuses the `git commit` after it, and the tool exits 4 beside
+  staging that is not its run's. A session could stage a mode and could not
+  commit it.
+- **The sync's check read a mode in neither direction.** It compares text. A
+  module whose hook was 100644 read level against a canon whose hook was
+  100755, and the other way round.
+- **A mode the index holds stays there.** Where `core.fileMode` is false it
+  outlived an edit, a `git add` and a commit made through the tool. A file
+  deleted and added again comes back 100644.
+- **Git's hooks set in config are not in the git the family commits with.**
+  The runner's git lists `hook.<name>.command` and `hook.<name>.event`. Git
+  for Windows 2.50.1 lists neither.
+
+**Ruled by the owner, 2026-10-10.**
+
+1. **The run on Linux is made by a probe commit, pushed,** before anything
+   is proposed.
+2. **Enforced end to end,** with that run in hand, and after the owner said
+   that nobody commits to a family repo from Linux or macOS. The hook is
+   tracked 100755 here, in `skeleton/` and in `acks-extras`. The commit tool
+   carries a mode, the sync compares the mode each module's index holds
+   against a list in the manifest, and the scaffolder gives a new module
+   the mode.
+
+**Built.** `commit-own-hunks.mjs` reads a `mode` key in `change.json`. A file
+it names is committed at that mode, with its hunks where the change has any
+and with HEAD's content where it has none. The mode comes from the key and
+never from a file, on any platform. `record` lists each mode, a first `ship`
+stops for that listing as it does for anything taken on the change's word,
+and later attempts hold the modes to it. After its commit the tool gives the
+working copy the mode where the repository's git reads one from a file.
+`manifest.mjs` lists `.githooks/pre-commit` as `EXECUTABLE`.
+`sync-toolchain.mjs` plans one step for each such path from the mode the
+target's index holds: `--check` reports `mode` and counts the file as
+drifted, and `--apply` names it, leaves it to the commit and exits 1. The
+sync still writes no index. `new-module.mjs` gives a new module's hook the
+mode, on the file and in the index, before its first commit. Both hook
+entries here are 100755, made so through the key by the commit that adds
+it. The fifth case of `bin/test-pre-commit.mjs` fails where either is not,
+or where a hook left at that mode does not read a commit, and CI's last step
+fails where a commit made on the runner, in a clone of this repo or in the
+scaffolded module, is not read by the hook. `bin/test-commit-own-hunks.mjs`
+gains six cases, `bin/test-sync-toolchain.mjs` one and
+`bin/test-new-module.mjs` one. TOOLCHAIN §9, LICENSING and the two skills say
+what a session meets. `acks-extras` is synced after the push, and its sync
+commit carries the mode.
+
+**Found while building.**
+
+1. *`--apply` no longer ends level on a module that has never held the
+   mode.* It writes files and no index (2026-10-08), so the first sync of
+   such a module exits 1 with the mode named, and the commit that lands the
+   sync gives it. The suite's fixture for this repo's own manifest read
+   level only once a commit held the modes.
+2. *A file whose text and mode both differ is one drifted file.* The check
+   counted steps, and the mode is a second step for a file it already
+   plans. It counts files.
+3. *A commit that gives the index a mode leaves the working copy reading as
+   modified where git reads modes from files.* That is git's rule, and no
+   run made here shows it. The tool, after its commit, and the scaffolder,
+   before its first, each set the file's own mode as well.
+4. *An insertion beside lines a peer committed is nobody's by the ledger.*
+   A line a session wrote stays that session's in the ledger after it is
+   committed. A paragraph, a function or a case added between two such
+   lines can slide by the blank line it shares with them, the two readings
+   name different writers, and the tool leaves the hunk. This change's
+   insertions were placed beside lines older than the ledger, or made
+   replacements of a neighbouring line the change had reason to reword.
+5. *The probe commit took a file whole under `adopt` on a belief nothing
+   had established.* Three of its hunks in `bin/test-pre-commit.mjs` met
+   that tie, and the session listed the file whole, adopting session
+   `f15e098c` as one whose work had been handed over. Nobody had said so.
+   That session had written nothing for nine hours, and wrote again ten
+   minutes after the commit. It had no pending hunk in the file, the gate
+   refused any clone whose suite or `ci.yml` was not the blob the session
+   had tested, and the commit holds those two blobs, so no line of the
+   other session's rode in. This change uses no `adopt`.
+
+**Rejected — the owner flips the three entries by hand, and the template
+pins its own two.** It was the session's recommendation: no synced byte
+changes, no module is synced, and the committer the mode protects does not
+exist yet. Two commits are made around the tool, and nothing reads a
+module's mode afterwards, so a hook deleted and added again in a module
+comes back 100644 with every check green.
+
+**Rejected — the same, with the flips made through the tool.** The tool
+gains the key and `acks-extras` is synced for it. A module's mode is still
+read by nothing.
+
+**Rejected — arming without the mode.** `prepare` would write an executable
+shim outside the tree, or arm a hook set in config. The git installed here
+has no such hooks. A shim re-arms every existing clone on the one platform
+in use, and this repo has no `prepare` to run.
+
+**Rejected — leaving 100644 and documenting it.** LICENSING would say the
+commit-time gate runs on Windows alone. The synced doctrine says the gate is
+armed on every clone, and LICENSING calls CI far too late.
+
+**Not decided here.** The guard passes `git update-index`, which writes the
+shared index: a session can still stage a mode by hand and cannot commit
+it. The ledger's reading of a committed line as its writer's (2026-10-07)
+is left as it is, with finding 4 as its cost. `adopt` is taken on the
+caller's word: nothing reads whether the session it names is still
+writing. `--apply` does not give a file it creates a mode where git reads
+one from the file. The list holds one path, and nothing says a file outside
+it is not executable. This repo's own two entries are held by the hook
+suite and not by the manifest.
+
+**Cost.** A module's CI has one more way to go red, and the first sync of a
+module that predates this exits 1 until its commit names the mode. A sync
+commit has one more thing to say. The commit tool takes a mode on the
+caller's word. Three canon tools changed for a committer the owner says
+does not exist yet.
+
+**Checked before this commit, and not.** On the Linux runner, before the
+build: the probe's run under "Found". In scratch clones on Windows, before
+the build, at `9611763`: a change of mode alone refused by the commit tool
+both ways; a mode staged by hand that the guard and the tool would not
+commit; `--check` reading level across a mode in both directions; and a mode
+in the index outliving an edit, a `git add` and a commit by the tool. After
+it, at `2417022`: `test-commit-own-hunks: 42 cases … 0 failed`,
+`test-sync-toolchain: 18 cases … 0 failed`, `test-new-module: 11 cases … 0
+failed` and `test-pre-commit: 5 cases … 0 failed`, where the hook suite
+fails its fifth case while the index holds 100644. 25 single breaks, 15 of
+the commit tool, 8 of the sync and 2 of the scaffolder, each turned a case
+red. In a scratch clone the commit tool, given the two hooks under `mode`,
+committed this change behind a replay of this repo's CI steps, fifteen
+stages with the last step among them, and that commit holds both hooks as
+100755. This entry was reworded after that run, and the tool made this
+commit behind the same replay on the tree it holds. In a clone holding the
+shared tree's files and its ledger, the tool's listing gave this session
+each of the change's 71 hunks and no other.
+
+Not checked: anything on Linux since the probe. This commit's CI run is the
+first to run the asserting step, and the first to try the scaffolder's
+change of a file's mode and the tool's levelling of a working copy, neither
+of which git on Windows shows; `--apply` into `acks-extras` and the sync
+commit that carries its mode, which follow the push; a hook at 100755 on
+macOS; and a commit made on Linux or macOS by a session.

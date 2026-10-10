@@ -39,11 +39,16 @@
  * is held: nothing is written in it and the paths are named. `--force` writes
  * them too. An uncommitted path the sync does not write is not looked at.
  *
- * Exit status: 0 where every target was read and is level with canon (after
- * `--apply`, was made level); 1 on drift, or on a repo `--apply` held; 2
- * where the run could not do what was asked — a target that is missing or is
- * not a module repo, a canon that cannot be resolved, an argument the script
- * does not know.
+ * A path the manifest lists as EXECUTABLE is level where the repo's index
+ * holds it as mode 100755, and is reported as `mode` where it does not. The
+ * sync writes a repo's files and never its index, so `--apply` names such a
+ * path and leaves the mode to the commit that lands the sync.
+ *
+ * Exit status: 0 where every target was read and is level with canon, modes
+ * included (after `--apply`, was made level); 1 on drift, on a repo `--apply`
+ * held, or on a mode `--apply` left to the commit; 2 where the run could not
+ * do what was asked — a target that is missing or is not a module repo, a
+ * canon that cannot be resolved, an argument the script does not know.
  *
  * After --apply, run `npm run build:packs && npm run validate` in each repo
  * and commit (compiled packs are gitignored build output — only
@@ -180,15 +185,30 @@ const render = (text, vars) =>
 
 /*
  * A repo is planned whole before a byte of it is written. A step is one file:
- * `found` is what the sync met there (ok, drift, missing, extra, custom),
- * `text` is what the file is to hold and `remove` says it is to go. A step
- * with neither is level already, or is one the sync does not write.
+ * `found` is what the sync met there (ok, drift, missing, extra, custom,
+ * mode), `text` is what the file is to hold and `remove` says it is to go. A
+ * step with neither is level already, or is one the sync does not write.
  */
 
 function planFile(repoDir, relFile, canonicalText) {
   const current = readIf(path.join(repoDir, relFile));
   if (current !== null && norm(current) === norm(canonicalText)) return { file: relFile, found: "ok" };
   return { file: relFile, found: current === null ? "missing" : "drift", text: canonicalText };
+}
+
+/** The mode a commit holds for a file that is to run. */
+const EXECUTABLE_MODE = "100755";
+
+/**
+ * Whether the repo's index holds a path as executable. The index is read and
+ * not the file: git on Windows keeps a file's mode nowhere else, and the mode
+ * a clone gives the file is the one a commit took from the index.
+ */
+function planMode(repoDir, relFile) {
+  const held = gitIn(repoDir, "--literal-pathspecs", "ls-files", "-s", "--", relFile).split("\n").filter(Boolean).map((entry) => entry.split(" ")[0]);
+  if (held.length && held.every((mode) => mode === EXECUTABLE_MODE)) return { file: relFile, found: "ok", label: `${relFile} (mode ${EXECUTABLE_MODE})` };
+  const holds = held.length ? `the index holds ${[...new Set(held)].join(" and ")}` : "not in the index";
+  return { file: relFile, found: "mode", label: `${relFile}  (${holds}; canon is ${EXECUTABLE_MODE})` };
 }
 
 /**
@@ -286,6 +306,7 @@ function planRepo(repoDir, manifest) {
   const vars = renderVars(readJson(path.join(repoDir, "module.json")), repoDir);
   for (const relFile of manifest.RENDER) steps.push(planFile(repoDir, relFile, render(skeletonText(relFile), vars)));
   steps.push(planPackageJson(repoDir, manifest));
+  for (const relFile of manifest.EXECUTABLE) steps.push(planMode(repoDir, relFile));
   return steps;
 }
 
@@ -353,12 +374,19 @@ function syncRepo(repoDir, manifest, tally) {
   }
   tally.read++;
   const hold = APPLY && dirty.size > 0 && !FORCE;
+  // A file whose text and whose mode both differ is one drifted file.
+  const drifted = new Set();
+  let modes = 0;
   for (const step of steps) {
     const label = step.label ?? step.file;
     if (step.found === "ok" || step.found === "custom") line(step.found, label);
-    else if (!APPLY) {
+    else if (step.found === "mode") {
+      line(step.found, label);
+      if (APPLY) modes++;
+      else drifted.add(step.file);
+    } else if (!APPLY) {
       line(step.found, dirty.has(step.file) ? `${label}  (uncommitted)` : label);
-      tally.drift++;
+      drifted.add(step.file);
     } else if (!writes(step)) {
       line(step.found, `${label}  (the sync does not create one)`);
       tally.left++;
@@ -369,6 +397,9 @@ function syncRepo(repoDir, manifest, tally) {
     }
     if (step.note) console.log(`${" ".repeat(17)}${step.note}`);
   }
+  tally.drift += drifted.size;
+  tally.modes += modes;
+  if (modes) console.log(`  mode: ${modes} path(s) are to be committed as ${EXECUTABLE_MODE}, and the sync writes no index; the commit that lands this sync names each under "mode"`);
   if (hold) {
     console.log(`  held: ${dirty.size} path(s) the sync would write carry uncommitted changes, so nothing is written in this repo (--force writes them too)`);
     tally.held++;
@@ -395,7 +426,7 @@ const canonPaths = (manifest) => ["skeleton", ...manifest.COPY_DIRS, "manifest.m
 async function engine(canon, announce) {
   const manifest = await import("../manifest.mjs");
   if (announce) console.log(`canon: ${canon}${announce.detail}`);
-  const tally = { read: 0, unread: 0, drift: 0, written: 0, held: 0, left: 0 };
+  const tally = { read: 0, unread: 0, drift: 0, written: 0, held: 0, left: 0, modes: 0 };
   for (const repoDir of targetsOf(manifest)) syncRepo(repoDir, manifest, tally);
 
   // A run that left a target unread says so in place of the line a level run
@@ -408,9 +439,10 @@ async function engine(canon, announce) {
   const repos = [`${tally.read} repo(s) read`];
   if (tally.held) repos.push(`${tally.held} held with nothing written`);
   if (tally.left) repos.push(`${tally.left} path(s) the sync does not write`);
+  if (tally.modes) repos.push(`${tally.modes} mode(s) left to the commit`);
   const count = APPLY ? `${tally.written} file(s) written` : `${tally.drift} file(s) drifted from canon`;
   console.log(`\ndone: ${count} in ${repos.join(", ")}; canon is ${canon}`);
-  return (APPLY ? tally.held || tally.left : tally.drift) ? EXIT.drift : 0;
+  return (APPLY ? tally.held || tally.left || tally.modes : tally.drift) ? EXIT.drift : 0;
 }
 
 /** Whether this file sits at the top of a repository of its own, and not in a copy without history or inside another repository. */
