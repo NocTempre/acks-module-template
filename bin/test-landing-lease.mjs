@@ -157,6 +157,22 @@ function fakeTime(startMs, each = () => {}) {
   return { time, clock: () => time.now, pause };
 }
 
+/**
+ * Run `body` with `stand` in place of one of `fs`'s functions, which the lease
+ * calls through the same object. `stand` is handed the real one ahead of the
+ * call's own arguments. It is how a case makes the filesystem answer at a
+ * chosen moment as it otherwise does only under load.
+ */
+async function withFs(name, stand, body) {
+  const real = fs[name];
+  fs[name] = (...args) => stand(real, ...args);
+  try {
+    return await body();
+  } finally {
+    fs[name] = real;
+  }
+}
+
 try {
   // --- the lease alone ---
 
@@ -253,6 +269,24 @@ try {
     check("and neither is told of a holder there is nothing to say about", told.length === 0);
   });
 
+  await test("a create the system refuses for a moment is asked again, and one it goes on refusing is thrown", async (check) => {
+    const gitDir = gitDirOf("refused");
+    // What Windows was seen to answer, under load, for a create over a lease given up a moment before.
+    const refusing = (times) => {
+      let left = times;
+      return (real, file, ...rest) => {
+        if (file === leaseFile(gitDir) && left-- > 0) throw Object.assign(new Error("EPERM: operation not permitted, open"), { code: "EPERM" });
+        return real(file, ...rest);
+      };
+    };
+    const { time, clock, pause } = fakeTime(Date.now());
+    const lease = await withFs("writeFileSync", refusing(3), () => acquire(gitDir, { session: A }, { clock, pause }));
+    check("refused three times and then let through, the lease is taken", lease !== null && holds(gitDir, lease.token) && time.looks === 3, `${time.looks} look(s)`);
+    lease?.stop();
+    const thrown = await withFs("writeFileSync", refusing(Infinity), () => acquire(gitDir, { session: A }, { waitMs: 60_000, clock, pause }).then(() => null, (e) => e));
+    check("refused at every look, the refusal is thrown and the wait is not sat out", thrown?.code === "EPERM" && time.looks < 100, `${thrown?.code ?? thrown}, ${time.looks} look(s)`);
+  });
+
   await test("giving up or touching a lease that is another run's leaves it alone", async (check) => {
     const gitDir = gitDirOf("foreign");
     plant(gitDir, { pid: process.pid }, 60_000);
@@ -300,6 +334,29 @@ try {
     check("the lease as judged is removed", clear(gitDir, now) === true && readLease(gitDir) === null && !fs.existsSync(guard));
   });
 
+  await test("a remover whose look finds no lease removes none, one made the moment after included", async (check) => {
+    const gitDir = gitDirOf("late-remover");
+    plant(gitDir, { pid: deadPid(), token: "gone" });
+    const judged = readLease(gitDir);
+    // Its holder gave it up after it was judged, and the next run's lease lands between this remover's look and its removal.
+    fs.rmSync(leaseFile(gitDir));
+    let landed = false;
+    const lookThenLand = (real, file, ...rest) => {
+      try {
+        return real(file, ...rest);
+      } catch (e) {
+        if (file === leaseFile(gitDir) && !landed) {
+          landed = true;
+          plant(gitDir, { pid: process.pid, token: "live" });
+        }
+        throw e;
+      }
+    };
+    const answer = await withFs("statSync", lookThenLand, () => clear(gitDir, judged));
+    check("it answers that the lease it judged is gone", answer === true && landed);
+    check("and the lease that landed after its look stands", readLease(gitDir)?.token === "live", JSON.stringify(readLease(gitDir)));
+  });
+
   await test("six runs asking at once, over a dead holder's lease, hold it one at a time", async (check) => {
     const gitDir = gitDirOf("crowd");
     plant(gitDir, { pid: deadPid() });
@@ -308,15 +365,25 @@ try {
     fs.writeFileSync(script, `import fs from "node:fs";
 const { acquire } = await import(process.argv[2]);
 const lease = await acquire(process.argv[3], { session: String(process.pid) }, { waitMs: 60_000, pollMs: 15 });
-if (!lease) process.exit(1);
+if (!lease) {
+  console.error("the wait ran out with the lease still held");
+  process.exit(1);
+}
 fs.appendFileSync(process.argv[4], "in " + process.pid + "\\n");
 await new Promise((r) => setTimeout(r, 40));
 fs.appendFileSync(process.argv[4], "out " + process.pid + "\\n");
 lease.stop();
 `);
-    const runs = Array.from({ length: 6 }, () => new Promise((resolve) => spawn(process.execPath, [script, LEASE, gitDir, log]).on("close", resolve)));
-    const exits = await Promise.all(runs);
-    check("every run got its turn", exits.every((code) => code === 0), exits.join(","));
+    // Each run's exit status, and for one that failed what it wrote as it did.
+    const run = () =>
+      new Promise((resolve) => {
+        const child = spawn(process.execPath, [script, LEASE, gitDir, log]);
+        let said = "";
+        child.stderr.on("data", (chunk) => (said += chunk));
+        child.on("close", (code) => resolve(code === 0 ? "0" : `${code}: ${said.trim() || "nothing on stderr"}`));
+      });
+    const exits = await Promise.all(Array.from({ length: 6 }, run));
+    check("every run got its turn", exits.every((exit) => exit === "0"), exits.join("\n"));
     const turns = fs.readFileSync(log, "utf8").trim().split("\n");
     const paired = turns.length === 12 && turns.every((line, n) => (n % 2 ? line === turns[n - 1].replace("in", "out") : line.startsWith("in ")));
     check("no run entered while another was inside", paired, turns.join(" | "));
