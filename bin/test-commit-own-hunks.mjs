@@ -631,6 +631,54 @@ try {
     check("the peer's entry alone is left, ahead of this session's", /^\+## theirs\n\+a PEER entry$/m.test(working(f)) && !working(f).includes("+## mine"), working(f));
   });
 
+  ledgerCase("a section added beside a peer's landed one is this session's, though it slides across the lines between them", (check) => {
+    // The blank line closing the peer's section and the one closing this session's.
+    const f = fixture("ledger-slide-landed", { files: { "a.txt": {} } }, { session: ME });
+    f.write("a.txt", "## one\nbody one\n\n## last\nbody last\n");
+    f.git("commit", "-q", "-am", "two sections");
+    f.as(PEER).write("a.txt", "## one\nbody one\n\n## theirs\ntheir body\n\n## last\nbody last\n");
+    f.git("commit", "-q", "-am", "the peer's section lands");
+    f.as(ME).write("a.txt", "## one\nbody one\n\n## theirs\ntheir body\n\n## mine\nmy body\n\n## last\nbody last\n");
+    const shipped = f.kit("ship");
+    check("ship exits 0 with no record made first", shipped.status === 0, shipped.out);
+    check("the listing gives the hunk to this session alone", /MINE -\d+,0 \(-0 \+3\) \[me\]/.test(shipped.out), shipped.out);
+    check("HEAD holds the section, and the working tree nothing more", f.show("a.txt").includes("their body\n\n## mine\nmy body\n\n## last\n") && working(f) === "", f.show("a.txt"));
+    // A closing line and a blank line: two lines the hunk slides across.
+    const g = fixture("ledger-slide-landed-two", { files: { "a.txt": {} } }, { session: ME });
+    g.write("a.txt", "start();\n\nend();\n");
+    g.git("commit", "-q", "-am", "a short script");
+    g.as(PEER).write("a.txt", 'start();\n\ntest("theirs", () => {\n  theirs();\n});\n\nend();\n');
+    g.git("commit", "-q", "-am", "the peer's test lands");
+    g.as(ME).write("a.txt", 'start();\n\ntest("theirs", () => {\n  theirs();\n});\n\ntest("mine", () => {\n  mine();\n});\n\nend();\n');
+    const two = g.kit("ship");
+    check("a hunk sliding across two lines ships the same way", two.status === 0 && /MINE -\d+,0 \(-0 \+4\) \[me\]/.test(two.out) && working(g) === "", two.out);
+  });
+
+  ledgerCase("a hunk that slides across a peer's line is not this session's where that line may be the one added", (check) => {
+    // The peer's section has not landed: its lines are added beside this session's.
+    const f = fixture("ledger-slide-unlanded", { files: { "a.txt": {} } }, { session: ME });
+    f.write("a.txt", "## one\nbody one\n\n## last\nbody last\n");
+    f.git("commit", "-q", "-am", "two sections");
+    f.as(PEER).write("a.txt", "## one\nbody one\n\n## theirs\na PEER body\n\n## last\nbody last\n");
+    f.as(ME).write("a.txt", "## one\nbody one\n\n## theirs\na PEER body\n\n## mine\nmy body\n\n## last\nbody last\n");
+    const r = f.ship();
+    check("the hunk is not listed as this session's alone", !/MINE -\d+,0 \(-0 \+6\)/.test(r.out) && /\(-0 \+6\) \[me \+ session session-\]/.test(r.out), r.out);
+    check("HEAD holds no peer line", !f.show("a.txt").includes("PEER"), f.show("a.txt"));
+    check("the peer's section is still in the working tree", /^\+a PEER body$/m.test(working(f)), working(f));
+    // This session's blank line has landed and the peer's has not, and this session's section lies between them.
+    const g = fixture("ledger-slide-peer-blank", { files: { "a.txt": {} } }, { session: ME });
+    g.write("a.txt", "## one\nbody one\n## last\nbody last\n");
+    g.git("commit", "-q", "-am", "two sections, unspaced");
+    g.as(ME).write("a.txt", "## one\nbody one\n\n## last\nbody last\n");
+    g.git("commit", "-q", "-am", "this session's blank line lands");
+    g.as(PEER).write("a.txt", "## one\nbody one\n\n\n## last\nbody last\n");
+    g.as(ME).write("a.txt", "## one\nbody one\n\n## mine\nmy body\n\n## last\nbody last\n");
+    const base = g.head();
+    const left = g.kit("record");
+    check("record exits 1 with the hunk left and the peer named", left.status === 1 && /left -\d+,0 \(-0 \+3\) \[session session- \+ no record\]/.test(left.out) && /the ledger gives this session none of its hunks/.test(left.out), left.out);
+    check("no commit is made", g.head() === base);
+  });
+
   ledgerCase("a line another session changed and changed back is this session's to change", (check) => {
     const f = fixture("ledger-undone", { files: { "a.txt": {} } }, { session: ME });
     f.as(PEER).edit("a.txt", { 3: "line 3 at 28" });

@@ -1598,7 +1598,7 @@ reported five drifted files in `foundryvtt-acks-extras`, four of them other
 sessions' uncommitted canon, so the sync ran from a clean clone of the pushed
 commit, which reported one.
 
-## 2026-10-07 — The edit ledger and the shared-tree guard — IN FORCE except a line changed and changed back, and a division that keeps no added line (superseded 2026-10-13)
+## 2026-10-07 — The edit ledger and the shared-tree guard — IN FORCE except a line changed and changed back, and a division that keeps no added line (superseded 2026-10-13), and a tie of added lines the ledger can place (superseded 2026-10-14)
 
 **Problem.** The first two of the tools ruled on this date under "A worktree
 or a branch per session is rejected, and what is left lands as tools". Whose
@@ -1640,6 +1640,9 @@ the commit tool was one way to commit among several.
    place its lines let it slide to. A hunk two such places give to different
    writers is nobody's to take, and the sessions among them still stop a
    pattern from taking it.
+   *(Superseded 2026-10-14 for a hunk of added lines with a place of one
+   session's lines whose lines left out the ledger shows HEAD holds — "A
+   hunk of added lines that ties across another writer's line", below.)*
 3. *Two sessions' lines in one hunk divide.* Entries appended to one file by
    two sessions are one hunk to git. The tool takes this session's lines of
    it where every line has a writer and this session removed every line the
@@ -2628,6 +2631,9 @@ commit carries the mode.
    name different writers, and the tool leaves the hunk. This change's
    insertions were placed beside lines older than the ledger, or made
    replacements of a neighbouring line the change had reason to reword.
+   *(Answered 2026-10-14 where the ledger shows the peer's lines landed —
+   "A hunk of added lines that ties across another writer's line",
+   below.)*
 5. *The probe commit took a file whole under `adopt` on a belief nothing
    had established.* Three of its hunks in `bin/test-pre-commit.mjs` met
    that tie, and the session listed the file whole, adopting session
@@ -3114,3 +3120,155 @@ reader; `reset`, `rebase` or `gc` moving HEAD past a recorded commit; time
 on a large file read at many commits; Linux and macOS. The sync into a
 module repo follows the push, and records there name a commit only from the
 first edit after it.
+
+## 2026-10-14 — A hunk of added lines that ties across another writer's line is one session's where the ledger shows its lines unlanded and the rest HEAD's — IN FORCE
+
+**Problem.** Finding 2 of the entry of 2026-10-07 leaves to nobody a hunk
+that two of its places give to different writers. A section a session
+appends beside another session's landed section slides across the blank line
+or `});` between them, and the session's own section is listed
+`left [session … + no record]`. An `own` pattern cannot take a line the
+ledger gives another session, and `adopt` is the owner's ruling, so the
+session has no way to commit its own work. In `foundryvtt-acks-extras` it
+came back four times in two days: `tools/test-conditions.mjs` on 2026-10-13,
+then `docs/lib/TESTING.md` and twice `tools/test-mount.mjs` on 2026-10-14.
+Finding 4 of the entry of 2026-10-10 met it in this repo.
+
+**Found.**
+
+1. *The ledger can tell the place in every recurrence.* Replaying the records
+   at the four states gives five tied hunks. In each, the places differ by
+   the other session's last lines: a blank line, or a closing `}`, `});` or
+   `})();` and the blank line after it. That session wrote them no later
+   than a line whose text no other line in the file holds and which git
+   holds unchanged, so its lines had landed, and the lines between the
+   sections are HEAD's.
+2. *A record's commit does not reach them.* None of the 52 records of those
+   files names the commit HEAD was at: the hook in that repo predates the
+   field (the entry above).
+3. *A place of one session's lines is not enough.* The first rule built here
+   took the place whose lines are one session's, some of them of a text the
+   slide holds no more often than the hunk adds it and the rest written no
+   earlier. Random histories found it giving a session a hunk while the
+   place left out another session's line that had not landed, with git
+   holding a line of HEAD's of the same text in its place. HEAD's line was
+   either taken out further on and its text written in again, or still
+   standing further on among lines git calls added.
+4. *A session's own landed lines can fill a place.* Dropping the first rule's
+   conditions and keeping only the one on lines left out broke 1 961 ties in
+   eight runs of 1 000 random histories, where this rule broke 1 057, and gave
+   3 of them to a session whose lines at the place had all landed. In those,
+   the line git counts as added is another line further on.
+
+**Built.**
+
+- `blame` returns `born`: the step of the replay that wrote each line.
+- `writersOf` takes every hunk of the file's diff as a third argument, and
+  `commit-own-hunks.mjs` passes them. A line none of them adds is one git
+  holds unchanged. A caller that passes none breaks no tie across another
+  session's line.
+- Where the places of a hunk of added lines tie and name different writers,
+  the hunk is the session's whose lines fill one place, where the ledger
+  shows three things. Some of the place's lines have a text the slide holds
+  no more often than the hunk adds it, so every line of that text there is
+  added. The place's other lines were written no earlier than the oldest of
+  those. A session's lines in a file land together, so none of the place's
+  lines has landed. And each line the place leaves out is older than the
+  ledger, that session's own, or another session's shown landed: that
+  session wrote, no earlier, a line git holds unchanged whose text no other
+  line in the file holds and no removed line held. Where places shown so
+  name different sessions, the hunk stays nobody's.
+- A line of the session's own that the place leaves out is not asked to have
+  landed. Where it has not, the line git holds in its place is HEAD's, and
+  the commit carries only that session's lines.
+- Nothing else reads differently.
+
+**Superseded.** Finding 2 of the entry of 2026-10-07, for a hunk of added
+lines with such a place. Finding 4 of the entry of 2026-10-10, four days old,
+is answered where the peer's lines show they landed. The new evidence is the
+four recurrences and finding 1: the ledger itself shows which place holds the
+lines added. Neither entry had a replay of a real tie.
+
+**Rejected: the place a line from its neighbour, the lines the two share one
+session's, and that session's lines alone at git's own placement.** It reads
+how git aligned the lines, which is not who wrote them. In three runs of
+1 000 random histories it gave a session 31 hunks in which a line truly added
+was another session's. The suite's case of a peer's lines that repeat HEAD's is one: git
+places the insertion clear of the peer's blank line, and the blank line is
+the peer's and unlanded.
+
+**Rejected: preferring the place whose differing line's writer has no line in
+the file's diff.** A blank line a peer adds beside one this session landed is
+that peer's only line in the file, and the rule gives it to this session (the
+suite's "slide-peer-blank" case). Where the peer appears in the diff only
+through a second tie, the rule cannot answer one tie without the other's
+answer.
+
+**Rejected: the first rule built here** (finding 3), **and refusing a line
+left out whose text any removal held.** The second misses HEAD's line
+standing further on, and it refused the fifth recurrence over a blank line
+the writing session had itself taken out.
+
+**Rejected: the rule on lines left out alone** (finding 4). It reaches more
+ties, at the cost of the hunks it gives to a session whose lines had landed.
+None of the recurrences needs that reach.
+
+**Not decided here.**
+
+- A session that lands only some of its lines in a file, through an `own`
+  pattern or a hunk left mixed, is read as having landed all of them. A line
+  it left behind can then read as landed beside the line that shows it.
+- A session none of whose lines in the file has a text found once in it is
+  never shown landed: a section of blank lines and closing braces stays
+  nobody's.
+- Records now name the commit HEAD was at, and a landing read from them could
+  reach that session. That is not built.
+- A line of a writer no hook saw is never shown landed.
+- A hunk that only removes reads as before.
+- A hunk git counts as added at a place that holds a session's landed lines
+  reads as that session's, here as in a hunk with no tie. The ledger says who
+  wrote a line, not whether it landed.
+
+**Cost.** `writersOf` takes a third argument. A tie costs a pass over the
+file's lines for each line a place leaves out. Ties this rule cannot settle
+stay as they were, refused to a pattern and left to `adopt`.
+
+**Checked before this commit, and not.** Offline, in this repo's working
+tree.
+
+- `bin/test-shared-tree-hooks.mjs`: 49 cases, 0 failed.
+  `bin/test-commit-own-hunks.mjs`: 52 cases, 0 failed.
+  `bin/test-landing-lease.mjs`: 19 cases, 0 failed. Against the reader in
+  force one case of each suite fails: the one that takes a section beside a
+  landed one.
+- 16 single edits of the added code, 15 in the reader and one in the tool:
+  10 turn a case red. Four of the ten fell only to a case written after the
+  first run, which plants a line that seems to show the peer's blank landed:
+  one of the peer's written before the blank, one of another session's, one
+  the peer wrote back over another session's removal, and a landed line of
+  a writer no hook saw, who wrote the blank. Of the six left, three change no
+  answer: dropping the refusal of a place with no line of a text the slide
+  holds no more often than the hunk adds it (the step condition refuses it
+  then), the farthest place shown in place of the nearest, and dropping the
+  agreement of the places shown (they named one session in every history
+  here). Two ask more, that a line left out older than the ledger, or the
+  session's own, have landed, and change no answer in the suites or the
+  histories. One asks less: without the step condition the histories below
+  broke 11 and 9 more ties at two seeds, none wrongly. It is kept, as what
+  shows the place's lines unlanded; no check here shows what dropping it
+  costs.
+- The four recurrence states replayed with this reader, from the
+  `acks-extras` ledger: all five ties read as the writing session's, and the
+  other 20 hunks read as before.
+- Random histories of three sessions writing, landing and taking out blocks
+  of lines, each hunk read against the replay's own identity of its lines,
+  1 000 worlds of 14 rounds at each of ten seeds: 6 781 ties of added lines,
+  1 311 broken, none to a session while a line truly added was another's. In
+  3 the session's truly added lines are fewer than the hunk's, and every line
+  of the hunk is that session's. Single lines instead of blocks, at three
+  seeds: 326 ties, 12 broken, none wrongly. HEAD in these histories is a model
+  of what each session landed; git reads the diff.
+
+Not checked: the tool making a commit in a module repo with this reader,
+which follows the sync; time on a file of many thousand lines; Linux and
+macOS.

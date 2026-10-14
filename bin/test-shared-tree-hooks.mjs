@@ -137,7 +137,8 @@ function fixture(name, { origin = null, tool = true } = {}) {
   /** The writers of every hunk of a file, one entry per hunk. */
   const writers = (rel) => {
     const b = blamed(rel);
-    return hunks(rel).map((h) => writersOf(b, h));
+    const all = hunks(rel);
+    return all.map((h) => writersOf(b, h, all));
   };
   return { repo, abs, git, gitDir, read, hook, write, unseen, change, hunks, blamed, writers };
 }
@@ -744,6 +745,128 @@ try {
     for (const newStart of [2, 3, 4]) {
       const w = writersOf(f.blamed("a.txt"), { newStart, plus: [""], minus: [] });
       check(`placed at line ${newStart}`, w !== null && all(w.added, NOBODY) && w.among.includes(ME), show(w));
+    }
+  });
+
+  /**
+   * A history whose last write is this session's insertion beside a peer's
+   * unlanded blank, with git holding a blank of HEAD's in the blank's place:
+   * the peer's lines repeat HEAD's after them. `lead(step)` and `tail(step)`
+   * give the lines that begin and end the tree written at each step,
+   * `after[step](f, lines)` runs once that step is written, and `peer` writes
+   * the blank, null for a writer no hook sees.
+   */
+  const peerUnlanded = (name, { lead = () => [], tail = () => [], after = {}, peer = PEER } = {}) => {
+    const f = fixture(name);
+    const trees = [
+      [null, ["", "head two", "}", "", "}", "head four"]],
+      [OTHER, ["", "head two", "}", "", "}", "}", "other one", "other two", ""]],
+      [ME, ["", "mine one", "head two", "}", "", "}", "}", "other one", "other two", ""]],
+      [OTHER, ["", "mine one", "head two", "}", "", "}", "}", "other one", "other three", "other four", ""]],
+      [ME, ["", "mine one", "head two", "}", "", "}", "", "mine two", "}", "head four", "other three", "other four", ""]],
+      [peer, ["", "mine one", "theirs", "}", "", "}", "", "}", "", "mine two", "}", "head four", "other three", "other four", ""]],
+      [ME, ["", "mine one", "theirs", "}", "", "", "mine three", "", "}", "", "}", "", "mine two", "}", "head four", "other three", "other four", ""]],
+    ];
+    trees.forEach(([who, lines], step) => {
+      const next = `${[...lead(step), ...lines, ...tail(step)].join("\n")}\n`;
+      if (who === null) f.unseen("a.txt", next);
+      else f.write(who, "a.txt", next);
+      if (step === 0) f.git("commit", "-q", "-am", "the start");
+      if (step === 2) f.git("commit", "-q", "-am", "the working tree lands");
+      after[step]?.(f, lines);
+    });
+    return f;
+  };
+  /** The hunk that holds this session's insertion, read with every hunk of the file. */
+  const insertion = (f) => {
+    const list = f.hunks("a.txt");
+    const hunk = list.find((h) => h.plus.includes("mine three"));
+    return hunk ? writersOf(f.blamed("a.txt"), hunk, list) : null;
+  };
+
+  test("a hunk that slides across another writer's line is one session's only where the ledger shows its lines unlanded and the lines left out HEAD's", (check) => {
+    const text = (...lines) => `${lines.join("\n")}\n`;
+    // Each file holds the one hunk, read at each place it can slide to.
+    const alone = (b, hunk) => writersOf(b, hunk, [hunk]);
+    const placed = (f, newStart) => alone(f.blamed("a.txt"), { newStart, plus: newStart === 4 ? ["", "## mine"] : ["## mine", ""], minus: [] });
+    // A peer's section lands, and this session adds one after it: the blank line closing each lets the hunk slide.
+    const f = fixture("slide-landed");
+    f.unseen("a.txt", text("## one", "", "## last"));
+    f.git("commit", "-q", "-am", "two sections");
+    f.write(PEER, "a.txt", text("## one", "", "## theirs", "", "## last"));
+    f.git("commit", "-q", "-am", "the peer's section lands");
+    f.write(ME, "a.txt", text("## one", "", "## theirs", "", "## mine", "", "## last"));
+    for (const newStart of [4, 5]) {
+      const w = placed(f, newStart);
+      check(`placed at line ${newStart}, it is this session's`, w !== null && all(w.added, ME) && w.among.length === 0, show(w));
+    }
+    // The same section written where no hook saw it: a writer no hook saw is not one session.
+    const g = fixture("slide-landed-unseen");
+    g.unseen("a.txt", text("## one", "", "## last"));
+    g.git("commit", "-q", "-am", "two sections");
+    g.write(PEER, "a.txt", text("## one", "", "## theirs", "", "## last"));
+    g.git("commit", "-q", "-am", "the peer's section lands");
+    g.unseen("a.txt", text("## one", "", "## theirs", "", "## mine", "", "## last"));
+    const unseen = placed(g, 5);
+    check("a section no hook saw is nobody's, the peer among", unseen !== null && all(unseen.added, NOBODY) && unseen.among.includes(PEER), show(unseen));
+    // This session's blank line lands; the peer adds one beside it, and this session's section goes between the two.
+    const h = fixture("slide-peer-blank");
+    h.unseen("a.txt", text("## one", "## last"));
+    h.git("commit", "-q", "-am", "two sections, unspaced");
+    h.write(ME, "a.txt", text("## one", "", "## last"));
+    h.git("commit", "-q", "-am", "this session's blank line lands");
+    h.write(PEER, "a.txt", text("## one", "", "", "## last"));
+    h.write(ME, "a.txt", text("## one", "", "## mine", "", "## last"));
+    for (const [newStart, plus] of [[2, ["", "## mine"]], [3, ["## mine", ""]]]) {
+      const w = alone(h.blamed("a.txt"), { newStart, plus, minus: [] });
+      check(`a blank line this session landed before its section is not shown unlanded, placed at line ${newStart}`, w !== null && all(w.added, NOBODY) && show([...w.among].sort()) === show([ME, PEER].sort()), show(w));
+    }
+    // A peer's unlanded lines repeat HEAD's after them, and git holds HEAD's in the peer's place, so a blank of the peer's is left out of this session's insertion.
+    const k = peerUnlanded("slide-peer-unlanded");
+    const working = k.read("a.txt");
+    const unlanded = insertion(k);
+    check("the peer's blank is not shown landed, and the insertion is nobody's, the peer among", unlanded !== null && all(unlanded.added, NOBODY) && unlanded.among.includes(PEER) && unlanded.among.includes(ME), show(unlanded));
+    // The peer's lines land: its one line of a text nothing else holds is HEAD's, and so is its blank.
+    k.unseen("a.txt", text("", "mine one", "theirs", "}", "", "}", "", "}", "}", "other one", "other two", ""));
+    k.git("commit", "-q", "-am", "the peer's lines land");
+    k.unseen("a.txt", working);
+    const landed = insertion(k);
+    check("once the peer's lines land, the insertion is this session's", landed !== null && all(landed.added, ME) && landed.among.length === 0, show(landed));
+  });
+
+  test("a line a place leaves out is shown landed only by a line its own writer wrote no earlier, that git holds, of a text no removal held", (check) => {
+    const text = (...lines) => `${lines.join("\n")}\n`;
+    /** One line lands alone: `head` commits, and the working tree `tree` is put back. */
+    const land = (f, head, tree) => {
+      f.unseen("a.txt", head);
+      f.git("commit", "-q", "-am", "one line lands");
+      f.unseen("a.txt", tree);
+    };
+    const cases = [
+      ["the peer's landed line is older than its blank", "left-out-older", {
+        tail: (step) => (step >= 2 ? ["peer zero"] : []),
+        after: { 1: (f, lines) => f.write(PEER, "a.txt", text(...lines, "peer zero")) },
+      }],
+      ["the line that landed after the blank is another session's", "left-out-another", {
+        tail: (step) => (step >= 6 ? ["other five"] : []),
+        after: { 5: (f, lines) => { f.write(OTHER, "a.txt", text(...lines, "other five")); land(f, `${f.git("show", "HEAD:a.txt")}other five\n`, text(...lines, "other five")); } },
+      }],
+      ["the peer wrote back a line of HEAD's that another session took out", "left-out-written-back", {
+        tail: () => ["head five"],
+        after: { 5: (f, lines) => { f.write(OTHER, "a.txt", text(...lines)); f.write(PEER, "a.txt", text(...lines, "head five")); } },
+      }],
+      // The script's line begins the file, so the replay's trim keeps the script's blank beside the insertion.
+      ["a writer no hook saw wrote the blank, and a line of its own landed after it", "left-out-unseen", {
+        peer: null,
+        lead: (step) => (step >= 5 ? ["script line"] : []),
+        after: { 5: (f, lines) => land(f, `script line\n${f.git("show", "HEAD:a.txt")}`, text("script line", ...lines)) },
+      }],
+    ];
+    for (const [what, name, options] of cases) {
+      const f = peerUnlanded(name, options);
+      const w = insertion(f);
+      const b = f.blamed("a.txt");
+      check(`${what}: the insertion is nobody's`, w !== null && all(w.added, NOBODY), `${show(w)}\n${show(b.lines.map((line, i) => `${b.owners[i]}:${line}`))}`);
     }
   });
 
