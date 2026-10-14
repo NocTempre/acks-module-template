@@ -2936,3 +2936,50 @@ by this tool in a tree sessions share, where its listing alone was read. The
 random histories land the whole working tree and never one session's hunks
 beside another's. Nothing was run on Linux or macOS, and the sync into a
 module repo follows the push.
+
+## 2026-10-13 — A commit the hook is not asked about is read by nothing, and no reader is built for it — IN FORCE
+
+**Problem.** The entry of 2026-10-10 on the commit-time gate left open what
+reads a commit made by a merge, a cherry-pick or a rebase, and said CI's scan
+of the pushed tree does. That holds for this repo alone: a module's tree is
+scanned at a release and never between two, and nothing reads history
+(`LICENSING.md`, "CI backstop").
+
+**Found.** A session is refused every such commit by `shared-tree-guard.mjs`,
+and the commit tool scans its change set whether or not the hook is armed, so
+the route left is a commit the owner makes by hand. A scratch reader read both
+histories once: 471 commits of `acks-extras`, none flagged, and 114 of this
+repo, 2 flagged, both the scaffold's 378-byte placeholder `docs/RULES.md`,
+which holds no book text and was removed on 2026-07-16. A reader hung on
+`pre-push` is skipped by `git push --no-verify`, which git 2.50.1 also takes
+shortened to `--no-veri`, and by `git send-pack`, which runs no hook.
+
+The scanner had a fault of its own: started as a command through a linked
+directory it took itself for an import, printed nothing and exited 0. `node
+tools/ip-scan.mjs` did that from PowerShell at a Foundry dev-install junction.
+`validate` starts the scanner by its real path, and run through the same
+junction it printed the scan's line.
+
+**Ruled by the owner, 2026-10-13.** First, to build the reader: a `pre-push`
+and a `pre-merge-commit` hook, a quarantine stop on a merge, a guard refusing
+`--no-verify`, and a CI job. With that build at 1,857 added lines over 19
+files and the findings above in hand, the owner stopped it as too much build
+for a release gate: none of it lands. The scanner's fault is fixed, with a
+case in `bin/test-ip-scan.mjs` that starts it through a link, and
+`LICENSING.md` says what CI reads.
+
+**Rejected — the build as ruled first.** Its hooks read a route a session is
+already refused, and `--no-verify` or an unarmed clone skips them as it skips
+the hook they back up. Its CI job reads a push that is already public.
+
+**Rejected — the push hook alone.** The same flag skips it, and `send-pack`
+never asks it.
+
+**Cost.** A flagged file the owner commits by hand, past or around the hook,
+is published unread unless a release finds it still in the tree. The two
+placeholder commits stay in this repo's history.
+
+**Checked, and not.** `test-ip-scan: 13 cases … 1 failed` against the scanner
+as it was, the new case alone, and `0 failed` against the fix. Not checked: a
+symbolic link on Linux, which this commit's CI run is the first to try, and
+the scanner through the junction in `acks-extras`, which waits on the sync.

@@ -10,13 +10,15 @@
  * Each case is a throwaway tree of invented files scanned through `scanPaths`,
  * the entry the pre-commit hook and the commit tool use. A case that gives a
  * `from` is a repository as well: `head` is its first commit and `staged` its
- * index, each put there with no file written.
+ * index, each put there with no file written. A case that gives `command` has
+ * its tree scanned by the scanner started as a command as well, at the tree
+ * and through a link to it.
  *
  * Usage:  node bin/test-ip-scan.mjs [<ip-scan.mjs>]
  *         (defaults to skeleton/tools/ip-scan.mjs; pass a modified copy to
  *         confirm a case fails when the behaviour it guards is broken)
  */
-import { execFileSync } from "node:child_process";
+import { execFileSync, spawnSync } from "node:child_process";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -36,6 +38,23 @@ const git = (root, args, input) => execFileSync("git", args, { cwd: root, input,
 function stage(root, texts) {
   const lines = Object.entries(texts).map(([rel, text]) => `100644 ${git(root, ["hash-object", "-w", "--stdin"], text).trim()}\t${rel}\0`);
   if (lines.length) git(root, ["update-index", "--add", "-z", "--index-info"], lines.join(""));
+}
+/** Starts a copy of the scanner kept in a tree as a command, at the tree and through a link to it, and gives what either did other than report the tree's one leak. */
+function commandProblems(root) {
+  fs.mkdirSync(path.join(root, "tools"));
+  fs.copyFileSync(SCANNER, path.join(root, "tools", "ip-scan.mjs"));
+  const link = `${root}.link`;
+  fs.symlinkSync(root, link, "junction");
+  const problems = [];
+  for (const [how, from] of [
+    ["at the tree", root],
+    ["through a link to it", link],
+  ]) {
+    // No repository above the tree is asked what it tracks, so the tree is walked wherever it stands.
+    const r = spawnSync(process.execPath, [path.join(from, "tools", "ip-scan.mjs")], { cwd: from, encoding: "utf8", env: { ...GIT_ENV, GIT_CEILING_DIRECTORIES: path.dirname(root) } });
+    if (r.status !== 1 || !/LEAK {2}ruledata/u.test(r.stderr) || !/ip-scan: FAILED — 1 leak\(s\)/u.test(r.stderr)) problems.push(`started ${how}, it exited ${r.status} and said: ${`${r.stdout}${r.stderr}`.trim() || "nothing"}`);
+  }
+  return problems;
 }
 
 // Invented text, longer than the scanner's 1500-character threshold.
@@ -213,6 +232,14 @@ export const A = "${PROSE}";
     errors: [/^lang\/6-last\.json: footer contains a copyright notice/],
     flagged: ["lang/6-last.json"],
   },
+  {
+    name: "started as a command through a linked directory, the scanner scans as it does started at the directory",
+    files: { "ruledata/x.json": "{}\n", "docs/note.txt": "clean\n" },
+    command: true,
+    // Nothing here is asked of `scanPaths`.
+    paths: [],
+    warnings: [],
+  },
 ];
 
 const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "acks-ip-scan-"));
@@ -227,6 +254,7 @@ try {
         fs.mkdirSync(path.dirname(path.join(root, rel)), { recursive: true });
         fs.writeFileSync(path.join(root, rel), text);
       }
+      if (testCase.command) problems.push(...commandProblems(root));
       if (testCase.from) {
         git(root, ["init", "-q", "-b", "main"]);
         if (testCase.head) {

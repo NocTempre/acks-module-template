@@ -172,11 +172,20 @@ repository.
 
 ### CI backstop
 
-CI re-runs the scan and, on a leak, takes the repo **private** rather than
-publishing. This should now never fire; it exists to catch `--no-verify`, an
-unarmed clone, a commit made by a merge, a cherry-pick or a rebase, which the
-hook is not asked about, or a scan rule added after something was already
-committed.
+CI reads a tree, at two moments, and never history. A module's release
+workflow scans the tagged tree and then the unpacked `module.zip`, and on a
+leak withholds the release and takes the repo **private**. This repo's CI
+scans this tree on every push. A module's push between releases is read by
+neither.
+
+So a flagged file the hook was not asked about (`--no-verify`, an unarmed
+clone, a merge, a cherry-pick, a rebase, or a scan rule added after the
+commit) is caught only where it is still in the tree when a scan runs. One a
+later commit removed first is public in history and unread. A session cannot
+commit around the hook: `shared-tree-guard.mjs` refuses it `git commit`,
+`merge`, `cherry-pick` and `rebase`, and the commit tool scans its change set
+whether or not the hook is armed. `docs/DECISIONS.md` (2026-10-13) says why
+no reader was built for a commit the owner makes by hand.
 
 > **Setup required:** the auto-private step needs a PAT with `admin:repo` in the
 > repo secret **`IP_GATE_TOKEN`**, because `GITHUB_TOKEN` cannot change repo
