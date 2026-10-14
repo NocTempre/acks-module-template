@@ -1598,7 +1598,7 @@ reported five drifted files in `foundryvtt-acks-extras`, four of them other
 sessions' uncommitted canon, so the sync ran from a clean clone of the pushed
 commit, which reported one.
 
-## 2026-10-07 — The edit ledger and the shared-tree guard — IN FORCE
+## 2026-10-07 — The edit ledger and the shared-tree guard — IN FORCE except a line changed and changed back, and a division that keeps no added line (superseded 2026-10-13)
 
 **Problem.** The first two of the tools ruled on this date under "A worktree
 or a branch per session is rejected, and what is left lands as tools". Whose
@@ -1644,6 +1644,9 @@ the commit tool was one way to commit among several.
    two sessions are one hunk to git. The tool takes this session's lines of
    it where every line has a writer and this session removed every line the
    hunk removes, and leaves the rest in the working tree.
+   *(Superseded 2026-10-13 for a division that keeps no added line over a
+   line another session wrote over — "A session that changed a line and
+   changed it back has no claim on it", below.)*
 4. *The guard judges a command by its repository.* The commit tool's own
    scratch clone, a test fixture and a probe all commit by hand, by design.
    A command is refused only where the repository it runs in carries the
@@ -1672,6 +1675,9 @@ hook reached it.
 **Rejected — telling two removed lines of the same text apart by which is
 older than the ledger.** It is wrong once a line has been removed, committed
 and written again. Two tombstones with different removers are nobody's.
+*(The last sentence superseded 2026-10-13 where the earlier remover wrote the
+line back itself — "A session that changed a line and changed it back has no
+claim on it", below. The rejection stands.)*
 
 **Rejected — refusing every `git reset` and `git restore`.** It leaves stale
 staging that no session can clear.
@@ -2693,3 +2699,240 @@ change of a file's mode and the tool's levelling of a working copy, neither
 of which git on Windows shows; `--apply` into `acks-extras` and the sync
 commit that carries its mode, which follow the push; a hook at 100755 on
 macOS; and a commit made on Linux or macOS by a session.
+
+## 2026-10-13 — A session that changed a line and changed it back has no claim on it, and a line a peer wrote over is not carved into a removal — IN FORCE
+
+**Problem.** The entry of 2026-10-07 that built the edit ledger ruled that
+two tombstones of one text with different removers are nobody's. On
+2026-10-10 that refused a release its own lines. In `acks-extras` a session
+had changed the two version-stamp lines of `docs/lib/API.md` from 27 to 28
+and back to 27, and had finished. The session cutting 11.1.0 then changed
+them to 28. Each place held two tombstones of the 27 line, one by each
+session, so the removal was nobody's and the tool refused: "the hunk at -1
+holds this session's lines and 31615677's, and they do not divide by line; it
+lands once theirs has". Nothing of the finished session's was left in the
+tree to land. The release left the two lines out under an `own` pattern
+(`45e82ca`), and the way through the tool was `adopt`, which a session does
+not give itself.
+
+**Found.**
+
+- **The refusal is the reader's, and a fixture makes it.** One session
+  changes a line and changes it back, a second changes it: the tool in force
+  lists `left -3,1 (-1 +1) [me + session session- + no record]` and refuses
+  with the words above.
+- **The tool in force takes HEAD's line out where a peer wrote over this
+  session's replacement.** A session replaces a line HEAD holds; a peer
+  replaces that session's uncommitted line with its own. To the first
+  session the hunk divides by finding 3 of 2026-10-07: it removed the one
+  removed line, and none of the added lines is its own. The tool listed
+  `PART -3,1 (-1 +1)`, the gate was green, and the commit removed HEAD's line
+  and added nothing, with the peer's line left in the tree. `ship` did not
+  stop for the listing, since the ledger accounted for every line. The same
+  commit is made where the peer changes the session's uncommitted line and
+  changes it back, which leaves the peer the writer of the session's own
+  text.
+- **The two meet.** After the release, the session writing the next stamp
+  wrote 29 over the 28. With the first defect alone repaired, the release
+  session's listing of that file read `PART -1,1` and `PART -34,1`: its next
+  commit there would have taken the document's title line and the stamp line
+  out of HEAD.
+- **Three rules were built and thrown away before this one,** each broken by
+  a history a separate review wrote. The first set a tombstone aside where
+  another line of its text had been written at the place after it was
+  removed: a peer took a blank line out, this session drafted and deleted one
+  of its own beside it, and the rule gave this session the peer's removal.
+  The second read the place by the last step that left it holding HEAD's
+  lines, whoever had written them back: a session takes a blank line out,
+  another writes one back and takes it out again, and the second was given
+  the removal the first still meant. The third asked that every other
+  remover of the text had written it at the place as often as it had removed
+  it, whenever it wrote. One session lands a line and rewords it; a second
+  puts the line back as HEAD holds it and rewords it again the same way; the
+  second's commit, naming no path, took the first's rewording and exited 0.
+  The first session had written the line it later removed, and that writing
+  was counted as its undoing.
+- **No rule over these records tells a withdrawn line from a landed one.** A
+  session writes a line and lands it, takes it out, another session writes
+  it back, a third takes it out: the removal is still the first session's to
+  land. A session writes a line and takes it out, another writes it there
+  and lands it, a third takes it out: the removal is the third's. The two
+  ledgers hold the same records, since no record marks a landing.
+
+**Built.**
+
+- `ledger.mjs` numbers the steps of its replay. Every line carries the step
+  that wrote it and, once removed, the step that removed it.
+- The reading by text is as it was, and no removal it names is read again. A
+  removed line it leaves to nobody is read once more, by when. The reader
+  finds the last step that left the hunk's removed lines standing, and no
+  others, among the lines the place has since lost. The line is its
+  remover's where all of these hold: the lines of its text that stood after
+  that step went by one session's hand; no line of that text has been
+  written at the place since, and the hunk adds none; and every earlier
+  removal of a line of that text there by another session was undone by that
+  session's own hand, which from each such removal on wrote the text there
+  in later steps at least as often as it took it out.
+- So a session that changed a line and changed it back has no claim on it. A
+  session whose removal another hand undid still has one. So has a session
+  that took out a line it had written itself, the line not being told from
+  one that landed, and so has a writer no hook saw: a line such a writer
+  removed is left as the text reads it.
+- The place is the tombstones the reading by text already reads. A hunk that
+  only removes can slide, and its place is chosen as before, by text alone;
+  only the place chosen is read again.
+- `writersOf` reports, for a hunk that removes and adds, each line put in
+  the removed lines' place that has since been removed, with its writer and
+  its remover, followed through every rewording.
+- `commit-own-hunks.mjs` leaves a hunk that would divide into this change's
+  removals and none of its added lines, where another session removed a line
+  put in the removed lines' place. The hunk is listed `left` with both
+  sessions named, and is the other session's to land.
+- The refusal of a hunk two sessions share reads the hunk from each other
+  session's seat. It says "it lands once theirs has" only where one of them
+  can divide a part of it off by the ledger. Where none can, it says that no
+  part is theirs to land first and names `adopt`.
+- The ledger's records are as they were. A ledger written before this
+  change is read by it with nothing migrated.
+
+**Superseded in the entry of 2026-10-07.** "Two tombstones with different
+removers are nobody's" no longer holds where the earlier remover wrote the
+line back itself, after it removed it, and the later one removed what then
+stood. Finding 3 there, that a hunk divides where this session removed every
+line it removes, no longer holds for a division that keeps no added line
+over a line a peer wrote over. The alternative that entry rejected stays
+rejected: no tombstone is told by being older than the ledger, and a line
+removed, committed and written again by another session is still nobody's to
+remove. The evidence that entry did not have is the refusal of 2026-10-10,
+and the commit the tool in force makes of the second fixture above.
+
+**Rejected — reading a session whose latest content of a file equals its
+first as having written nothing.** It is wrong once a commit has landed
+between the two, and it reads a whole file where one line was undone.
+
+**Rejected — setting a tombstone aside where its text was written at the
+place after it was removed.** The first rule built. A line's text coming
+back says nothing of who removed the line HEAD holds.
+
+**Rejected — giving the removal to whoever removed the line since the place
+last held HEAD's lines, whoever wrote them back.** The second rule built. A
+line one session took out and another wrote back would be the next
+remover's, and the first session's removal, still meant and still in no
+commit, would land under another session's gate or not at all.
+
+**Rejected — counting a line the remover wrote before it took the line
+out.** The third rule built. It reads a session that withdrew a line of its
+own rightly, and hands a session's pending change of a line it had landed to
+whoever puts that line back and changes it again.
+
+**Rejected — reading by when at every place a removal can slide to.** The
+place chosen is the one that leaves fewest removals to nobody. Read by when,
+a place the text leaves to nobody stood level with the one the text names,
+the two gave different removers, and a removal the reader in force names
+came out nobody's. Nothing built here changes a reading the text gives.
+
+**Rejected — giving a written-over hunk to the session whose line stands,
+with no refusal.** Its commit would carry the removal of HEAD's line, which
+another session made, and a session that touched a peer's unfinished line
+would land the peer's change under its own gate.
+
+**Rejected — a hook that records commits.** A replay that knew which lines
+HEAD holds would need none of the above. Such a hook has to see every way
+HEAD moves: a commit by hand, a pull, a reset.
+
+**Not decided here.**
+
+- A session that wrote a line and took it out itself still stands against
+  the next removal of that text at the place. A version stamp one session
+  drafted and withdrew, and a release then wrote and landed, is refused to
+  the session that writes the next. A ledger record that carried the commit
+  HEAD was at when it was written would tell a withdrawn line from a landed
+  one, by whatever means HEAD had moved, and none does.
+- A removal that landed leaves its tombstone. A later removal of an equal
+  line beside it is read onto that tombstone: given to the earlier remover
+  where the stale tombstones agree, and to nobody where they do not. The
+  review's random histories found both in the reader in force, and neither
+  is changed.
+- A division that keeps some of this change's added lines still takes out
+  every line the hunk removes, one whose replacement a peer wrote over among
+  them. The ledger pairs no removed line with an added one. A removal newly
+  named here lets the tool make such a division where the tool in force
+  refused the hunk for the removal.
+- A peer that changes this session's uncommitted line and changes it back is
+  the line's writer. The hunk is now left for it, and the session needs
+  `adopt` for a line whose text is its own.
+- The refusal's seat is read hunk by hunk, and `record` refuses a file
+  whole. Two sessions that each wait on the other in two hunks of one file
+  are each told the hunk lands once the other's has.
+- Git cuts the hunks, by the algorithm its configuration names. With blank
+  lines enough around it, the default prints two reworded paragraphs and the
+  blank line between them as one hunk with the blank line on both sides.
+- `adopt` takes every line of the adopted session in the files the change
+  names, not the one hunk the refusal named.
+
+**Cost.** A line one session took out and another wrote back is refused to
+the next session that removes it, with the first session named, as before,
+and so is a line whose text a session once wrote there and withdrew. A
+session that wrote over a peer's uncommitted line still needs the owner's
+`adopt` to land the hunk, and so does the peer; the tool now says so. A bare
+removal that used to land is left where a peer wrote over the line put in
+its place. A hunk two live sessions share, which a stale tombstone used to
+have listed `left`, is refused as the shared hunk it is. Lines of one text
+that stood at a place together are still nobody's, and so is a line moved
+and then removed, or moved and moved back, whoever moved it back. The
+reading is by text and by step and keeps no identity
+for a line: a session that takes a line out and later writes that text back
+at the place is read as having undone its change, whatever it meant by the
+second line.
+
+**Checked before this commit, and not.** All of it offline, in a replica of
+this repo at `27c4cee` holding the change. The reader, the tool and their
+two suites in the working tree were then compared with the replica's and are
+the same byte for byte, and the two suites pass from the working tree as
+well. The tool made this commit behind a replay of this repo's CI steps on
+the tree it holds.
+
+- `bin/test-shared-tree-hooks.mjs`: 44 cases, 0 failed. Of its thirteen new
+  cases six fail on the reader in force, and seven hold readings this change
+  leaves as they were.
+- `bin/test-commit-own-hunks.mjs`: 49 cases, 0 failed. Of its seven new
+  cases four fail on the tool in force.
+- `bin/test-landing-lease.mjs`, whose code this change does not touch: 17
+  cases, 0 failed in three runs. In a fourth, made while two other kits ran
+  beside it, "six runs asking at once, over a dead holder's lease, hold it
+  one at a time" failed, one run of the six exiting 1. The commit below this
+  one, `e2a8410`, gives the cause and the repair.
+- 35 single edits of the changed lines, 28 in the reader and 7 in the tool:
+  each turns at least one case red. One of them, `>=` for `>` between the
+  step that wrote a line and the step that removed another, had been set
+  aside as reaching nothing. A line moved within a place reaches it, and the
+  case of a line one session moved and another moved back was written for
+  it.
+- Random histories of three sessions and a writer no hook sees, 2,500 worlds
+  of 12 rounds at each of two seeds: 64,451 and 65,273 hunks read by the
+  reader in force and by this one. No removal the reader in force names
+  reads differently. 127 and 100 hunks hold a removal it left to nobody that
+  this one names. The tool in force makes 649 and 740 divisions that keep no
+  added line over a line another writer took out, and this one makes none.
+  Of divisions that keep some, the tool in force makes 451 and 410, and this
+  one 452 and 410.
+- The review's own histories, run through the tool as built: the landed line
+  of the third rule's break stays in HEAD in both its shapes, and both
+  ledgers of the last finding are refused alike. In its histories of equal
+  lines, 5,259 hunks of which 3,390 hold one text on both sides, this tool
+  makes 14 divisions keeping some added line that the tool in force did not
+  make, beside 175 that both make.
+- The ledger of `acks-extras` at `45e82ca`, read and not written: both stamp
+  removals are the release session's; its listing leaves both hunks to the
+  session whose 29 stands; and that session's listing is refused with
+  `adopt` named and no word of waiting.
+
+Not checked: the build as it stands was not read by the review, which read
+the three before it. It differs from the last patch the review ran in
+counting a line only where it was written in a later step than the removal,
+in counting each such line once, and in leaving a text the hunk adds; the
+two read every hunk of the random histories alike. No commit has been made
+by this tool in a tree sessions share, where its listing alone was read. The
+random histories land the whole working tree and never one session's hunks
+beside another's. Nothing was run on Linux or macOS, and the sync into a
+module repo follows the push.

@@ -33,6 +33,7 @@ const results = [];
 const BODY = Array.from({ length: 12 }, (_, n) => `line ${n + 1}`);
 const ME = "session-me";
 const PEER = "session-peer";
+const OTHER = "session-other";
 
 /**
  * The patch the Edit and Write tools report for a change in one place: one
@@ -280,6 +281,276 @@ try {
     const w = f.writers("a.txt");
     check("one hunk removes both, and neither removal is given to a session", w.length === 1 && show(w[0].removed) === show([NOBODY, NOBODY]), show(w));
     check("both sessions are among its writers", show([...w[0].among].sort()) === show([ME, PEER].sort()), show(w));
+  });
+
+  test("a line one session changed and changed back is the next writer's to change", (check) => {
+    const f = fixture("undone");
+    f.write(PEER, "a.txt", f.change("a.txt", { 3: "line 3 at 28" }));
+    f.write(PEER, "a.txt", f.change("a.txt", { 3: "line 3" }));
+    f.write(ME, "a.txt", f.change("a.txt", { 3: "line 3 at 28" }));
+    const w = f.writers("a.txt");
+    check("one hunk", w.length === 1, show(w));
+    check("both sides are this session's, and nobody else is named", all(w[0].added, ME) && all(w[0].removed, ME) && w[0].among.length === 0, show(w[0]));
+    check("the peer's undone wording is not read as put in the line's place", w[0].replaced.length === 0, show(w[0]));
+    // The line lands, and a third session changes it again. The peer wrote that text once and took it out itself: no record says that line did not land, so the removal is not undone and the peer is still named.
+    f.git("commit", "-q", "-am", "this session's line lands");
+    f.write(OTHER, "a.txt", f.change("a.txt", { 3: "line 3 at 29" }));
+    const next = f.writers("a.txt");
+    check("the next change's removal is nobody's, between its writer and the peer", next.length === 1 && all(next[0].added, OTHER) && show(next[0].removed) === show([NOBODY]) && show([...next[0].among].sort()) === show([OTHER, PEER].sort()), show(next));
+    // A writer no hook saw changes the line the peer changed and changed back: the removal is nobody's, and is read as the text reads it.
+    const g = fixture("undone-then-unseen");
+    g.write(PEER, "a.txt", g.change("a.txt", { 3: "line 3 at 28" }));
+    g.write(PEER, "a.txt", g.change("a.txt", { 3: "line 3" }));
+    g.unseen("a.txt", g.change("a.txt", { 3: "line 3, by a script" }));
+    const v = g.writers("a.txt");
+    check("a removal no hook saw stays nobody's, with the peer still named", v.length === 1 && show(v[0].removed) === show([NOBODY]) && v[0].among.includes(PEER), show(v));
+  });
+
+  test("a line its remover wrote back is the next remover's, and one another hand wrote back is not", (check) => {
+    const f = fixture("out-again");
+    f.write(PEER, "a.txt", f.change("a.txt", { 4: null }));
+    f.write(PEER, "a.txt", f.change("a.txt", { 3: ["line 4"] }));
+    f.write(ME, "a.txt", f.change("a.txt", { 4: null }));
+    const w = f.writers("a.txt");
+    check("one removal, this session's", w.length === 1 && show(w[0].removed) === show([ME]) && w[0].among.length === 0, show(w));
+    // Another session wrote the line back: the first remover did not undo its change, and still has a claim.
+    const g = fixture("out-again-by-another");
+    g.write(PEER, "a.txt", g.change("a.txt", { 4: null }));
+    g.write(OTHER, "a.txt", g.change("a.txt", { 3: ["line 4"] }));
+    g.write(ME, "a.txt", g.change("a.txt", { 4: null }));
+    const v = g.writers("a.txt");
+    check("one removal, nobody's, and both removers are named", v.length === 1 && show(v[0].removed) === show([NOBODY]) && show([...v[0].among].sort()) === show([ME, PEER].sort()), show(v));
+    // This session took it out first, another wrote it back, the peer changed it and changed it back: the only claim left is this session's own.
+    const k = fixture("out-again-own");
+    k.write(ME, "a.txt", k.change("a.txt", { 4: null }));
+    k.write(OTHER, "a.txt", k.change("a.txt", { 3: ["line 4"] }));
+    k.write(PEER, "a.txt", k.change("a.txt", { 4: "line 4 PEER" }));
+    k.write(PEER, "a.txt", k.change("a.txt", { 4: "line 4" }));
+    k.write(ME, "a.txt", k.change("a.txt", { 4: null }));
+    const t = k.writers("a.txt");
+    check("an earlier removal of this session's own does not stand against it", t.length === 1 && show(t[0].removed) === show([ME]) && t[0].among.length === 0, show(t));
+    // A writer no hook saw took the line out, and one wrote it back: what either meant is not known.
+    const h = fixture("out-again-unseen");
+    h.write(PEER, "a.txt", h.change("a.txt", { 25: "line 25 PEER" }));
+    h.unseen("a.txt", h.change("a.txt", { 4: null }));
+    h.write(PEER, "a.txt", h.change("a.txt", { 19: "line 20 PEER" }));
+    h.unseen("a.txt", h.change("a.txt", { 3: ["line 4"] }));
+    h.write(PEER, "a.txt", h.change("a.txt", { 10: "line 10 PEER" }));
+    h.write(ME, "a.txt", h.change("a.txt", { 4: null }));
+    const u = h.writers("a.txt").filter((x) => x.added.length === 0);
+    check("a removal no hook saw is not read as undone", u.length === 1 && show(u[0].removed) === show([NOBODY]), show(u));
+    // The peer changes the line and changes it back, twice over: each of its removals has a later line of its own to answer for it.
+    const m = fixture("out-again-twice");
+    m.write(PEER, "a.txt", m.change("a.txt", { 4: "line 4, a first wording" }));
+    m.write(PEER, "a.txt", m.change("a.txt", { 4: "line 4" }));
+    m.write(PEER, "a.txt", m.change("a.txt", { 4: "line 4, a second wording" }));
+    m.write(PEER, "a.txt", m.change("a.txt", { 4: "line 4" }));
+    m.write(ME, "a.txt", m.change("a.txt", { 4: "line 4 MINE" }));
+    const s = m.writers("a.txt");
+    check("a line changed back twice is still the next writer's", s.length === 1 && show(s[0].removed) === show([ME]) && s[0].among.length === 0, show(s));
+    // The peer and then another session each change the line and change it back: each answers for its own removal alone.
+    const q = fixture("out-again-in-turn");
+    q.write(PEER, "a.txt", q.change("a.txt", { 4: "line 4 PEER" }));
+    q.write(PEER, "a.txt", q.change("a.txt", { 4: "line 4" }));
+    q.write(OTHER, "a.txt", q.change("a.txt", { 4: "line 4 OTHER" }));
+    q.write(OTHER, "a.txt", q.change("a.txt", { 4: "line 4" }));
+    q.write(ME, "a.txt", q.change("a.txt", { 4: "line 4 MINE" }));
+    const r = q.writers("a.txt");
+    check("a line two sessions each changed back is still the next writer's", r.length === 1 && show(r[0].removed) === show([ME]) && r[0].among.length === 0, show(r));
+    // Two equal lines the peer took out together. It wrote one back and another session wrote the other: one line of the peer's does not answer for both removals.
+    const n = fixture("out-two-back-one");
+    n.unseen("a.txt", "top\nsame\nsame\nbottom\n");
+    n.git("commit", "-q", "-am", "two equal lines");
+    n.write(PEER, "a.txt", "top\nbottom\n");
+    n.write(PEER, "a.txt", "top\nsame\nbottom\n");
+    n.write(OTHER, "a.txt", "top\nsame\nsame\nbottom\n");
+    n.write(ME, "a.txt", "top\nbottom\n");
+    const p = n.writers("a.txt");
+    check("both removals are nobody's, between this session and the peer", p.length === 1 && show(p[0].removed) === show([NOBODY, NOBODY]) && show([...p[0].among].sort()) === show([ME, PEER].sort()), show(p));
+  });
+
+  test("a line changed and changed back beside another session's new line is still the next writer's", (check) => {
+    const f = fixture("undone-beside");
+    f.write(OTHER, "a.txt", f.change("a.txt", { 3: ["a line by another"] }));
+    f.write(PEER, "a.txt", f.change("a.txt", { 3: "line 3 at 28" }));
+    f.write(PEER, "a.txt", f.change("a.txt", { 3: "line 3" }));
+    f.write(ME, "a.txt", f.change("a.txt", { 3: "line 3 at 28" }));
+    const w = f.writers("a.txt");
+    check("one hunk removes the line and adds two", w.length === 1 && w[0].removed.length === 1 && w[0].added.length === 2, show(w));
+    check("the removal is this session's, beside the other session's line", show(w[0].removed) === show([ME]) && show(w[0].added) === show([ME, OTHER]) && w[0].among.length === 0, show(w[0]));
+  });
+
+  test("a line written back while the line after it is out is not told from the line it was", (check) => {
+    const f = fixture("out-beside");
+    f.write(ME, "a.txt", f.change("a.txt", { 4: null }));
+    f.write(PEER, "a.txt", f.change("a.txt", { 3: null }));
+    f.write(PEER, "a.txt", f.change("a.txt", { 2: ["line 3"] }));
+    f.write(ME, "a.txt", f.change("a.txt", { 3: null }));
+    const w = f.writers("a.txt");
+    // The place read as HEAD does only before the first of these edits, and line 3 has been written there since.
+    check("one hunk removes both, and the first is nobody's", w.length === 1 && show(w[0].removed) === show([NOBODY, ME]), show(w));
+    check("both sessions are among its writers", show([...w[0].among].sort()) === show([ME, PEER].sort()), show(w));
+  });
+
+  test("two equal lines HEAD holds at one place are not told apart by when each went", (check) => {
+    const f = fixture("equal-in-head");
+    f.unseen("a.txt", "top\nsame\nmid\nbottom\n");
+    f.git("commit", "-q", "-am", "one of the two equal lines");
+    f.write(PEER, "a.txt", "top\nmid\nbottom\n");
+    f.write(OTHER, "a.txt", "top\nmid\nsame\nbottom\n");
+    // The second equal line lands, and the peer's removal of the first does not.
+    const tree = f.read("a.txt");
+    f.unseen("a.txt", "top\nsame\nmid\nsame\nbottom\n");
+    f.git("commit", "-q", "-am", "the other session's line lands");
+    f.unseen("a.txt", tree);
+    f.write(ME, "a.txt", "top\nmine\nbottom\n");
+    const w = f.writers("a.txt");
+    check("one hunk removes three lines", w.length === 1 && w[0].removed.length === 3, show(w));
+    check("the peer's removal is not given to this session", show(w[0].removed) === show([NOBODY, ME, ME]), show(w[0]));
+    check("the peer is among its writers", w[0].among.includes(PEER), show(w[0]));
+  });
+
+  test("one of two equal lines written back and taken out again leaves both removals nobody's", (check) => {
+    const f = fixture("out-thrice");
+    f.unseen("a.txt", "top\nsame\nsame\nbottom\n");
+    f.git("commit", "-q", "-am", "two equal lines");
+    f.write(PEER, "a.txt", "top\nsame\nbottom\n");
+    f.write(OTHER, "a.txt", "top\nbottom\n");
+    f.write(OTHER, "a.txt", "top\nsame\nbottom\n");
+    f.write(ME, "a.txt", "top\nbottom\n");
+    const w = f.writers("a.txt");
+    check("one hunk removes both, and neither removal is given to a session", w.length === 1 && show(w[0].removed) === show([NOBODY, NOBODY]), show(w));
+    check("all three sessions are among its writers", show([...w[0].among].sort()) === show([ME, OTHER, PEER].sort()), show(w));
+  });
+
+  test("a line moved and then taken out is not told from the line it was", (check) => {
+    const f = fixture("moved-out");
+    f.unseen("a.txt", "top\nsame\nmid\nbottom\n");
+    f.git("commit", "-q", "-am", "a line above another");
+    f.write(PEER, "a.txt", "top\nmid\nsame\nbottom\n");
+    f.write(ME, "a.txt", "top\nbottom\n");
+    const w = f.writers("a.txt");
+    check("one hunk removes both lines", w.length === 1 && w[0].removed.length === 2, show(w));
+    check("the moved line's removal is nobody's, and both sessions are named", w[0].removed[0] === NOBODY && show([...w[0].among].sort()) === show([ME, PEER].sort()), show(w[0]));
+  });
+
+  test("a line one session moved and another moved back is not read as undone by the first", (check) => {
+    const f = fixture("moved-and-back");
+    f.unseen("a.txt", "top\nsame\nmid\nbottom\n");
+    f.git("commit", "-q", "-am", "a line above another");
+    // A move takes the line out and writes it in one step: that line is the move itself, and does not answer for the removal.
+    f.write(PEER, "a.txt", "top\nmid\nsame\nbottom\n");
+    f.write(OTHER, "a.txt", "top\nsame\nmid\nbottom\n");
+    f.write(ME, "a.txt", "top\nsame MINE\nmid MINE\nbottom\n");
+    const w = f.writers("a.txt");
+    check("one hunk removes both lines", w.length === 1 && w[0].removed.length === 2, show(w));
+    check("a removal is left to nobody, and the peer that moved the line is named", w[0].removed.includes(NOBODY) && w[0].among.includes(PEER), show(w[0]));
+  });
+
+  test("a line two sessions changed in turn is one's removal and the other's line", (check) => {
+    const f = fixture("in-turn");
+    f.write(PEER, "a.txt", f.change("a.txt", { 3: "line 3 PEER" }));
+    f.write(ME, "a.txt", f.change("a.txt", { 3: "line 3 MINE" }));
+    const w = f.writers("a.txt");
+    check("the line HEAD held went by the peer, and the line standing is this session's", w.length === 1 && show(w[0].removed) === show([PEER]) && show(w[0].added) === show([ME]), show(w));
+    check("what the peer wrote in its place is named as removed by this session", show(w[0].replaced) === show([{ owner: PEER, by: ME }]), show(w[0]));
+    // A line taken out, and another session's line put in at the same place: neither replaced the other's.
+    const g = fixture("out-and-in");
+    g.write(ME, "a.txt", g.change("a.txt", { 3: null }));
+    g.write(PEER, "a.txt", g.change("a.txt", { 2: ["a line by the peer"] }));
+    const v = g.writers("a.txt");
+    check("a removal and an insertion at one place name nothing replaced", v.length === 1 && show(v[0].removed) === show([ME]) && show(v[0].added) === show([PEER]) && v[0].replaced.length === 0, show(v));
+    // A line taken out in one edit, a line written there in the next, and that line changed by another session.
+    const h = fixture("out-then-in");
+    h.write(ME, "a.txt", h.change("a.txt", { 3: null }));
+    h.write(ME, "a.txt", h.change("a.txt", { 2: ["a line by me"] }));
+    h.write(PEER, "a.txt", h.change("a.txt", { 3: "a line by the peer" }));
+    const u = h.writers("a.txt");
+    check("a line written in a later edit than the removal is not named as replaced", u.length === 1 && show(u[0].removed) === show([ME]) && u[0].replaced.length === 0, show(u));
+    // A line changed, reworded by its own writer, and then changed by another session.
+    const k = fixture("reworded");
+    k.write(ME, "a.txt", k.change("a.txt", { 3: "line 3 MINE" }));
+    k.write(ME, "a.txt", k.change("a.txt", { 3: "line 3 MINE, reworded" }));
+    k.write(PEER, "a.txt", k.change("a.txt", { 3: "line 3 PEER" }));
+    const t = k.writers("a.txt");
+    check("a reworded line the peer changed is named as replaced, after the wording its writer dropped", t.length === 1 && show(t[0].replaced) === show([{ owner: ME, by: ME }, { owner: ME, by: PEER }]), show(t));
+    // Three sessions change the line in turn: the second's line went by the third, and is named too.
+    const m = fixture("three-in-turn");
+    m.write(ME, "a.txt", m.change("a.txt", { 3: "line 3 MINE" }));
+    m.write(OTHER, "a.txt", m.change("a.txt", { 3: "line 3 OTHER" }));
+    m.write(PEER, "a.txt", m.change("a.txt", { 3: "line 3 PEER" }));
+    const s = m.writers("a.txt");
+    const pairs = (s[0]?.replaced ?? []).map((line) => `${line.owner}>${line.by}`).sort();
+    check("each line written over is named with who wrote over it", s.length === 1 && show(s[0].removed) === show([ME]) && show(pairs) === show([`${ME}>${OTHER}`, `${OTHER}>${PEER}`].sort()), show(s));
+  });
+
+  test("a line taken out since the place last read as HEAD does is its remover's, whatever else was written there", (check) => {
+    const f = fixture("other-text");
+    // The peer changes the line and changes it back, which leaves the place as HEAD holds it. Then the line goes, with a line of another text written and removed beside it.
+    f.write(PEER, "a.txt", f.change("a.txt", { 3: "line 3 at 28" }));
+    f.write(PEER, "a.txt", f.change("a.txt", { 3: "line 3" }));
+    f.write(OTHER, "a.txt", f.change("a.txt", { 3: ["another line"] }));
+    f.write(ME, "a.txt", f.change("a.txt", { 3: null }));
+    f.write(OTHER, "a.txt", f.change("a.txt", { 3: null }));
+    const w = f.writers("a.txt");
+    check("one removal, this session's, and the peer is not named", w.length === 1 && show(w[0].removed) === show([ME]) && w[0].among.length === 0, show(w));
+  });
+
+  test("a line its own writer took out is not told from one that had landed", (check) => {
+    const f = fixture("own-line-out");
+    const body = (...head) => `${[...head, ...BODY].join("\n")}\n`;
+    f.unseen("a.txt", body("same", "same"));
+    f.git("commit", "-q", "-am", "two equal lines");
+    // A third equal line comes and goes by the peer's hand, and then one of HEAD's two goes.
+    f.write(PEER, "a.txt", body("same", "same", "same"));
+    f.write(PEER, "a.txt", body("same", "same"));
+    f.write(ME, "a.txt", body("same"));
+    const w = f.writers("a.txt");
+    check("one removal, nobody's, and both sessions are named", w.length === 1 && show(w[0].removed) === show([NOBODY]) && show([...w[0].among].sort()) === show([ME, PEER].sort()), show(w));
+    // The peer writes a line and takes it out; another session writes it there again; this session takes that out. The same records stand for a line the peer landed and then removed, which another hand put back.
+    const g = fixture("own-line-out-and-back");
+    g.write(PEER, "a.txt", g.change("a.txt", { 3: ["a line"] }));
+    g.write(PEER, "a.txt", g.change("a.txt", { 4: null }));
+    g.write(OTHER, "a.txt", g.change("a.txt", { 3: ["a line"] }));
+    g.git("commit", "-q", "-am", "the line lands");
+    g.write(ME, "a.txt", g.change("a.txt", { 4: null }));
+    const v = g.writers("a.txt");
+    check("a removal of that text there is nobody's, the peer still named", v.length === 1 && show(v[0].removed) === show([NOBODY]) && show([...v[0].among].sort()) === show([ME, PEER].sort()), show(v));
+  });
+
+  test("a text the hunk also adds is not read by when", (check) => {
+    const f = fixture("text-both-sides");
+    f.write(PEER, "a.txt", f.change("a.txt", { 3: "line 3 at 28" }));
+    f.write(PEER, "a.txt", f.change("a.txt", { 3: "line 3" }));
+    f.write(ME, "a.txt", f.change("a.txt", { 3: "a line by me" }));
+    const one = f.writers("a.txt");
+    check("the line the peer changed and changed back is this session's to change", one.length === 1 && show(one[0].removed) === show([ME]), show(one));
+    // This session writes the line's text again under its own. Git prints the new line alone; a hunk cut with the text on both sides holds a standing line that is not told from the one removed.
+    f.write(ME, "a.txt", f.change("a.txt", { 3: ["line 3"] }));
+    const w = writersOf(f.blamed("a.txt"), { newStart: 3, plus: ["a line by me", "line 3"], minus: ["line 3"] });
+    check("the removal is nobody's, between the two sessions", w !== null && show(w.removed) === show([NOBODY]) && show([...w.among].sort()) === show([ME, PEER].sort()), show(w));
+  });
+
+  test("a removal the tombstones' text names is not read by when at another place it can slide to", (check) => {
+    const f = fixture("named-by-text");
+    const text = (...lines) => `${lines.join("\n")}\n`;
+    f.unseen("a.txt", text("h1", "", "h2", "}", "h3", "}", "h4"));
+    f.git("commit", "-q", "-am", "a short file");
+    f.write(PEER, "a.txt", text("h1", "", "h3", "}", "h4"));
+    f.write(PEER, "a.txt", text("h1", "", "h3", "}", "h4", "h2"));
+    f.write(PEER, "a.txt", text("h1", "", "h3", "}", "a line by the peer"));
+    f.write(ME, "a.txt", text("h1", "", "h3", "}"));
+    f.write(ME, "a.txt", text("h1", "h2", "}"));
+    f.write(ME, "a.txt", text("h1", "h2"));
+    f.write(PEER, "a.txt", text("h1", "h2", "x"));
+    f.write(PEER, "a.txt", text("h1", "h2"));
+    f.write(PEER, "a.txt", text("h1", "h2", "h2"));
+    f.write(PEER, "a.txt", text("h1", "h2", "h2", "another by the peer"));
+    f.git("commit", "-q", "-am", "the whole working tree lands");
+    f.write(ME, "a.txt", text("h1", "h2", "another by the peer"));
+    const w = f.writers("a.txt");
+    // The peer's removals landed and left their tombstones, which by text answer for the removal of an equal line. A removal the text names is not read again.
+    check("one removal, read as the tombstones' text names it", w.length === 1 && show(w[0].removed) === show([PEER]) && w[0].among.length === 0, show(w));
   });
 
   test("two sessions' entries appended one after the other are told apart inside one hunk", (check) => {

@@ -631,6 +631,160 @@ try {
     check("the peer's entry alone is left, ahead of this session's", /^\+## theirs\n\+a PEER entry$/m.test(working(f)) && !working(f).includes("+## mine"), working(f));
   });
 
+  ledgerCase("a line another session changed and changed back is this session's to change", (check) => {
+    const f = fixture("ledger-undone", { files: { "a.txt": {} } }, { session: ME });
+    f.as(PEER).edit("a.txt", { 3: "line 3 at 28" });
+    f.as(PEER).edit("a.txt", { 3: "line 3" });
+    f.as(ME).edit("a.txt", { 3: "line 3 at 28" });
+    const shipped = f.kit("ship");
+    check("ship exits 0 with no record made first", shipped.status === 0, shipped.out);
+    check("the listing gives the hunk to this session alone", /MINE -3,1 \(-1 \+1\) \[me\]/.test(shipped.out), shipped.out);
+    check("HEAD holds the line", f.show("a.txt").includes("line 3 at 28\n") && working(f) === "", f.show("a.txt").slice(0, 60));
+    // Another session wrote the line back: the first one's removal was not undone by its own hand, and it is still named.
+    const g = fixture("ledger-undone-by-another", { files: { "a.txt": {} } }, { session: ME });
+    g.as(PEER).edit("a.txt", { 3: "line 3 at 28" });
+    g.as("session-other-0003").edit("a.txt", { 3: "line 3" });
+    g.as(ME).edit("a.txt", { 3: "line 3 at 28" });
+    const r = g.kit("record");
+    check("a line another session wrote back is still refused, the first session named", r.status === 1 && /REFUSED: a\.txt: the hunk at -3 holds this session's lines and session-'s, and they do not divide by line/.test(r.out), r.out);
+  });
+
+  ledgerCase("this session's line over a peer's uncommitted line is refused, both sessions being in the hunk", (check) => {
+    const f = fixture("ledger-over-peer", { files: { "a.txt": {} } }, { session: ME });
+    f.as(PEER).edit("a.txt", { 3: "line 3 PEER" });
+    f.as(ME).edit("a.txt", { 3: "line 3 by me" });
+    const r = f.kit("record");
+    check("record exits 1 and names the peer", r.status === 1 && /REFUSED: a\.txt: the hunk at -3 holds this session's lines and session-'s, and they do not divide by line/.test(r.out), r.out);
+    check("it does not say to wait for a line that is gone", /no part of it is theirs to land first by the ledger either, so it lands under "adopt"/.test(r.out) && !/it lands once theirs has/.test(r.out), r.out);
+    // A peer's entry beside this session's line, over a line the peer took out: the peer's entry can still land.
+    const g = fixture("ledger-beside-peer", { files: { "a.txt": {} } }, { session: ME });
+    const lines = () => fs.readFileSync(path.join(g.repo, "a.txt"), "utf8").split("\n");
+    g.as(PEER).write("a.txt", lines().flatMap((l) => (l === "line 3" ? ["a PEER entry"] : [l])).join("\n"));
+    g.as(ME).write("a.txt", lines().flatMap((l) => (l === "a PEER entry" ? [l, "an entry by me"] : [l])).join("\n"));
+    const beside = g.kit("record");
+    check("a peer's line still standing in the hunk is waited for", beside.status === 1 && /they do not divide by line; it lands once theirs has/.test(beside.out), beside.out);
+  });
+
+  ledgerCase("a peer's line standing where this session's stood is left for the peer, and HEAD's line is not taken out", (check) => {
+    const f = fixture("ledger-under-peer", {}, { session: ME });
+    f.as(ME).edit("a.txt", { 3: "line 3 by me" });
+    f.as(PEER).edit("a.txt", { 3: "line 3 PEER" });
+    f.as(ME).edit("a.txt", { 20: "line 20 by me" });
+    const shipped = f.kit("ship");
+    check("ship exits 0", shipped.status === 0, shipped.out);
+    check("the listing leaves the hunk and names both sessions", /left -3,1 \(-1 \+1\) \[me \+ session session-\]/.test(shipped.out) && /MINE -20,1/.test(shipped.out), shipped.out);
+    check("HEAD holds line 3 as it was, and this session's other line", f.show("a.txt").includes("line 2\nline 3\nline 4\n") && f.show("a.txt").includes("line 20 by me"), f.show("a.txt").slice(0, 60));
+    check("the peer's line alone is left in the working tree", working(f).includes("+line 3 PEER") && !working(f).includes("by me"), working(f));
+    // The same where this session had reworded its own line before the peer wrote over it.
+    const g = fixture("ledger-under-peer-reworded", {}, { session: ME });
+    g.as(ME).edit("a.txt", { 3: "line 3 by me" });
+    g.as(ME).edit("a.txt", { 3: "line 3 by me, reworded" });
+    g.as(PEER).edit("a.txt", { 3: "line 3 PEER" });
+    g.as(ME).edit("a.txt", { 20: "line 20 by me" });
+    const again = g.kit("ship");
+    check("a reworded line the peer wrote over leaves the hunk the same way", again.status === 0 && /left -3,1 \(-1 \+1\) \[me \+ session session-\]/.test(again.out) && g.show("a.txt").includes("line 2\nline 3\nline 4\n"), again.out);
+    // The same where an adopted session reworded the line before the peer wrote over it.
+    const h = fixture("ledger-under-peer-adopted", { files: { "a.txt": {} }, adopt: ["session-other-0003"] }, { session: ME });
+    h.as(ME).edit("a.txt", { 3: "line 3 by me" });
+    h.as("session-other-0003").edit("a.txt", { 3: "line 3 by the adopted session" });
+    h.as(PEER).edit("a.txt", { 3: "line 3 PEER" });
+    h.as(ME).edit("a.txt", { 20: "line 20 by me" });
+    const adopted = h.kit("record");
+    check("an adopted session's line the peer wrote over leaves it too", adopted.status === 0 && /left -3,1 \(-1 \+1\) \[me \+ session session-\]/.test(adopted.out) && /MINE -20,1/.test(adopted.out), adopted.out);
+  });
+
+  ledgerCase("a line this session took out, where a peer then put one in, is still divided: the removal lands", (check) => {
+    const f = fixture("ledger-out-and-in", { files: { "a.txt": {} } }, { session: ME });
+    const lines = () => fs.readFileSync(path.join(f.repo, "a.txt"), "utf8").split("\n");
+    f.as(ME).write("a.txt", lines().filter((l) => l !== "line 3").join("\n"));
+    f.as(PEER).write("a.txt", lines().flatMap((l) => (l === "line 2" ? [l, "a PEER line"] : [l])).join("\n"));
+    const shipped = f.kit("ship");
+    check("ship exits 0", shipped.status === 0, shipped.out);
+    check("the listing divides the hunk", /PART -3,1 \(-1 \+1\) \[me \+ session session-\]/.test(shipped.out), shipped.out);
+    check("HEAD no longer holds line 3, and holds no peer line", f.show("a.txt").includes("line 2\nline 4\n") && !f.show("a.txt").includes("PEER"), f.show("a.txt").slice(0, 60));
+    check("the peer's line is left in the working tree", /^\+a PEER line$/m.test(working(f)), working(f));
+    // The same where this session had first reworded the line: what it wrote there went by its own hand.
+    const g = fixture("ledger-out-in-two", { files: { "a.txt": {} } }, { session: ME });
+    const now = () => fs.readFileSync(path.join(g.repo, "a.txt"), "utf8").split("\n");
+    g.as(ME).edit("a.txt", { 3: "line 3 by me" });
+    g.as(ME).write("a.txt", now().filter((l) => l !== "line 3 by me").join("\n"));
+    g.as(PEER).write("a.txt", now().flatMap((l) => (l === "line 2" ? [l, "a PEER line"] : [l])).join("\n"));
+    const two = g.kit("record");
+    check("a line this session wrote there and took out itself leaves the hunk divided", two.status === 0 && /PART -3,1 \(-1 \+1\) \[me \+ session session-\]/.test(two.out), two.out);
+  });
+
+  ledgerCase("a peer's line over one of two lines this session wrote is still divided: the other line lands", (check) => {
+    const f = fixture("ledger-under-peer-half", { files: { "a.txt": {} } }, { session: ME });
+    const lines = () => fs.readFileSync(path.join(f.repo, "a.txt"), "utf8").split("\n");
+    f.as(ME).write("a.txt", lines().flatMap((l) => (l === "line 3" ? ["line 3 by me", "and another by me"] : [l])).join("\n"));
+    f.as(PEER).write("a.txt", lines().map((l) => (l === "line 3 by me" ? "line 3 PEER" : l)).join("\n"));
+    const shipped = f.kit("ship");
+    check("ship exits 0", shipped.status === 0, shipped.out);
+    check("the listing divides the hunk", /PART -3,1 \(-1 \+2\) \[me \+ session session-\]/.test(shipped.out), shipped.out);
+    check("HEAD holds this session's second line where line 3 was", f.show("a.txt").includes("line 2\nand another by me\nline 4\n"), f.show("a.txt").slice(0, 80));
+    check("the peer's line alone is left in the working tree", /^\+line 3 PEER$/m.test(working(f)) && !working(f).includes("by me"), working(f));
+  });
+
+  ledgerCase("a refusal says to wait only where another session can land its part of the hunk", (check) => {
+    const text = (x) => fs.readFileSync(path.join(x.repo, "a.txt"), "utf8").split("\n");
+    const waits = (r) => r.status === 1 && /they do not divide by line; it lands once theirs has, or under "adopt"/.test(r.out);
+    const cannot = (r) => r.status === 1 && /they do not divide by line; no part of it is theirs to land first by the ledger either, so it lands under "adopt"/.test(r.out);
+    // Two peer lines over HEAD's, and this session's over the first: the second still stands.
+    const f = fixture("ledger-over-one-of-two", { files: { "a.txt": {} } }, { session: ME });
+    f.as(PEER).write("a.txt", text(f).flatMap((l) => (l === "line 3" ? ["a PEER line", "a second PEER line"] : [l])).join("\n"));
+    f.as(ME).write("a.txt", text(f).map((l) => (l === "a PEER line" ? "a line by me" : l)).join("\n"));
+    const half = f.kit("record");
+    check("a peer with a line still standing in the hunk", waits(half), half.out);
+    // The peer reworded the line and took it out again itself: its removal is still its own to land.
+    const g = fixture("ledger-peer-took-out", { files: { "a.txt": {} } }, { session: ME });
+    g.as(PEER).edit("a.txt", { 3: "line 3 PEER" });
+    g.as(PEER).write("a.txt", text(g).filter((l) => l !== "line 3 PEER").join("\n"));
+    g.as(ME).write("a.txt", text(g).flatMap((l) => (l === "line 2" ? [l, "a line by me"] : [l])).join("\n"));
+    const out = g.kit("record");
+    check("a peer whose line there went by its own hand", waits(out), out.out);
+    // This session's line over a peer's, and a third session's line beside it: the peer's line is gone, and the third did not remove HEAD's.
+    const h = fixture("ledger-over-peer-beside-third", { files: { "a.txt": {} } }, { session: ME });
+    h.as(PEER).edit("a.txt", { 3: "line 3 PEER" });
+    h.as(ME).edit("a.txt", { 3: "line 3 by me" });
+    h.as("session-other-0003").write("a.txt", text(h).flatMap((l) => (l === "line 3 by me" ? [l, "a third session's line"] : [l])).join("\n"));
+    const three = h.kit("record");
+    check("two other sessions, neither of which takes any of the hunk", cannot(three), three.out);
+    // Three sessions change one line in turn: the first is left it, and the second removed nothing HEAD holds.
+    const k = fixture("ledger-three-in-turn", { files: { "a.txt": {} } }, { session: ME });
+    k.as(PEER).edit("a.txt", { 3: "line 3 PEER" });
+    k.as("session-other-0003").edit("a.txt", { 3: "line 3 by another" });
+    k.as(ME).edit("a.txt", { 3: "line 3 by me" });
+    const turn = k.kit("record");
+    check("a first writer whose line two sessions have written over", cannot(turn), turn.out);
+  });
+
+  ledgerCase("a line its writer landed and then changed is not taken by a session that put it back and changed it again", (check) => {
+    const OTHER = "session-other-0003";
+    const text = (x) => fs.readFileSync(path.join(x.repo, "a.txt"), "utf8").split("\n");
+    const swap = (x, from, to) => text(x).flatMap((l) => (l === from ? to : [l])).join("\n");
+    // The peer writes a line and it lands. The peer rewords it; this session puts it back as HEAD holds it and rewords it again the same way.
+    const f = fixture("ledger-landed-then-reworded", {}, { session: ME });
+    f.as(PEER).write("a.txt", swap(f, "line 2", ["line 2", "a PEER line"]));
+    f.git("commit", "-q", "-am", "the peer's line lands");
+    f.as(PEER).write("a.txt", swap(f, "a PEER line", ["a PEER line, reworded"]));
+    f.as(ME).write("a.txt", swap(f, "a PEER line, reworded", ["a PEER line"]));
+    f.as(ME).write("a.txt", swap(f, "a PEER line", ["a PEER line, reworded"]));
+    f.as(ME).write("a.txt", swap(f, "line 20", ["line 20 by me"]));
+    const shipped = f.kit("ship");
+    check("ship exits 1 at the peer's reworded line", shipped.status === 1 && /REFUSED: a\.txt: the hunk at -3 holds this session's lines and session-'s, and they do not divide by line/.test(shipped.out), shipped.out);
+    check("HEAD holds the line as it landed", f.show("a.txt").includes("line 2\na PEER line\nline 3\n"), f.show("a.txt").slice(0, 60));
+    // The peer takes its landed line out; another session writes it back; this session takes it out.
+    const g = fixture("ledger-landed-then-out", {}, { session: ME });
+    g.as(PEER).write("a.txt", swap(g, "line 2", ["line 2", "a PEER line"]));
+    g.git("commit", "-q", "-am", "the peer's line lands");
+    g.as(PEER).write("a.txt", swap(g, "a PEER line", []));
+    g.as(OTHER).write("a.txt", swap(g, "line 2", ["line 2", "a PEER line"]));
+    g.as(ME).write("a.txt", swap(g, "a PEER line", []));
+    const out = g.kit("ship");
+    check("ship exits 1 with the removal left", out.status === 1 && /left -3,1 \(-1 \+0\)/.test(out.out) && /REFUSED: nothing in the working tree is this session's to commit, by the ledger/.test(out.out), out.out);
+    check("HEAD still holds the line", g.show("a.txt").includes("line 2\na PEER line\nline 3\n"), g.show("a.txt").slice(0, 60));
+  });
+
   ledgerCase("a pattern cannot take a hunk the ledger gives another session", (check) => {
     const f = fixture("ledger-veto", { files: { "a.txt": { own: "line" } } }, { session: ME });
     f.as(ME).edit("a.txt", { 3: "line 3 by me" });
