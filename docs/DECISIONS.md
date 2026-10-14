@@ -3272,3 +3272,51 @@ tree.
 Not checked: the tool making a commit in a module repo with this reader,
 which follows the sync; time on a file of many thousand lines; Linux and
 macOS.
+
+## 2026-10-14 — The commit tooling is frozen, a landing is one command, and a release reads git — IN FORCE
+
+**Problem.** The owner read the commit, push and release procedure as agent
+work that had grown where scripts were asked for. Measured in one session:
+1,796 tool calls over 45 user messages, about 750 of them on landing, sync,
+gate and lease mechanics; a two-file fix landed in about twelve calls around
+a four-minute gate, a five-file sync in fourteen; the commit tooling with its
+hooks and tests stood at 4,895 lines, 5,125 of them added since 2026-10-07
+and 594 after the owner stopped the commit reader on 2026-10-13; and a
+release agent polled every session by message for what it had left to land.
+
+**Found.** The scripts existed. What did not was a driver for them: a session
+ran a seven-mode tool step by step and read each step's output, a full gate
+ran for a docs-only change as for a runtime one, and a sync was two tools
+and a hand-written change. The ruling of 2026-10-07 (one tree, one branch,
+several sessions) is what makes "whose lines" a question git cannot answer,
+and it stands.
+
+**Ruled by the owner, 2026-10-14.**
+
+1. The commit tooling is frozen: no new mode, case or rule beyond this
+   entry's. A failure gets an entry here and a workaround until the owner
+   re-justifies a fix.
+2. `land` is the command a session runs: record, gate, commit, push, clean,
+   one line out. The listing is read on a refusal and not otherwise.
+3. A change that touches no gated file lands with `"gate": []`.
+4. A release reads peer work from the tree and asks the owner once
+   (`shared-tree.md`). It never polls sessions: an answer is not a landing.
+5. `sync-toolchain --apply --land` lands each repo it wrote through that
+   repo's `land`, with a generated message that names the canon, the paths
+   and the template's commit range.
+6. Not ruled: `validate` and `test` run by module CI on every push, which
+   would take the gate's minutes off the session. Offered, left to the owner.
+
+**Rejected — resuming the commit reader.** It reads a route only the owner
+can take, adds stages and suites to every commit, and found nothing in 585
+commits on 2026-10-13. Nothing since is evidence of a leak, so that ruling
+stands.
+
+**Cost.** A generated sync message names paths and a range, not what each
+commit did; the range is where that is read. `land` prints one line, so a
+gate's output is read from its log and not from the screen. A session that
+wants a step on its own still has the modes; nothing is removed. The first
+`land` met a failure of the frozen kind: a file rewritten whole with the
+Write tool, its text moved, reads as this session's lines beside lines no
+record accounts for. It lands as `"whole": true`, which is what the key is
+for, and the ledger is not taught the case.

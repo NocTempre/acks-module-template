@@ -5,6 +5,8 @@
  *   node bin/sync-toolchain.mjs [--check]            report drift (default; exit 1 if any)
  *   node bin/sync-toolchain.mjs --apply              write canon into each target
  *   node bin/sync-toolchain.mjs --apply --force      write the paths --apply holds, too
+ *   node bin/sync-toolchain.mjs --apply --land       and land each repo written through its
+ *                                                    own acks-commit: gate, commit, push
  *   node bin/sync-toolchain.mjs --repo acks-monsters limit to named repo(s) (repeatable)
  *   node bin/sync-toolchain.mjs --repo-path <path>   target an explicit repo path (repeatable;
  *                                                    used by the CI toolchain-check workflow)
@@ -54,7 +56,7 @@
  * and commit (compiled packs are gitignored build output — only
  * `packs/_source` can show a diff, and only when content really changed).
  */
-import { execFileSync, spawn } from "node:child_process";
+import { execFileSync, spawn, spawnSync } from "node:child_process";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -100,7 +102,7 @@ function parseArgs(argv) {
   const values = { "--repo": [], "--repo-path": [], "--from": [] };
   for (let i = 0; i < argv.length; i++) {
     const arg = argv[i];
-    if (["--check", "--apply", "--force", "--pushed", "--worktree"].includes(arg)) flags.add(arg);
+    if (["--check", "--apply", "--force", "--land", "--pushed", "--worktree"].includes(arg)) flags.add(arg);
     else if (Object.hasOwn(values, arg)) {
       const value = argv[++i];
       if (!value || value.startsWith("--")) usage(`${arg} takes a value`);
@@ -110,15 +112,17 @@ function parseArgs(argv) {
   const apply = flags.has("--apply");
   if (apply && flags.has("--check")) usage("--check and --apply are two runs");
   if (flags.has("--force") && !apply) usage("--force goes with --apply");
+  if (flags.has("--land") && !apply) usage("--land goes with --apply");
   const named = [flags.has("--pushed") && "pushed", flags.has("--worktree") && "worktree", values["--from"].length && "rev"].filter(Boolean);
   if (named.length > 1 || values["--from"].length > 1) usage("--pushed, --from and --worktree each name the canon; give one");
   if (apply && named.length && named[0] !== "pushed") usage(`--apply writes ${REMOTE}/${BRANCH} as this run fetches it, and takes no other canon`);
-  return { apply, force: flags.has("--force"), canon: named[0] ?? null, from: values["--from"][0], repos: values["--repo"], repoPaths: values["--repo-path"] };
+  return { apply, force: flags.has("--force"), land: flags.has("--land"), canon: named[0] ?? null, from: values["--from"][0], repos: values["--repo"], repoPaths: values["--repo-path"] };
 }
 
 const args = parseArgs(process.argv.slice(2));
 const APPLY = args.apply;
 const FORCE = args.force;
+const LAND = args.land;
 
 const norm = (text) => text.replaceAll("\r\n", "\n");
 const readIf = (file) => (fs.existsSync(file) ? fs.readFileSync(file, "utf8") : null);
@@ -377,6 +381,8 @@ function syncRepo(repoDir, manifest, tally) {
   // A file whose text and whose mode both differ is one drifted file.
   const drifted = new Set();
   let modes = 0;
+  // What `--land` commits in this repo: the paths this run wrote or removed, and the modes it left to the commit.
+  const landing = { repoDir, files: [], removed: [], modes: [] };
   for (const step of steps) {
     const label = step.label ?? step.file;
     if (step.found === "ok" || step.found === "custom") line(step.found, label);
@@ -384,6 +390,7 @@ function syncRepo(repoDir, manifest, tally) {
       line(step.found, label);
       if (APPLY) modes++;
       else drifted.add(step.file);
+      if (APPLY && !hold) landing.modes.push(step.file);
     } else if (!APPLY) {
       line(step.found, dirty.has(step.file) ? `${label}  (uncommitted)` : label);
       drifted.add(step.file);
@@ -394,11 +401,13 @@ function syncRepo(repoDir, manifest, tally) {
     else {
       line(act(repoDir, step), label);
       tally.written++;
+      (step.remove ? landing.removed : landing.files).push(step.file);
     }
     if (step.note) console.log(`${" ".repeat(17)}${step.note}`);
   }
   tally.drift += drifted.size;
   tally.modes += modes;
+  if (landing.files.length || landing.removed.length || landing.modes.length) tally.landings.push(landing);
   if (modes) console.log(`  mode: ${modes} path(s) are to be committed as ${EXECUTABLE_MODE}, and the sync writes no index; the commit that lands this sync names each under "mode"`);
   if (hold) {
     console.log(`  held: ${dirty.size} path(s) the sync would write carry uncommitted changes, so nothing is written in this repo (--force writes them too)`);
@@ -406,6 +415,57 @@ function syncRepo(repoDir, manifest, tally) {
   } else if (!APPLY && dirty.size) {
     console.log(`  note: --apply would hold this repo: ${dirty.size} of these path(s) carry uncommitted changes`);
   }
+}
+
+/**
+ * Land what `--apply` wrote in one repo through that repo's own acks-commit
+ * tool: a change directory in the system's temp space names each path whole,
+ * with a generated message, and `land` gates, commits and pushes it. `record`
+ * runs first because a file taken whole stops a first `ship` for its listing
+ * to be read; here every such file was written from canon a moment ago, and a
+ * repo carrying anything else in one was held and is not landed.
+ *
+ * @returns {number} The landing's exit status; 0 where the repo's commit is made.
+ */
+function landRepo(canonSha, { repoDir, files, removed, modes }) {
+  const tool = path.join(repoDir, ".claude", "skills", "acks-commit", "commit-own-hunks.mjs");
+  if (!fs.existsSync(tool)) {
+    console.log(`  land: ${path.basename(repoDir)} holds no ${path.relative(repoDir, tool)}; nothing landed`);
+    return 1;
+  }
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "acks-sync-land-"));
+  const change = { files: Object.fromEntries(files.map((f) => [f, { whole: true }])) };
+  if (removed.length) change.removed = removed;
+  if (modes.length) change.mode = Object.fromEntries(modes.map((f) => [f, EXECUTABLE_MODE]));
+  fs.writeFileSync(path.join(dir, "change.json"), `${JSON.stringify(change, null, 1)}\n`);
+  let before = null;
+  try {
+    before = gitIn(repoDir, "log", "-1", "--format=%B", "--grep=^chore: sync toolchain from acks-module-template").match(/acks-module-template ([0-9a-f]{7,40})/)?.[1] ?? null;
+  } catch {
+    before = null;
+  }
+  const paths = [...files.map((f) => `- ${f}`), ...removed.map((f) => `- ${f} (removed)`), ...modes.map((f) => `- ${f} (mode ${EXECUTABLE_MODE})`)];
+  const short = canonSha.slice(0, 12);
+  const message = [
+    "chore: sync toolchain from acks-module-template",
+    "",
+    `Canon at acks-module-template ${short}. ${paths.length} path(s), each as the template's blob:`,
+    "",
+    ...paths,
+    "",
+    `What changed is the template's log${before ? ` ${before.slice(0, 12)}..${short}` : ` up to ${short}`} over its canon paths.`,
+    "",
+  ];
+  fs.writeFileSync(path.join(dir, "commit-msg.txt"), message.join("\n"));
+  const run = (mode, stdio) => spawnSync(process.execPath, [tool, mode, "--change", dir], { cwd: repoDir, stdio, encoding: "utf8" });
+  const record = run("record", ["ignore", "pipe", "pipe"]);
+  fs.writeFileSync(path.join(dir, "record.log"), `${record.stdout ?? ""}${record.stderr ?? ""}`);
+  if (record.status !== 0) {
+    console.log(`  land: record stopped (exit ${record.status}); ${path.join(dir, "record.log")}`);
+    return record.status ?? 1;
+  }
+  process.stdout.write("  land: ");
+  return run("land", "inherit").status ?? 1;
 }
 
 /** Where a run's targets are: the paths given, the repos named beside the template, or the manifest's own list. */
@@ -426,8 +486,9 @@ const canonPaths = (manifest) => ["skeleton", ...manifest.COPY_DIRS, "manifest.m
 async function engine(canon, announce) {
   const manifest = await import("../manifest.mjs");
   if (announce) console.log(`canon: ${canon}${announce.detail}`);
-  const tally = { read: 0, unread: 0, drift: 0, written: 0, held: 0, left: 0, modes: 0 };
+  const tally = { read: 0, unread: 0, drift: 0, written: 0, held: 0, left: 0, modes: 0, landings: [], unlanded: 0 };
   for (const repoDir of targetsOf(manifest)) syncRepo(repoDir, manifest, tally);
+  if (LAND) for (const landing of tally.landings) if (landRepo(canon.split(" ")[0], landing) !== 0) tally.unlanded++;
 
   // A run that left a target unread says so in place of the line a level run
   // ends on: whoever reads only the last line must not read that one.
@@ -439,10 +500,11 @@ async function engine(canon, announce) {
   const repos = [`${tally.read} repo(s) read`];
   if (tally.held) repos.push(`${tally.held} held with nothing written`);
   if (tally.left) repos.push(`${tally.left} path(s) the sync does not write`);
-  if (tally.modes) repos.push(`${tally.modes} mode(s) left to the commit`);
+  if (tally.modes && !LAND) repos.push(`${tally.modes} mode(s) left to the commit`);
+  if (LAND) repos.push(`${tally.landings.length - tally.unlanded} of ${tally.landings.length} landed`);
   const count = APPLY ? `${tally.written} file(s) written` : `${tally.drift} file(s) drifted from canon`;
   console.log(`\ndone: ${count} in ${repos.join(", ")}; canon is ${canon}`);
-  return (APPLY ? tally.held || tally.left || tally.modes : tally.drift) ? EXIT.drift : 0;
+  return (APPLY ? tally.held || tally.left || (LAND ? tally.unlanded : tally.modes) : tally.drift) ? EXIT.drift : 0;
 }
 
 /** Whether this file sits at the top of a repository of its own, and not in a copy without history or inside another repository. */
@@ -555,7 +617,7 @@ async function front() {
     await new Promise((resolve) => process.stdout.write(`${opening.join("\n")}\n`, resolve));
     // The engine is another commit's copy of this file, so the command line it
     // is started with here is one every copy has to read the same way.
-    const child = spawn(process.execPath, [script, ...(APPLY ? ["--apply", ...(FORCE ? ["--force"] : [])] : ["--check"]), ...targets.flatMap((t) => ["--repo-path", t])], {
+    const child = spawn(process.execPath, [script, ...(APPLY ? ["--apply", ...(FORCE ? ["--force"] : []), ...(LAND ? ["--land"] : [])] : ["--check"]), ...targets.flatMap((t) => ["--repo-path", t])], {
       stdio: "inherit",
       env: { ...process.env, [EXPORT_ENV]: JSON.stringify({ dir: scratch.tree, name: canon.name }) },
     });
