@@ -629,7 +629,7 @@ Full ruling and its corollaries: DECISIONS, 2026-07-19.
 
 ## 8. Known deviations
 
-**None.** Both module repos are on canon — `node bin/sync-toolchain.mjs --check`
+**None.** The live module repo is on canon — `node bin/sync-toolchain.mjs --check`
 reports zero drift, and the deviations recorded here through 2026-07 (a legacy
 `master` branch, two repos with pack data inline in a custom `build-packs.mjs`,
 a stale `compatibility.minimum`) went away with the repos that carried them. The
