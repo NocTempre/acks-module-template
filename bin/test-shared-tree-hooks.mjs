@@ -292,11 +292,11 @@ try {
     check("one hunk", w.length === 1, show(w));
     check("both sides are this session's, and nobody else is named", all(w[0].added, ME) && all(w[0].removed, ME) && w[0].among.length === 0, show(w[0]));
     check("the peer's undone wording is not read as put in the line's place", w[0].replaced.length === 0, show(w[0]));
-    // The line lands, and a third session changes it again. The peer wrote that text once and took it out itself: no record says that line did not land, so the removal is not undone and the peer is still named.
+    // The line lands, and a third session changes it again. The peer wrote that text once and took it out while HEAD held no line of it: the line HEAD holds now is this session's, and the peer's withdrawn one does not stand against its removal.
     f.git("commit", "-q", "-am", "this session's line lands");
     f.write(OTHER, "a.txt", f.change("a.txt", { 3: "line 3 at 29" }));
     const next = f.writers("a.txt");
-    check("the next change's removal is nobody's, between its writer and the peer", next.length === 1 && all(next[0].added, OTHER) && show(next[0].removed) === show([NOBODY]) && show([...next[0].among].sort()) === show([OTHER, PEER].sort()), show(next));
+    check("the next change's removal is its writer's, and the peer is not named", next.length === 1 && all(next[0].added, OTHER) && show(next[0].removed) === show([OTHER]) && next[0].among.length === 0, show(next));
     // A writer no hook saw changes the line the peer changed and changed back: the removal is nobody's, and is read as the text reads it.
     const g = fixture("undone-then-unseen");
     g.write(PEER, "a.txt", g.change("a.txt", { 3: "line 3 at 28" }));
@@ -496,7 +496,7 @@ try {
     check("one removal, this session's, and the peer is not named", w.length === 1 && show(w[0].removed) === show([ME]) && w[0].among.length === 0, show(w));
   });
 
-  test("a line its own writer took out is not told from one that had landed", (check) => {
+  test("a line its own writer took out is not told from one that had landed where HEAD holds its text elsewhere", (check) => {
     const f = fixture("own-line-out");
     const body = (...head) => `${[...head, ...BODY].join("\n")}\n`;
     f.unseen("a.txt", body("same", "same"));
@@ -507,15 +507,154 @@ try {
     f.write(ME, "a.txt", body("same"));
     const w = f.writers("a.txt");
     check("one removal, nobody's, and both sessions are named", w.length === 1 && show(w[0].removed) === show([NOBODY]) && show([...w[0].among].sort()) === show([ME, PEER].sort()), show(w));
-    // The peer writes a line and takes it out; another session writes it there again; this session takes that out. The same records stand for a line the peer landed and then removed, which another hand put back.
-    const g = fixture("own-line-out-and-back");
+  });
+
+  /** The ledger's records of a.txt rewritten in place, each through `change`. */
+  const rewrite = (f, change) => {
+    const dir = path.join(f.gitDir, "acks-ledger");
+    for (const name of fs.readdirSync(dir).filter((n) => n.endsWith(".jsonl"))) {
+      const lines = fs.readFileSync(path.join(dir, name), "utf8").split("\n").filter(Boolean);
+      fs.writeFileSync(path.join(dir, name), `${lines.map((line, i) => JSON.stringify(change(JSON.parse(line), name.slice(0, -".jsonl".length), i))).join("\n")}\n`);
+    }
+  };
+
+  test("a line withdrawn before it landed does not stand against the removal of one that landed", (check) => {
+    // The peer writes a line and takes it out; another session writes it there again and it lands; this session takes that out.
+    const withdrawn = (name) => {
+      const g = fixture(name);
+      g.write(PEER, "a.txt", g.change("a.txt", { 3: ["a line"] }));
+      g.write(PEER, "a.txt", g.change("a.txt", { 4: null }));
+      g.write(OTHER, "a.txt", g.change("a.txt", { 3: ["a line"] }));
+      g.git("commit", "-q", "-am", "the line lands");
+      g.write(ME, "a.txt", g.change("a.txt", { 4: null }));
+      return g;
+    };
+    const g = withdrawn("withdrawn");
+    const v = g.writers("a.txt");
+    check("the removal is this session's, and the peer is not named", v.length === 1 && show(v[0].removed) === show([ME]) && v[0].among.length === 0, show(v));
+    const pool = g.blamed("a.txt").removed.flat();
+    check("each tombstone names the commit HEAD was at when it was written and when it went", pool.length === 2 && pool.every((e) => /^[0-9a-f]{40}$/.test(e.bornAt) && /^[0-9a-f]{40}$/.test(e.goneAt)) && pool[0].goneAt === pool[1].bornAt && pool[1].goneAt === g.git("rev-parse", "HEAD").trim() && pool[1].bornAt !== pool[1].goneAt, show(pool));
+    // The same writes with the peer's line landed before it took it out: the same lines in the same order, and the removal is the peer's to land too.
+    const h = fixture("landed-then-out");
+    h.write(PEER, "a.txt", h.change("a.txt", { 3: ["a line"] }));
+    h.git("commit", "-q", "-am", "the peer's line lands");
+    h.write(PEER, "a.txt", h.change("a.txt", { 4: null }));
+    h.write(OTHER, "a.txt", h.change("a.txt", { 3: ["a line"] }));
+    h.write(ME, "a.txt", h.change("a.txt", { 4: null }));
+    const u = h.writers("a.txt");
+    check("a line that had landed when its writer took it out is nobody's, both sessions named", u.length === 1 && show(u[0].removed) === show([NOBODY]) && show([...u[0].among].sort()) === show([ME, PEER].sort()), show(u));
+    // Records that name no commit, as every record written before the hook named one.
+    for (const [name, change] of [["no-head", (rec) => { const { head, ...rest } = rec; return rest; }], ["null-head", (rec) => ({ ...rec, head: null })], ["gone-head", (rec) => ({ ...rec, head: "0".repeat(40) })], ["odd-head", (rec) => ({ ...rec, head: "--help" })]]) {
+      const k = withdrawn(`withdrawn-${name}`);
+      rewrite(k, change);
+      const t = k.writers("a.txt");
+      check(`records with ${name} read as they did before a record named a commit`, t.length === 1 && show(t[0].removed) === show([NOBODY]) && show([...t[0].among].sort()) === show([ME, PEER].sort()), show(t));
+    }
+    // One record alone names no commit: the withdrawal, the writing of the line that landed, or its removal. Each leaves one thing unknown.
+    for (const [what, session, index] of [["the withdrawal", PEER, 1], ["the line that landed", OTHER, 0], ["its removal", ME, 0]]) {
+      const m = withdrawn(`withdrawn-unknown-${session}`);
+      let hit = 0;
+      rewrite(m, (rec, who, i) => (who === session && i === index && ++hit ? { ...rec, head: null } : rec));
+      const s = m.writers("a.txt");
+      check(`with no commit named for ${what}, the removal is nobody's`, hit === 1 && s.length === 1 && show(s[0].removed) === show([NOBODY]) && s[0].among.includes(PEER), show(s));
+    }
+    // The withdrawal and the line that landed name a commit git no longer holds: a commit that cannot be read is not one that held no such line.
+    const n = withdrawn("withdrawn-unread");
+    rewrite(n, (rec, who) => (who === ME ? rec : { ...rec, head: "0".repeat(40) }));
+    const p = n.writers("a.txt");
+    check("a commit that cannot be read says nothing of what it held", p.length === 1 && show(p[0].removed) === show([NOBODY]), show(p));
+    // The peer's line lands and so does its removal of it. The text is written there again by another session, lands, and this session takes it out. HEAD held the line when the peer removed it, and no record says that removal landed.
+    const q = fixture("landed-removal");
+    q.write(PEER, "a.txt", q.change("a.txt", { 3: ["a line"] }));
+    q.git("commit", "-q", "-am", "the peer's line lands");
+    q.write(PEER, "a.txt", q.change("a.txt", { 4: null }));
+    q.git("commit", "-q", "-am", "the peer's removal lands");
+    q.write(OTHER, "a.txt", q.change("a.txt", { 3: ["a line"] }));
+    q.git("commit", "-q", "-am", "the line lands again");
+    q.write(ME, "a.txt", q.change("a.txt", { 4: null }));
+    const o = q.writers("a.txt");
+    check("a removal made while HEAD held the line stands, landed or not", o.length === 1 && show(o[0].removed) === show([NOBODY]) && show([...o[0].among].sort()) === show([ME, PEER].sort()), show(o));
+    // Two equal lines taken out together, one written before its text landed and one after. The one written after is not known to be another line than the peer's, and neither removal is read.
+    const d = fixture("withdrawn-beside-written-back");
+    d.write(PEER, "a.txt", d.change("a.txt", { 3: ["a line"] }));
+    d.write(PEER, "a.txt", d.change("a.txt", { 4: null }));
+    d.write(OTHER, "a.txt", d.change("a.txt", { 3: ["a line"] }));
+    d.git("commit", "-q", "-am", "the line lands");
+    d.write(OTHER, "a.txt", d.change("a.txt", { 4: ["a line"] }));
+    d.git("commit", "-q", "-am", "an equal line lands beside it");
+    d.write(ME, "a.txt", d.change("a.txt", { 4: null, 5: null }));
+    const e = d.writers("a.txt");
+    check("each line taken out has to have been written while HEAD held none of its text", e.length === 1 && show(e[0].removed) === show([NOBODY, NOBODY]) && e[0].among.includes(PEER), show(e));
+  });
+
+  test("a line that landed after it was taken out of the working tree is still its remover's to remove", (check) => {
+    const f = fixture("lands-after");
+    // The peer writes a line and takes it out, and a commit built in between lands it.
+    f.write(PEER, "a.txt", f.change("a.txt", { 3: ["a line"] }));
+    const built = f.read("a.txt");
+    f.write(PEER, "a.txt", f.change("a.txt", { 4: null }));
+    const tree = f.read("a.txt");
+    f.unseen("a.txt", built);
+    f.git("commit", "-q", "-am", "the line lands after the peer took it out");
+    f.unseen("a.txt", tree);
+    // Another session writes it back while HEAD holds it, and this session takes that out.
+    f.write(OTHER, "a.txt", f.change("a.txt", { 3: ["a line"] }));
+    f.write(ME, "a.txt", f.change("a.txt", { 4: null }));
+    const w = f.writers("a.txt");
+    check("the removal is nobody's, and the peer is named", w.length === 1 && show(w[0].removed) === show([NOBODY]) && show([...w[0].among].sort()) === show([ME, PEER].sort()), show(w));
+    // The line this session takes out was written before the commit, and the commit lands after this session took it out: HEAD did not hold it then.
+    const g = fixture("lands-after-both");
     g.write(PEER, "a.txt", g.change("a.txt", { 3: ["a line"] }));
     g.write(PEER, "a.txt", g.change("a.txt", { 4: null }));
     g.write(OTHER, "a.txt", g.change("a.txt", { 3: ["a line"] }));
-    g.git("commit", "-q", "-am", "the line lands");
+    const held = g.read("a.txt");
     g.write(ME, "a.txt", g.change("a.txt", { 4: null }));
+    const after = g.read("a.txt");
+    g.unseen("a.txt", held);
+    g.git("commit", "-q", "-am", "the line lands after this session took it out");
+    g.unseen("a.txt", after);
     const v = g.writers("a.txt");
-    check("a removal of that text there is nobody's, the peer still named", v.length === 1 && show(v[0].removed) === show([NOBODY]) && show([...v[0].among].sort()) === show([ME, PEER].sort()), show(v));
+    check("a line that had not landed when it was taken out is not read as landed", v.length === 1 && show(v[0].removed) === show([NOBODY]) && v[0].among.includes(PEER), show(v));
+    // The commit built before the peer took its line out lands after another session wrote the text there again. The records are those of a line the other session landed: the working tree held the line when HEAD came to, and the removal is read as this session's.
+    const k = fixture("lands-after-written-back");
+    k.write(PEER, "a.txt", k.change("a.txt", { 3: ["a line"] }));
+    const snapshot = k.read("a.txt");
+    k.write(PEER, "a.txt", k.change("a.txt", { 4: null }));
+    k.write(OTHER, "a.txt", k.change("a.txt", { 3: ["a line"] }));
+    k.unseen("a.txt", snapshot);
+    k.git("commit", "-q", "-am", "the peer's commit lands the line");
+    k.write(ME, "a.txt", k.change("a.txt", { 4: null }));
+    const t = k.writers("a.txt");
+    check("a line that stood in the working tree when its text landed is its remover's", t.length === 1 && show(t[0].removed) === show([ME]), show(t));
+  });
+
+  test("the hook records the commit HEAD is at, and none where the repository has none", (check) => {
+    const f = fixture("head-recorded");
+    const first = f.git("rev-parse", "HEAD").trim();
+    f.write(ME, "a.txt", f.change("a.txt", { 3: "line 3 MINE" }));
+    f.git("commit", "-q", "-am", "a commit");
+    const second = f.git("rev-parse", "HEAD").trim();
+    f.write(ME, "a.txt", f.change("a.txt", { 5: "line 5 MINE" }));
+    const heads = readRecords(f.gitDir).get("a.txt").map((rec) => rec.head);
+    check("each record names the commit HEAD was at when it was written", first !== second && show(heads) === show([first, second]), show(heads));
+    // A linked work tree has a HEAD of its own, and shares the ledger.
+    const linked = path.join(tmp, "head-recorded-linked");
+    f.git("worktree", "add", "-q", "--detach", linked, first);
+    const there = path.join(linked, "there.txt");
+    fs.writeFileSync(there, "a new file\n");
+    f.hook({ session_id: ME, hook_event_name: "PostToolUse", cwd: linked, tool_name: "Write", tool_input: { file_path: there }, tool_response: { type: "create", filePath: there, structuredPatch: [], originalFile: null } }, linked);
+    const other = readRecords(f.gitDir).get("there.txt");
+    check("a write in a linked work tree names that work tree's commit", other?.length === 1 && other[0].head === first, show(other));
+    // A repository with no commit yet.
+    const repo = path.join(tmp, "head-unborn");
+    fs.mkdirSync(path.dirname(path.join(repo, TOOL)), { recursive: true });
+    fs.writeFileSync(path.join(repo, TOOL), "// stands for the commit tool\n");
+    execFileSync("git", ["init", "-q", "-b", "main"], { cwd: repo });
+    const file = path.join(repo, "new.txt");
+    fs.writeFileSync(file, "a new file\n");
+    const r = spawnSync(process.execPath, [HOOK], { cwd: repo, input: JSON.stringify({ session_id: ME, hook_event_name: "PostToolUse", cwd: repo, tool_name: "Write", tool_input: { file_path: file }, tool_response: { type: "create", filePath: file, structuredPatch: [], originalFile: null } }), encoding: "utf8" });
+    const unborn = readRecords(path.join(repo, ".git")).get("new.txt");
+    check("a write before the first commit is recorded, with no commit named", r.status === 0 && unborn?.length === 1 && unborn[0].head === null && unborn[0].how === "create", show(unborn));
   });
 
   test("a text the hunk also adds is not read by when", (check) => {

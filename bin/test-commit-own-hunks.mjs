@@ -785,6 +785,31 @@ try {
     check("HEAD still holds the line", g.show("a.txt").includes("line 2\na PEER line\nline 3\n"), g.show("a.txt").slice(0, 60));
   });
 
+  ledgerCase("a line a session drafted and withdrew, which this tool then landed for another, is the next writer's to change", (check) => {
+    const OTHER = "session-other-0003";
+    // The peer drafts a stamp and withdraws it. This session writes the same stamp and the tool lands it. A third session writes the next.
+    const f = fixture("ledger-withdrawn-then-landed", { files: { "a.txt": {} } }, { session: ME });
+    f.as(PEER).edit("a.txt", { 3: "line 3 at 28" });
+    f.as(PEER).edit("a.txt", { 3: "line 3" });
+    f.as(ME).edit("a.txt", { 3: "line 3 at 28" });
+    const first = f.kit("ship");
+    check("this session's stamp lands", first.status === 0 && f.show("a.txt").includes("line 3 at 28\n"), first.out);
+    f.as(OTHER).edit("a.txt", { 3: "line 3 at 29" });
+    const next = f.kit("ship", "--session", OTHER);
+    check("the next stamp ships with exit 0, its hunk the third session's alone", next.status === 0 && /MINE -3,1 \(-1 \+1\) \[me\]/.test(next.out), next.out);
+    check("HEAD holds the next stamp", f.show("a.txt").includes("line 3 at 29\n") && working(f) === "", f.show("a.txt").slice(0, 60));
+    // The same with the peer's draft landed before it withdrew it: its withdrawal is a change it has yet to land.
+    const g = fixture("ledger-landed-then-withdrawn", { files: { "a.txt": {} } }, { session: ME });
+    g.as(PEER).edit("a.txt", { 3: "line 3 at 28" });
+    g.git("commit", "-q", "-am", "the peer's stamp lands");
+    g.as(PEER).edit("a.txt", { 3: "line 3" });
+    g.as(ME).edit("a.txt", { 3: "line 3 at 28" });
+    g.as(OTHER).edit("a.txt", { 3: "line 3 at 29" });
+    const r = g.kit("record", "--session", OTHER);
+    check("a stamp that had landed when its writer withdrew it is refused to the next writer", r.status === 1 && /REFUSED: a\.txt: the hunk at -3 holds this session's lines and/.test(r.out), r.out);
+    check("HEAD holds the stamp as it landed", g.show("a.txt").includes("line 3 at 28\n"), g.show("a.txt").slice(0, 60));
+  });
+
   ledgerCase("a pattern cannot take a hunk the ledger gives another session", (check) => {
     const f = fixture("ledger-veto", { files: { "a.txt": { own: "line" } } }, { session: ME });
     f.as(ME).edit("a.txt", { 3: "line 3 by me" });

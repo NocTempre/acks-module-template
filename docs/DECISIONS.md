@@ -2700,7 +2700,7 @@ of which git on Windows shows; `--apply` into `acks-extras` and the sync
 commit that carries its mode, which follow the push; a hook at 100755 on
 macOS; and a commit made on Linux or macOS by a session.
 
-## 2026-10-13 — A session that changed a line and changed it back has no claim on it, and a line a peer wrote over is not carved into a removal — IN FORCE
+## 2026-10-13 — A session that changed a line and changed it back has no claim on it, and a line a peer wrote over is not carved into a removal — IN FORCE except a line its own writer took out before it landed (superseded 2026-10-14)
 
 **Problem.** The entry of 2026-10-07 that built the edit ledger ruled that
 two tombstones of one text with different removers are nobody's. On
@@ -2778,6 +2778,8 @@ not give itself.
   that took out a line it had written itself, the line not being told from
   one that landed, and so has a writer no hook saw: a line such a writer
   removed is left as the text reads it.
+  *(The third sentence superseded 2026-10-14, "A ledger record names the
+  commit HEAD was at", where the commits say the line had not landed.)*
 - The place is the tombstones the reading by text already reads. A hunk that
   only removes can slide, and its place is chosen as before, by text alone;
   only the place chosen is read again.
@@ -2848,6 +2850,7 @@ HEAD moves: a commit by hand, a pull, a reset.
   the session that writes the next. A ledger record that carried the commit
   HEAD was at when it was written would tell a withdrawn line from a landed
   one, by whatever means HEAD had moved, and none does.
+  *(Decided 2026-10-14, "A ledger record names the commit HEAD was at".)*
 - A removal that landed leaves its tombstone. A later removal of an equal
   line beside it is read onto that tombstone: given to the earlier remover
   where the stale tombstones agree, and to nobody where they do not. The
@@ -2983,3 +2986,131 @@ placeholder commits stay in this repo's history.
 as it was, the new case alone, and `0 failed` against the fix. Not checked: a
 symbolic link on Linux, which this commit's CI run is the first to try, and
 the scanner through the junction in `acks-extras`, which waits on the sync.
+
+## 2026-10-14 — A ledger record names the commit HEAD was at, and a line withdrawn before it landed has no claim on one that landed — IN FORCE
+
+**Problem.** The entry of 2026-10-13 on lines changed and changed back left a
+session that wrote a line and took it out itself standing against the next
+removal of that text at the place. A version stamp one session drafted and
+withdrew, and a release then wrote and landed, is refused to the session that
+writes the next stamp, with a session named that has nothing to land. That
+entry named what would tell the two apart: a record that carried the commit
+HEAD was at.
+
+**Built.**
+
+- `.claude/hooks/edit-ledger.mjs` writes `head` into every record: the commit
+  HEAD is at in the work tree the file is in, or null where the repository
+  has no commit yet or git does not answer. The record stays `v: 1`.
+- `ledger.mjs` gives each step of its replay its record's commit, so a line
+  carries the commit HEAD was at when it was written and when it was
+  removed. A step that stands for a writer no hook saw names none. `blame`
+  returns `inHead`, which says whether the file as a commit holds it holds a
+  line of a text. It asks git once per commit, and only when a reading turns
+  on it.
+- An earlier removal that its session did not undo still does not stand
+  where three things are known: HEAD held no line of the text when it was
+  made; HEAD held none when each line that stood after the step was written;
+  and HEAD held one when each of those was taken out. The first says the
+  earlier session took out a line that had not landed. The other two say the
+  line the hunk's remover took out is another line, written while HEAD had
+  none, which landed before it went.
+- Nothing else reads differently, and `commit-own-hunks.mjs` is unchanged.
+
+**Superseded in the entry of 2026-10-13.** "So has a session that took out a
+line it had written itself, the line not being told from one that landed" no
+longer holds where the three commits are known and say the line had not
+landed. The first bullet of its "Not decided here" is decided. Its rejection
+of a hook that records commits stands: this hook records where HEAD was at
+each write, and sees no commit. The evidence that entry did not have is the
+field itself. With it, the two ledgers of that entry's last finding differ:
+one withdrawal was made while HEAD held the line, the other while HEAD held
+none.
+
+**Ruled by the owner, 2026-10-14.** A review found one history the rule gives
+to the wrong session, by the reading that a session keeps its claim on a line
+it withdrew. A session writes a line and a commit is built that holds it. The
+session takes the line out, and another session writes the text at the place
+again. The commit lands, and a third session takes the line out. The records
+are those of a line the second session wrote and landed, and the rule gives
+the removal to the third. The ledger cannot tell the two apart. The working
+tree held the line when HEAD came to, so the first session's withdrawal was
+never a difference against HEAD, and the third session's commit takes out
+what the first meant to. The owner took the rule with this history named
+here; a case in the suite holds the reading.
+
+**Rejected — letting an earlier removal fall wherever HEAD held no line of
+the text when the later line was written.** It reaches further: it would also
+set aside the tombstone of a removal that landed. That is a second question,
+the entry of 2026-10-13 left it undecided on its own, and a case holds that
+reading as it is.
+
+**Rejected — asking only that HEAD held no line of the text when the earlier
+removal was made.** A commit built before a line was taken out of the working
+tree lands the line afterwards, and the session that took it out then has a
+removal to land. A line written back after that landing was written while
+HEAD held the text. The second condition keeps that removal its remover's.
+
+**Rejected — a new record version.** A reader older than the field ignores
+it, and this one reads a record without it as saying nothing of what had
+landed.
+
+**Rejected — reading the commit from `.git/HEAD` in the hook.** A packed ref,
+a linked work tree and a detached HEAD each need their own reading. A `git
+rev-parse` answers all three.
+
+**Not decided here.**
+
+- A removal that landed still leaves its tombstone, as the entry of
+  2026-10-13 says. With the commits recorded, a later line written while HEAD
+  held none of the text could set it aside.
+- HEAD is asked for the text anywhere in the file. A line withdrawn while
+  HEAD holds an equal line at another place is not told from a landed one.
+- A file the commit does not hold at the path the tree spells is not read:
+  one new since that commit, or renamed.
+- The commit is read when the hook runs, after the write. A commit that lands
+  between the two counts as the record's.
+
+**Cost.** One more `git rev-parse` in every Edit and Write a session makes in
+a repository that carries the tool, and one `git cat-file` for each commit a
+reading asks about. A ledger written before the field reads as it did: a
+withdrawal recorded with no commit stands until its session's records age
+out, so the two stamp lines in `acks-extras` stay as the entry of 2026-10-13
+left them. A removal newly named in a hunk that also holds a line no record
+accounts for turns a hunk the tool left into one it refuses until a pattern
+claims it.
+
+**Checked before this commit, and not.** Offline, in a replica of this repo
+at `08c5269` holding the change. The hook, the reader and the two suites in
+the working tree were then compared with the replica's and are the same byte
+for byte, and the suites pass from the working tree as well.
+
+- `bin/test-shared-tree-hooks.mjs`: 47 cases, 0 failed. Three are new, and
+  one check of an older case now reads the stamp history as the next
+  writer's. Against the reader in force 3 cases fail, and 4 with the hook in
+  force as well.
+- `bin/test-commit-own-hunks.mjs`: 50 cases, 0 failed. The new case fails
+  against the reader in force. `bin/test-landing-lease.mjs`: 19 cases, 0
+  failed.
+- 22 single edits of the added lines, 19 in the reader and 3 in the hook:
+  21 turn at least one case red. Three survived the first run, and two of
+  them got cases: `some` for `every` over the lines taken out, and the hook
+  reading HEAD from the main work tree instead of the linked one. The one
+  left, dropping the pattern a commit name is held to, changes no answer,
+  since git reads no file from a name that is not a commit.
+- Random histories of three sessions and a writer no hook sees, 2,500 worlds
+  of 12 rounds at each of two seeds: 64,474 and 65,287 hunks. No removal the
+  reader in force names reads differently. 27 and 12 removals it left to
+  nobody are named, and each is the remover of the line HEAD holds, by line
+  identity. At one seed four hunks the tool used to leave are refused. These
+  histories answer `inHead` from a model of HEAD, not from git; they land
+  only the whole tree or what the tool gives a session, never a line after
+  it left the tree.
+- A separate review wrote its own histories against the build, about twenty
+  of them. One finding, ruled above; the rest read as the policy says.
+
+Not checked: the tool making a commit in a tree sessions share with this
+reader; `reset`, `rebase` or `gc` moving HEAD past a recorded commit; time
+on a large file read at many commits; Linux and macOS. The sync into a
+module repo follows the push, and records there name a commit only from the
+first edit after it.
