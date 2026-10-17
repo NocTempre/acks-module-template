@@ -3363,6 +3363,15 @@ sessions' included, so the ask names them. The template still has to be
 pushed before a sync can write it (§9), and a module push inside that window
 fails `drift`, so one go-ahead covers the template's push and the modules'.
 
+**Amended by the owner, later 2026-10-17.** Ruling 1 is per piece, not per
+task: a session commits each finished piece of its change (a fix, a slice, a
+step) once that piece passes its gate. Local commits accumulate, and the
+complete work package goes up in one push on the go-ahead or at a release.
+The new evidence is the owner's third answer of the day, given after a
+session read ruling 1 as end-of-task: "save early and often locally. Push
+complete work packages to repo when given the green light." TOOLCHAIN §2
+says it.
+
 ## 2026-10-17 — A tie the ledger cannot place is this change's where every place is, and refused where every place holds a line of it beside another's — IN FORCE
 
 **Problem.** A session landing four interleaved formation changes in
@@ -3429,7 +3438,10 @@ reach, where that entry had replayed only ties its rule settles.
 **Freeze.** Ruling 1 of 2026-10-14 holds the commit tooling until the owner
 re-justifies a fix. This fix was asked for on 2026-10-17 through the session
 coordinating the formation work, after the failure above, and is set out here
-for the owner's review.
+for the owner's review. **Lifted for this fix by the owner, 2026-10-17:** the
+owner started the session that wrote it and, the same minute, put it in the
+hotfix that follows (extras 11.5.1). The freeze holds for every other change
+to the commit tooling.
 
 **Rejected — refusing every tie that names this change at some place.** On
 the real replay it refuses both sessions: the first because two places name

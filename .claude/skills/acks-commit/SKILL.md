@@ -5,8 +5,8 @@ description: Commit this session's own change from a working tree other sessions
 
 The rule is `.claude/rules/shared-tree.md`; `commit-own-hunks.mjs`, beside this
 file, carries it out, and its header is the reference for every mode and every
-`change.json` key. The user's "commit", or a task's work done and gated, is
-the go-ahead to commit. A push waits for the owner's own go-ahead (TOOLCHAIN
+`change.json` key. The user's "commit", or any finished piece of the work (a
+fix, a slice, a step) once gated, is the go-ahead to commit. A push waits for the owner's own go-ahead (TOOLCHAIN
 §2), so `land` carries `--no-push` until one is given.
 
 ## 1. Describe the change

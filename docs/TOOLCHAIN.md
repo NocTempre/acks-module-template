@@ -71,16 +71,18 @@ acks-<feature>/
 ## 2. Git conventions
 
 - **Default branch: `main`**, on every repo.
-- **Commit finished work; push on the owner's go-ahead** (DECISIONS
-  2026-10-17). A session commits its own change once the work is done and its
-  gate passes, without being asked, unless the owner said not to. The commit
-  stays local: `acks-commit` lands it with `--no-push`. A push takes the
-  owner's explicit word, and "commit" is not that word; a release or hotfix
-  the owner asked for carries its own atomic push and tag. A push sends every
-  local commit beneath its sha, other sessions' included, so the ask names
-  them. A go-ahead to push never covers a force-push, anything that could
-  carry licensed text, or publishing a previously-private repo: each is asked
-  for by name.
+- **Commit early and often; push the package on the owner's go-ahead**
+  (DECISIONS 2026-10-17). A session commits each finished piece of its own
+  change (a fix, a slice, a step) as soon as that piece passes its gate, not
+  only at the end of a task, without being asked, unless the owner said not
+  to. The commit stays local: `acks-commit` lands it with `--no-push`. Local
+  commits accumulate, and the complete work package goes up in one push. A
+  push takes the owner's explicit word, and "commit" is not that word; a
+  release or hotfix the owner asked for carries its own atomic push and tag.
+  A push sends every local commit beneath its sha, other sessions' included,
+  so the ask names them. A go-ahead to push never covers a force-push,
+  anything that could carry licensed text, or publishing a previously-private
+  repo: each is asked for by name.
 - **Tags: `v<semver>`** and the tag MUST equal `module.json` `version`
   (CI enforces this).
 - **Compiled LevelDB packs are NOT committed** (changed 2026-07-19; they were,
