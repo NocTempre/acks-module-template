@@ -1598,7 +1598,7 @@ reported five drifted files in `foundryvtt-acks-extras`, four of them other
 sessions' uncommitted canon, so the sync ran from a clean clone of the pushed
 commit, which reported one.
 
-## 2026-10-07 — The edit ledger and the shared-tree guard — IN FORCE except a line changed and changed back, and a division that keeps no added line (superseded 2026-10-13), and a tie of added lines the ledger can place (superseded 2026-10-14)
+## 2026-10-07 — The edit ledger and the shared-tree guard — IN FORCE except a line changed and changed back, and a division that keeps no added line (superseded 2026-10-13), a tie of added lines the ledger can place (superseded 2026-10-14), and a tie each of whose places names this change (superseded 2026-10-17)
 
 **Problem.** The first two of the tools ruled on this date under "A worktree
 or a branch per session is rejected, and what is left lands as tools". Whose
@@ -1642,7 +1642,10 @@ the commit tool was one way to commit among several.
    pattern from taking it.
    *(Superseded 2026-10-14 for a hunk of added lines with a place of one
    session's lines whose lines left out the ledger shows HEAD holds — "A
-   hunk of added lines that ties across another writer's line", below.)*
+   hunk of added lines that ties across another writer's line", below.
+   Superseded 2026-10-17 for a tie each of whose places names this change —
+   "A tie the ledger cannot place is this change's where every place is",
+   below.)*
 3. *Two sessions' lines in one hunk divide.* Entries appended to one file by
    two sessions are one hunk to git. The tool takes this session's lines of
    it where every line has a writer and this session removed every line the
@@ -3121,7 +3124,7 @@ on a large file read at many commits; Linux and macOS. The sync into a
 module repo follows the push, and records there name a commit only from the
 first edit after it.
 
-## 2026-10-14 — A hunk of added lines that ties across another writer's line is one session's where the ledger shows its lines unlanded and the rest HEAD's — IN FORCE
+## 2026-10-14 — A hunk of added lines that ties across another writer's line is one session's where the ledger shows its lines unlanded and the rest HEAD's — IN FORCE except its cost line on a tie it cannot settle (superseded 2026-10-17)
 
 **Problem.** Finding 2 of the entry of 2026-10-07 leaves to nobody a hunk
 that two of its places give to different writers. A section a session
@@ -3232,6 +3235,8 @@ None of the recurrences needs that reach.
 **Cost.** `writersOf` takes a third argument. A tie costs a pass over the
 file's lines for each line a place leaves out. Ties this rule cannot settle
 stay as they were, refused to a pattern and left to `adopt`.
+*(Superseded 2026-10-17: `adopt` did not reach such a tie — "A tie the
+ledger cannot place is this change's where every place is", below.)*
 
 **Checked before this commit, and not.** Offline, in this repo's working
 tree.
@@ -3357,3 +3362,132 @@ owner's go-ahead. A push sends every local commit beneath its sha, other
 sessions' included, so the ask names them. The template still has to be
 pushed before a sync can write it (§9), and a module push inside that window
 fails `drift`, so one go-ahead covers the template's push and the modules'.
+
+## 2026-10-17 — A tie the ledger cannot place is this change's where every place is, and refused where every place holds a line of it beside another's — IN FORCE
+
+**Problem.** A session landing four interleaved formation changes in
+`foundryvtt-acks-extras` ran `record` with every writer adopted. It exited 0,
+listed a 17-line insertion in `scripts/formation/deployment.mjs` as
+`left [no record]`, and took the hunks elsewhere that call the function the
+insertion defines. `land` reads a listing only on a refusal (2026-10-14,
+ruling 2), so nothing said the hunk mattered. The commit would have called a
+function it never defined: a gate sees that only where a check imports the
+module, and otherwise it fails at runtime.
+
+**Found.**
+
+1. *The replay made the tie, not the writers.* The ledger's records of that
+   file up to 2026-10-17T19:34:55Z, replayed over HEAD `01b0620` with the
+   working copy their last record holds (blob `46670b8f`): one session
+   inserted a block with a change just above it, so the replay gave it the
+   brace, blank line and `/**` above the block; a second session inserted its
+   function after that block; the first moved its block away, and the replay
+   kept that session's brace, blank line and `/**` and took HEAD's out. The
+   second session's insertion then slides to three places of equal cost. Two
+   hold a line of each session's, one holds the second session's alone and
+   leaves out the first's unlanded lines, so `besideHeadOf` shows none and
+   every line of the hunk is nobody's.
+2. *`adopt` could not reach it.* `verdictOf` counts this change's sessions
+   only among the lines `writersOf` gives a session, and an unplaced tie
+   gives none. With both sessions adopted the hunk was neither this change's
+   nor a peer's: `nobody`, left, exit 0. The entry of 2026-10-14 had said such
+   a tie is "left to `adopt`".
+3. *The writing session's own seat is as silent.* Rebuilt in a scratch
+   repository in the same shape, the session that wrote the function and its
+   call, alone, records exit 0 and builds a tree that calls the function and
+   does not define it. In the real file a different mixed hunk refused that
+   session first.
+4. *Where a session is named says what it can lose.* A hunk slides only
+   across a line of the text it gives up at its other end. A line every tied
+   place holds is added wherever the hunk lies, so a session every place
+   names wrote a line of it, whichever is true. A line only some places hold
+   has a line of its text beside the hunk at every place, so a session only
+   some places name may have written nothing but a repeated line, a blank, a
+   brace or an opener, that HEAD's line of the same text stands in for.
+
+**Built.**
+
+- `writersOf` returns `readings` on a hunk it gives to nobody because its
+  tied places disagree: per place, nearest git's first, everyone it names as
+  writer or remover, `NOBODY` and `ORIGIN` included.
+- `verdictOf` reads them first. Where every place names this change's
+  sessions alone, the hunk is this change's: what is committed is git's own
+  hunk, so which place is true changes nothing in the commit. Where every
+  place names one of this change's sessions beside another writer, `record`
+  refuses with exit 1, naming the hunk, how many places it slides to and the
+  other writers; landing theirs first can settle where it lies, `adopt` takes
+  it, and an `own` pattern does where no other session is named. Any other
+  tie reads as before. The listing tags the refused hunk `[me + …]`.
+
+**Superseded.** In the entry of 2026-10-14 on ties, the cost line "Ties this
+rule cannot settle stay as they were, refused to a pattern and left to
+`adopt`". In the entry of 2026-10-07, finding 2, for a tie each of whose
+places names this change. That entry of 2026-10-14 is three days old; the new
+evidence is findings 1 and 2, a replay of a real tie that `adopt` did not
+reach, where that entry had replayed only ties its rule settles.
+
+**Freeze.** Ruling 1 of 2026-10-14 holds the commit tooling until the owner
+re-justifies a fix. This fix was asked for on 2026-10-17 through the session
+coordinating the formation work, after the failure above, and is set out here
+for the owner's review.
+
+**Rejected — refusing every tie that names this change at some place.** On
+the real replay it refuses both sessions: the first because two places name
+its repeated lines, the second because every place names it, and neither
+lands until the other does. In the event the first session landed `d2724a5`
+with the hunk left, which was right; `besideHeadOf` then showed the second
+session's place, and it landed whole in `7207937`.
+
+**Rejected — reading this change's sessions as one writer in
+`besideHeadOf`.** The reported tie needs no place shown: every place names
+adopted sessions alone. Widening the place rule touches the reader the
+random histories of 2026-10-14 measured, for a case nothing has met yet.
+
+**Not decided.**
+
+- A tie whose every place names a line of this change's beside a line older
+  than the ledger, or beside a landed, unadopted session's repeated line, is
+  refused, though `besideHeadOf`, with this change's sessions read as one
+  writer, might place it. It is met: the same file at
+  2026-10-17T15:33:46Z, before the first session moved its block, holds a
+  34-line tie whose every place keeps two of HEAD's lines in the middle, and
+  with both writers adopted it is refused to an `own` pattern. The session
+  that reported the fault counted three more in that repo's
+  `docs/formation/` that day, by its account each bounded by a blank line of
+  a committed session's, which `adopt` reaches only by adopting that session
+  as well. Not replayed here.
+- A removal left to nobody by its text, where tombstones of that text name
+  different removers and no tie is involved, still leaves silently with this
+  change among them.
+- A session only some places name is left the hunk without a word. What it
+  can lose is a repeated line: the gate sees a brace that goes missing where
+  it parses the file, and nothing sees a blank.
+
+**Checked before this commit, and not.** Offline, in this repo's working
+tree, against the replays and scratch repositories named.
+
+- The real tie, replayed by `record` in a shared clone of `acks-extras` with
+  that file's records and blobs copied in. At `01b0620`: the first session
+  alone leaves the hunk, as it did when it landed `d2724a5`; both sessions
+  adopted, HEAD's tool leaves it with exit 0 and this one takes it; the
+  second session alone is refused at it. At `d2724a5` the second session
+  takes all 8 of its hunks, as it did in `7207937`.
+- A scratch history of the same shape, as each of the three seats: with
+  HEAD's tool the writing session alone and the adopting session each record
+  exit 0 and build a tree that calls the helper and does not define it; with
+  this one the first is refused, the second takes the hunk, and the session
+  that only owns the repeated lines leaves it, exit 0.
+- `bin/test-commit-own-hunks.mjs`, its ledger group before the new case:
+  24 cases, 1 failed, the slide-peer-blank case on its old message. The two
+  tie cases, run alone from a filtered copy of the suite: 0 failed with this
+  tool; 2 failed with HEAD's; and each of five single edits fails the new
+  case at the check it aims at (no all-mine rule, no refusal, a refusal where
+  any place names this change, no `readings`, a `record` that skips the
+  refusal).
+- `bin/test-landing-lease.mjs`: 19 cases, 0 failed. The full commit and
+  hooks suites were stopped part-way, 28 and 38 cases in with none failed,
+  for the landing gate, which runs all three suites on the tree this commit
+  holds.
+
+Not checked: a tie of removals alone, which the rule reads the same way and
+no case builds; a sync into a module repo, which waits on the owner's push.

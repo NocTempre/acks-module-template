@@ -675,8 +675,52 @@ try {
     g.as(ME).write("a.txt", "## one\nbody one\n\n## mine\nmy body\n\n## last\nbody last\n");
     const base = g.head();
     const left = g.kit("record");
-    check("record exits 1 with the hunk left and the peer named", left.status === 1 && /left -\d+,0 \(-0 \+3\) \[session session- \+ no record\]/.test(left.out) && /the ledger gives this session none of its hunks/.test(left.out), left.out);
+    check("record exits 1 with the hunk left and the peer named", left.status === 1 && /left -\d+,0 \(-0 \+3\) \[me \+ session session- \+ no record\]/.test(left.out) && /slides to 2 places the ledger cannot choose between, and at every one this session wrote a line of it beside session-'s/.test(left.out), left.out);
     check("no commit is made", g.head() === base);
+  });
+
+  ledgerCase("a hunk that slides where the ledger cannot place it is taken where every place is this change's, and refused where every place holds a line of it beside another's", (check) => {
+    const OTHER = "session-other-0003";
+    const text = (...lines) => `${lines.join("\n")}\n`;
+    const first = (decl) => ["export function first() {", decl, "  return one;", "}"];
+    const last = (body) => ["/**", " * The last one.", " */", "export function last() {", body, "}"];
+    const tail = (doc) => ["/**", doc, " */", "export function tail() {", "  return 3;", "}"];
+    const helper = (who) => ["/**", ` * The ${who} helper.`, " */", `export function ${who}() {`, `  return "${who}";`, "}"];
+    const mine = first("  const one = 1; // mine");
+    // This session inserts its helper with a change just above it, so the replay gives it the brace, blank and opener above the block. The peer
+    // inserts its own helper after this session's and calls it; this session moves its helper to the end, and the replay keeps its brace, blank
+    // and opener and takes HEAD's out; a third session rewords a line far off. The peer's helper then slides to four places, and three hold a
+    // line of this session's.
+    const history = (name, json) => {
+      const f = fixture(name, json, { session: ME });
+      f.write("a.txt", text(...first("  const one = 1;"), "", ...last("  return 2;"), "", ...tail(" * The tail.")));
+      f.git("commit", "-q", "-am", "three functions");
+      f.as(ME).write("a.txt", text(...mine, "", ...helper("mineHelper"), "", ...last("  return 2;"), "", ...tail(" * The tail.")));
+      f.as(PEER).write("a.txt", text(...mine, "", ...helper("mineHelper"), "", ...helper("theirHelper"), "", ...last("  return 2;"), "", ...tail(" * The tail.")));
+      f.as(PEER).write("a.txt", text(...mine, "", ...helper("mineHelper"), "", ...helper("theirHelper"), "", ...last("  return theirHelper();"), "", ...tail(" * The tail.")));
+      f.as(ME).write("a.txt", text(...mine, "", ...helper("theirHelper"), "", ...last("  return theirHelper();"), "", ...tail(" * The tail."), "", ...helper("mineHelper")));
+      f.as(OTHER).write("a.txt", text(...mine, "", ...helper("theirHelper"), "", ...last("  return theirHelper();"), "", ...tail(" * The tail, reworded."), "", ...helper("mineHelper")));
+      return f;
+    };
+    const defines = (f) => f.show("a.txt").includes("export function theirHelper() {");
+    const calls = (f) => f.show("a.txt").includes("  return theirHelper();");
+    // The peer's own seat: its helper is in every place, beside this session's lines.
+    const f = history("ledger-tie-refused", { files: { "a.txt": {} } });
+    const base = f.head();
+    const refused = f.kit("record", "--session", PEER);
+    check("the session that wrote the helper and its call is refused, the hunk named", refused.status === 1 && /left -5,0 \(-0 \+7\) \[me \+ session session- \+ no record\]/.test(refused.out) && /MINE -10,1 \(-1 \+1\) \[me\]/.test(refused.out) && /REFUSED: a\.txt: the hunk at -5 \(-0 \+7\) slides to 4 places the ledger cannot choose between, and at every one this session wrote a line of it beside session-'s; landing session-'s lines first can settle where it lies, or it lands under "adopt"/.test(refused.out), refused.out);
+    check("no commit is made", f.head() === base);
+    // This session adopting the peer: every writer of every place is this change's.
+    const g = history("ledger-tie-adopted", { files: { "a.txt": {} }, adopt: [PEER] });
+    const adopted = g.ship();
+    check("with the peer adopted, ship exits 0 and the hunk is taken", adopted.status === 0 && /MINE -5,0 \(-0 \+7\) \[me\]/.test(adopted.out), adopted.out);
+    check("HEAD defines the helper it calls", defines(g) && calls(g), g.show("a.txt"));
+    check("the third session's line alone is left", /^\+ \* The tail, reworded\.$/m.test(working(g)) && !/theirHelper|mineHelper|\/\/ mine/.test(working(g)), working(g));
+    // This session alone: no place gives it a line every other place does, and its own work calls on nothing in the hunk.
+    const h = history("ledger-tie-left", { files: { "a.txt": {} } });
+    const alone = h.ship();
+    check("this session alone ships its own lines and leaves the peer's helper", alone.status === 0 && /left -5,0 \(-0 \+7\) \[session session- \+ no record\]/.test(alone.out) && /MINE -2,1 \(-1 \+1\) \[me\]/.test(alone.out) && /MINE -18,0 \(-0 \+7\) \[me\]/.test(alone.out), alone.out);
+    check("HEAD holds this session's helper, and neither the peer's helper nor its call", h.show("a.txt").includes("export function mineHelper() {") && !defines(h) && !calls(h), h.show("a.txt"));
   });
 
   ledgerCase("a line another session changed and changed back is this session's to change", (check) => {
