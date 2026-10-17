@@ -28,10 +28,11 @@ every downstream CI at once. Read `docs/TOOLCHAIN.md` before changing anything;
 - **Push ordering: template first.** Module-repo CI checks out this repo's
   `main`; syncing modules before pushing the template edit they depend on turns
   every downstream toolchain-check red (TOOLCHAIN §9).
-- After editing anything canonical: commit the template and push it, then run
-  `/acks-sync-toolchain`. `--apply` writes what is on `origin/main` and nothing
-  else, so an edit that is not pushed reaches no module. Drift is fixed by
-  syncing, never by hand-editing the copies in module repos.
+- After editing anything canonical: commit the template, push it on the
+  owner's go-ahead (TOOLCHAIN §2), then run `/acks-sync-toolchain`. `--apply`
+  writes what is on `origin/main` and nothing else, so an edit that is not
+  pushed reaches no module. Drift is fixed by syncing, never by hand-editing
+  the copies in module repos.
 - `skeleton/CLAUDE.md` renders into every module repo — edits there speak to
   every future session in the family. Keep it lean; put procedures in skills
   and reference in TOOLCHAIN.

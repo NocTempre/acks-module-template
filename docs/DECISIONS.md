@@ -3273,7 +3273,7 @@ Not checked: the tool making a commit in a module repo with this reader,
 which follows the sync; time on a file of many thousand lines; Linux and
 macOS.
 
-## 2026-10-14 — The commit tooling is frozen, a landing is one command, and a release reads git — IN FORCE
+## 2026-10-14 — The commit tooling is frozen, a landing is one command, and a release reads git — IN FORCE except ruling 2's push (superseded 2026-10-17)
 
 **Problem.** The owner read the commit, push and release procedure as agent
 work that had grown where scripts were asked for. Measured in one session:
@@ -3320,3 +3320,40 @@ wants a step on its own still has the modes; nothing is removed. The first
 Write tool, its text moved, reads as this session's lines beside lines no
 record accounts for. It lands as `"whole": true`, which is what the key is
 for, and the ledger is not taught the case.
+
+## 2026-10-17 — A session commits finished work unasked, and a commit stays local until the owner says push — IN FORCE
+
+**Problem.** `land` pushed every commit it made (2026-10-14, ruling 2), and
+TOOLCHAIN §2 told a session to push what it committed in the same motion. The
+owner now wants finished work saved as a commit without waiting to be asked,
+and a push kept as a decision of the owner's own.
+
+**New evidence.** This supersedes part of an entry three days old, on the
+owner's two answers of 2026-10-17: commits made without being asked are never
+pushed, and the owner's "commit" does not approve a push either.
+
+**Ruled by the owner, 2026-10-17.**
+
+1. A session commits its own change once the work is done and its gate
+   passes, without being asked, unless the owner said not to for that task.
+2. A commit stays local. A push takes the owner's explicit go-ahead, and
+   "commit" is not one. A release or hotfix the owner asked for approves its
+   own atomic push and tag.
+3. The push in 2026-10-14 ruling 2 is superseded: a session runs
+   `land --no-push`, and `land` without it only under a go-ahead to push.
+
+**Not changed.** The commit tooling stays frozen (2026-10-14, ruling 1).
+`--no-push` already existed, so no script changed: `acks-commit`'s skill,
+TOOLCHAIN §2 and §9, `acks-sync-toolchain`'s steps 2 and 5 and this repo's
+`CLAUDE.md` were rewritten to say it. `sync-toolchain --apply --land` lands
+each repo through `land` with no `--no-push`, so it pushes every repo it
+lands, and it runs only under a go-ahead covering those pushes; otherwise a
+sync is `--apply` and each repo's own `land --no-push`. A `--no-push`
+passthrough for `--land` is offered and left to the owner. `acks-release`
+already landed with `--no-push` and pushes atomically as its own step.
+
+**Cost.** CI runs on a push, so a local commit has only its own gate until the
+owner's go-ahead. A push sends every local commit beneath its sha, other
+sessions' included, so the ask names them. The template still has to be
+pushed before a sync can write it (§9), and a module push inside that window
+fails `drift`, so one go-ahead covers the template's push and the modules'.

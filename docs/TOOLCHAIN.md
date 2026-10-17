@@ -71,10 +71,16 @@ acks-<feature>/
 ## 2. Git conventions
 
 - **Default branch: `main`**, on every repo.
-- **Push what you commit**, in the same motion, unless told otherwise or a
-  concern is flagged first. Exceptions that wait for an explicit go-ahead:
-  force-pushes, anything that could carry licensed text, publishing a
-  previously-private repo, and genuine doubt about scope.
+- **Commit finished work; push on the owner's go-ahead** (DECISIONS
+  2026-10-17). A session commits its own change once the work is done and its
+  gate passes, without being asked, unless the owner said not to. The commit
+  stays local: `acks-commit` lands it with `--no-push`. A push takes the
+  owner's explicit word, and "commit" is not that word; a release or hotfix
+  the owner asked for carries its own atomic push and tag. A push sends every
+  local commit beneath its sha, other sessions' included, so the ask names
+  them. A go-ahead to push never covers a force-push, anything that could
+  carry licensed text, or publishing a previously-private repo: each is asked
+  for by name.
 - **Tags: `v<semver>`** and the tag MUST equal `module.json` `version`
   (CI enforces this).
 - **Compiled LevelDB packs are NOT committed** (changed 2026-07-19; they were,
@@ -678,10 +684,12 @@ committed and not pushed, reaches no module, and the run lists it;
 push the template, then `--apply` into the modules, then push those. A module
 trails canon from the template's push until its own sync is pushed, and a
 module push inside that window fails `drift`, so the sync follows the push at
-once. `--apply` holds a repo, whole, where a file it would write carries an
-uncommitted change, and a run that could not read a target exits 2; the
-script's header says what each exit status means. The rulings, and the
-incidents behind them, are DECISIONS 2026-08-05 and 2026-10-08.
+once. Each of those pushes is the owner's to approve (§2): ask for the
+template's and the modules' in one go-ahead. `--apply` holds a repo, whole,
+where a file it would write carries an uncommitted change, and a run that
+could not read a target exits 2; the script's header says what each exit
+status means. The rulings, and the incidents behind them, are DECISIONS
+2026-08-05 and 2026-10-08.
 
 **A new module is compared with canon as it is made.** `bin/new-module.mjs`
 builds from the files of this tree as they stand, has the sync's `--check`
