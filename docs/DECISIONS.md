@@ -3503,3 +3503,58 @@ tree, against the replays and scratch repositories named.
 
 Not checked: a tie of removals alone, which the rule reads the same way and
 no case builds; a sync into a module repo, which waits on the owner's push.
+
+## 2026-10-17 — The commit tool lists a removed path under its own name, whatever git would pair it with — IN FORCE
+
+**Problem.** `build` compared the tree it wrote with the paths `change.json`
+names through `git diff --name-only HEAD <tree>`. Rename detection is on
+unless config turns it off, so a change that removes one file and adds a
+similar one lists as the added path alone, and `build` refused it: "the tree
+changes [new] and change.json names [new, old]". It met this twice in
+`acks-extras` on 2026-10-17, when `settlement-adventure.mjs` gave way to
+`book-adventure.mjs` and when one test file gave way to another. Both
+landed with renames turned off for the run:
+`GIT_CONFIG_COUNT=1 GIT_CONFIG_KEY_0=diff.renames GIT_CONFIG_VALUE_0=false`.
+
+**Found.** A carry reads the paths the landed commits write the same way. A
+peer's commit that moves gate tooling to a path `GATE_TOOLING` does not
+match lists as the new path alone, so the base was carried over it. Nothing
+has met that; a scratch case of it is carried by HEAD's tool.
+
+**Ruled.** Every diff the tool lists paths from passes `--no-renames`:
+`changedPaths` for the shared index's staging, the built tree and a carry's
+landed commits, and the `--stat` a changed tree is refused with. `record`'s
+diffs each name one path, and a diff limited to one path has nothing to pair
+it with, so they stay as they were.
+
+**Rejected — turning renames off for every git call the tool makes,** as the
+workaround did. It reaches commands whose output nothing compares, and the
+listing is right only while the wrapper stays; the flag sits on the
+comparison that needs it.
+
+**Rejected — a key in `change.json` naming a rename.** A new key is what the
+freeze rules out, and a change already names both paths, in `added` and
+`removed`.
+
+**Freeze.** Ruling 1 of 2026-10-14 holds the commit tooling until the owner
+re-justifies a fix. This fix was asked for on 2026-10-17 through the session
+coordinating that day's extras work, after the two refusals above, and is
+set out here for the owner's review. A module keeps the workaround until the
+owner's word, the template's push and the sync reach it.
+
+**Cost.** None to the ledger. A rename reads as two paths in the tool's
+refusals and in a carry's.
+
+**Checked before this commit, and not.** Offline, in this repo's working
+tree. Each new case turns renames on in its fixture, so it pins the fault
+whatever a machine's global config says.
+
+- `bin/test-commit-own-hunks.mjs --group tree`: 30 cases, 0 failed with
+  this tool. With HEAD's, the two new cases fail: the pair is refused with
+  the message above, and the base is carried over the moved validator and
+  committed.
+- The landing gate runs the three commit suites on the tree this commit
+  holds.
+
+Not checked: the two extras changes replayed without the workaround; a sync
+into a module repo, which reads only pushed canon.

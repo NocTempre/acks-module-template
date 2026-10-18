@@ -196,6 +196,23 @@ try {
     check("the peer's file is still modified and uncommitted", f.git("status", "--porcelain").trim() === "M a.txt", f.git("status", "--porcelain"));
   });
 
+  test("a removed file and a near-copy added under a new name land together, where git reads the pair as a rename", (check) => {
+    const f = fixture("rename", { added: ["b2.txt"], removed: ["b.txt"] });
+    // Rename detection is on here whatever this machine's global config says.
+    f.git("config", "diff.renames", "true");
+    f.write("b2.txt", BODY.map((l, n) => (n === 4 ? "line 5 changed" : l)).join("\n") + "\n");
+    fs.rmSync(path.join(f.repo, "b.txt"));
+    const recorded = f.kit("record");
+    check("record exits 0", recorded.status === 0, recorded.out);
+    const landed = f.kit("land", "--no-push");
+    check("land exits 0 and reports the commit unpushed", landed.status === 0 && /^landed [0-9a-f]{40} not pushed \(--no-push\)/m.test(landed.out), landed.out);
+    if (landed.status !== 0) return;
+    const names = f.git("diff", "--no-renames", "--name-only", "HEAD~1", "HEAD").trim().split("\n").sort().join(",");
+    check("the commit removes the one path and adds the other", names === "b.txt,b2.txt", names);
+    const status = f.git("diff", "-M", "--name-status", "HEAD~1", "HEAD");
+    check("git reads the commit as a rename", /^R\d+\tb\.txt\tb2\.txt$/m.test(status), status);
+  });
+
   test("a whole-listed file a peer has written in is refused at record", (check) => {
     const f = fixture("whole-foreign", { files: { "b.txt": { whole: true, own: "MINE" } } });
     f.edit("b.txt", { 5: "line 5 MINE", 25: "line 25 PEER" });
@@ -327,6 +344,21 @@ try {
     const moved = f.head();
     const r = f.kit("commit", "--carry");
     check("commit --carry exits 3", r.status === 3, r.out);
+    check("no commit is made", f.head() === moved);
+  });
+
+  test("a moved base is not carried over a commit that moves gate tooling to a path outside it", (check) => {
+    const f = fixture("carry-moved-tooling", OWN_A);
+    f.git("config", "diff.renames", "true");
+    f.edit("a.txt", { 3: "line 3 MINE" });
+    check("record and gate are green", f.kit("record").status === 0 && f.kit("gate").status === 0);
+    f.git("mv", "tools/validate.mjs", "validate.mjs");
+    f.git("commit", "-q", "-m", "peer moves the validator");
+    const status = f.git("diff", "-M", "--name-status", "HEAD~1", "HEAD");
+    check("git reads the landed commit as a rename", /^R\d+\ttools\/validate\.mjs\tvalidate\.mjs$/m.test(status), status);
+    const moved = f.head();
+    const r = f.kit("commit", "--carry");
+    check("commit --carry exits 3 and names the tooling", r.status === 3 && /writes gate tooling \(tools\/validate\.mjs\)/.test(r.out), r.out);
     check("no commit is made", f.head() === moved);
   });
 
