@@ -609,7 +609,7 @@ Full ruling and its corollaries: DECISIONS, 2026-07-19.
     and once silently clobbered newer text — delete any found.
   - `.claude/rules/` — always-true doctrine loaded on demand:
     `live-testing.md`, `ip-doctrine.md`, `docs-doctrine.md`,
-    `rules-lookup.md`, `ui-layout.md`, `delegation.md`, `shared-tree.md`. Each is the canonical
+    `rules-lookup.md`, `ui-layout.md`, `ui-tooltips.md`, `delegation.md`, `shared-tree.md`. Each is the canonical
     statement of its subject; every other file points at it.
   - `.claude/hooks/` — `single-branch-guard.mjs` (single-branch convention),
     `no-windows-path-heredoc.mjs` (Windows paths never enter Bash

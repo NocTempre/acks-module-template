@@ -3558,3 +3558,49 @@ whatever a machine's global config says.
 
 Not checked: the two extras changes replayed without the workaround; a sync
 into a module repo, which reads only pushed canon.
+
+## 2026-10-24 — Every figure carries a tooltip that says where it came from — IN FORCE
+
+**Owner ruling.** A standing UI rule, family-wide: tooltips liberally,
+especially on values and stats, and a tooltip that cannot be matched with
+the game text is a clue that the figure needs review.
+`.claude/rules/ui-tooltips.md` states it.
+
+**What "matched" means, and why it is the citation and not the text.** A
+tooltip that matched the page by carrying its words would be the rule
+sentence of 2026-08-15 on a new surface. The match is the one the
+2026-09-03 ruling already names as the module's audit trail: the tooltip
+names the parts a figure is built from and the page that prints them, and a
+reader with the book open checks the one against the other. The parts'
+names and how they combine are procedure and ship; their numbers are the
+world's, at render.
+
+**Found while drafting.**
+- Core 14.369's tooltip manager binds `pointerenter`, `pointerleave`,
+  `pointerup` and `pointermove`, and nothing that opens on focus. So a
+  tooltip cannot be the only copy of anything a keyboard or touch user
+  needs.
+- A `data-tooltip` that is not a lang key is rendered as cleaned HTML;
+  `data-tooltip-text` is written as text. A tooltip built from names or
+  imported rows belongs in the second.
+- acks-extras already holds the four shapes the rule names, and a runtime
+  page lookup for imported tables (`lib/tables.mjs` `citeOf`, since 8.6.0)
+  that two features use. About 720 `data-tooltip` attributes ship there;
+  47 of its 142 templates carry none.
+
+**Rejected.**
+- *A section of `ui-layout.md`.* That file is the layout and reach contract
+  that `validate.mjs` §8 enforces; this rule has no decidable half, and its
+  substance is provenance, which reads with `ip-doctrine.md`.
+- *A validate check.* Whether an element shows a figure, and whether a
+  tooltip paraphrases a rule, are not decidable from source. The hygiene
+  sweep carries it as `missing-provenance-tooltip`, with a `tooltips` lens.
+- *Retrofitting every surface with each change that touches one.* It would
+  turn a hotfix into a sheet rewrite. A figure a change adds or alters
+  carries one; older surfaces are retrofitted one at a time from each repo's
+  ROADMAP.
+
+**Cost.** A figure whose tooltip cannot be written stops the change that
+meets it long enough to register a ledger row (`acks-bug-triage`, source
+`tooltip:<date>`). The sweep's `dryrun.mjs` now counts categories from
+`categories.json` instead of holding 36.
