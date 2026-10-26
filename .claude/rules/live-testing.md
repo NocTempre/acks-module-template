@@ -72,9 +72,9 @@ rather than inventing one.
    **A fixture you drive is yours alone while you drive it.** One that a walk
    only reads or renders serves every session at once. One a walk moves,
    fights, bills or edits has two writers the moment a peer walks the same
-   surface, which is how a peer's party once dissolved mid-walk. Before
-   driving one, find out who is seated (Concurrency, below); where a peer is
-   on the same surface, build your own under a marker of your own.
+   surface. Before driving one, find out who is seated (Concurrency, below);
+   where a peer is on the same surface, build your own under a marker of
+   your own.
 
    **Delete a fixture only where setup is the subject.** A check of how a
    document comes to exist or stops existing needs it absent: a create path
