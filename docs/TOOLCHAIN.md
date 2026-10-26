@@ -254,7 +254,7 @@ DECISIONS.md — acks-equipment v0.12.1's dead-at-`init` releases,
 acks-henchmen v0.29.1's template-vs-API split, acks-formation v0.27.0's
 pre-upgrade fixtures).
 
-The canonical procedure — environment, fixtures you create and destroy, real
+The canonical procedure — environment, fixtures built once and kept, real
 player seats, pre-upgrade shapes, what to report — is the synced
 **`.claude/rules/live-testing.md`**, loaded in every repo. This section
 states only the policy: the gate is skipped exactly when
@@ -347,9 +347,9 @@ it. Worth knowing rather than worrying about: `ip-scan.mjs` reads file names
 and text and cannot see inside a PNG, so images are the one surface where this
 is judgement rather than a gate.
 
-**Shoot against the fixtures you already built.** §4a step 4 has you create
-disposable documents to exercise the feature and delete them afterwards; those
-are what the camera points at. No separate setup is needed, and a fixture named
+**Shoot against the fixtures you already built.** The fixtures §4a's live check
+walked, built for it or kept from an earlier one, are what the camera points
+at. No separate setup is needed, and a fixture named
 for what it demonstrates ("Waystation Inn") makes a better guide image than
 whatever the world happened to contain.
 

@@ -660,7 +660,7 @@ henchman-cap arithmetic and the `item-loss-from-damage` threshold hold values
 read off a page. Those are question 2, and question 2 was never about
 citations.
 
-## 2026-09-05 — Teardown is by the run's own ids; the prose that said so did not hold — IN FORCE
+## 2026-09-05 — Teardown is by the run's own ids; the prose that said so did not hold — IN FORCE except a sweep at the end of every run (superseded 2026-10-26)
 
 Several live-tester agents shared the one test world. One ended its walk with
 a scratchpad cleanup that deleted every document whose name began with
@@ -3604,3 +3604,56 @@ world's, at render.
 meets it long enough to register a ledger row (`acks-bug-triage`, source
 `tooltip:<date>`). The sweep's `dryrun.mjs` now counts categories from
 `categories.json` instead of holding 36.
+
+## 2026-10-26 — A fixture, once built, stays; only a check of setup deletes one — IN FORCE
+
+**Owner ruling.** Deleting test fixtures once built makes no sense, unless
+the check is testing a part of the setup process itself. It replaces
+create-and-destroy in `.claude/rules/live-testing.md` step 4, family-wide,
+and so in every release's live gate. The cause is the ruling itself:
+create-and-destroy made every walk rebuild what the walk before it had
+already built and proven, and the setup that buys nothing on a repeat is
+most of a long walk.
+
+**What create-and-destroy was buying, and what pays for it now.**
+- *No rollback.* Unchanged. Nothing restores a fixture at the end of a
+  walk; a step that needs a known shape asserts it at its start, and a
+  fixture that cannot be brought there is rebuilt as setup.
+- *Isolation.* A per-run fixture could not have two drivers. A kept one
+  can, which is the 2026-09-05 incident (a peer's party dissolved mid-walk)
+  by another route. A fixture a walk only reads or renders is shared; one it
+  drives is checked against the seated peers first, and a peer on the same
+  surface means building your own.
+- *A world a session can reason about.* The test world was emptied in
+  August because a document nobody recorded invites testing by mutating it.
+  A marker, `flags.world.fixture` naming the `<feature>/<name>` its recipe
+  gives it, makes a kept document one a later session can find and reason
+  about; a document without one is read, never driven. `world` is a scope
+  core always allows (`getFlagScopes`: core, world, the system, each active
+  module), so the marker needs no module of the family active.
+
+**Setup, defined.** A check of how a document comes to exist or stops
+existing: a create path or create hook, an import's first run (a standing
+import blocks the fresh create), the DELETE path, a migration of a
+pre-upgrade shape. It deletes the fixture first and runs the setup; what
+the setup produced is the fixture from then on.
+
+**2026-09-05 is superseded on the default only.** A walk no longer ends in
+a sweep. Every delete that does happen keys on the run's own ledger, a
+setup check's retirement of a kept fixture included: it tracks the uuid its
+marker lookup returned and sweeps that, never a pattern over markers. The
+driver's `close()` no longer warns on a ledger left unswept; it prints the
+ledger, so the log still holds every id a run built.
+
+**Rejected — a file listing the kept fixtures beside the world.** 2026-09-05
+already turned down a file-backed ledger as a second store that goes stale.
+A marker lives on its document and goes when the document goes.
+
+**Cost.**
+- The world fills. Kept fixtures accumulate across features and sessions,
+  and emptying the test world is the owner's call, never a session's.
+- acks-extras' `tools/live/` walks each sweep everything they built in a
+  `finally`, and its recipes' teardown lines describe those sweeps. They are
+  out of date, not in breach. Converting each walk to find-or-build by marker
+  is a ROADMAP row there, and so is a driver helper that does the lookup;
+  until one exists a walk finds its marker in page context.

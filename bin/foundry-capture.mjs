@@ -18,7 +18,7 @@
  * browser the developer is using, and closing UI windows to compose a frame
  * (below) affects only this session's DOM. Nothing the driver does on its own
  * writes to the world; what a run creates through it is recorded in the
- * fixture ledger (below) and removed by it.
+ * fixture ledger (below).
  *
  * NOTHING MACHINE-SPECIFIC LIVES HERE. Browser binary, origin and user name
  * are arguments; their values are local-only and belong in the machine's
@@ -35,9 +35,11 @@
  *   const api = await connect({ browser: EDGE, origin: ORIGIN, user: "Gamemaster" });
  *   try {
  *     await api.compose();                       // clear popups from other modules
- *     const inn = await api.create("Actor", { name: "Snapshot Fixture — Inn", type: "acks-extras.location" });
+ *     const marker = { world: { fixture: "location/inn" } };   // a kept fixture is found by its marker
+ *     const inn = await api.eval(`game.actors.find((a) => a.flags.world?.fixture === "location/inn")?.uuid ?? ""`)
+ *       || (await api.create("Actor", { name: "Inn", type: "acks-extras.location", flags: marker })).uuid;
  *     const sel = await api.eval(`(async () => {
- *       const a = await fromUuid(${JSON.stringify(inn.uuid)});
+ *       const a = await fromUuid(${JSON.stringify(inn)});
  *       await a.sheet.render(true);
  *       return "#" + a.sheet.id;
  *     })()`);
@@ -45,23 +47,25 @@
  *     await api.compose(sel);                    // sweep anything the write popped up
  *     console.log(await api.shot("docs/releases/v0.3.0/location-sheet.png", sel));
  *   } finally {
- *     console.log(await api.sweepTracked());     // { removed, missing, failed } — quote it in the report
- *     api.close();
+ *     api.close();                               // prints what the run built and kept — quote it in the report
  *   }
  *
  * THE FIXTURE LEDGER. Every document a run creates is recorded by uuid the
  * moment it exists — `create()` records what it makes; `track()` records one
  * made any other way, including one the feature wrote itself once its id has
- * been read back — and `sweepTracked()` deletes exactly that list, newest
- * first, re-resolving each uuid to prove it is gone. It returns what it
- * removed, what it could not find and what refused to go, and the report
- * quotes that object. Teardown keys on the run's own uuids and on nothing
- * else: the world is shared, so a delete keyed on a name, a name prefix, a
- * folder, a type or a time window takes other sessions' documents with
- * yours. Every `track` prints its uuid, so a run that dies before its sweep
- * leaves its ids in its log; the next run re-tracks those ids and sweeps —
- * it never goes looking by name. `close()` warns while the ledger holds
- * entries. A session driving a browser pane instead keeps the same list and
+ * been read back. A fixture stays in the world for the next check
+ * (`.claude/rules/live-testing.md`, step 4), so the ledger is first the
+ * run's record of what it built: every `track` prints its uuid and `close()`
+ * prints the ledger again. It is also the only list a delete keys on. A
+ * check whose subject is setup tracks the kept fixture it retires and calls
+ * `sweepTracked()`, which deletes exactly that list, newest first,
+ * re-resolving each uuid to prove it is gone, and returns what it removed,
+ * what it could not find and what refused to go; the report quotes that
+ * object. The world is shared, so a delete keyed on a name, a name prefix,
+ * a folder, a type or a time window takes other sessions' documents with
+ * yours. A setup check that dies before its sweep has its ids in its log;
+ * the next run re-tracks those ids and sweeps — it never goes looking by
+ * name. A session driving a browser pane instead keeps the same list and
  * runs `pageSweep(entries)` there — the very expression the driver uses.
  *
  * A FRAME IS TAKEN OF A FOREGROUND PAGE WITH NO TOAST ON IT. A page that loses
@@ -604,10 +608,10 @@ export async function connect({ browser, origin, user, port = 9333, width = 1600
 
       ...fixtures,
 
-      /** Tear the session down (see `cleanup`). Warns while the ledger still holds entries. */
+      /** Tear the session down (see `cleanup`), printing the ledger: the fixtures this run built and the world keeps. */
       close() {
-        const left = fixtures.tracked();
-        if (left.length) console.warn(`  warn: ${left.length} tracked fixture(s) not swept — sweepTracked() before close(): ${left.map((e) => e.uuid).join(", ")}`);
+        const kept = fixtures.tracked();
+        if (kept.length) console.log(`  kept: ${kept.length} fixture(s): ${kept.map((e) => e.uuid).join(", ")}`);
         cleanup();
       },
     };
