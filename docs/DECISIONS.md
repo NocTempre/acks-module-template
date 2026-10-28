@@ -3657,3 +3657,59 @@ A marker lives on its document and goes when the document goes.
   out of date, not in breach. Converting each walk to find-or-build by marker
   is a ROADMAP row there, and so is a driver helper that does the lookup;
   until one exists a walk finds its marker in page context.
+
+## 2026-10-28 — The driver finds a kept fixture by its marker; a session's own is the recipe's marker with `@<tag>`, and a marker on two documents stops the run — IN FORCE
+
+The 2026-10-26 ruling left two points open, and acks-extras' ROADMAP row
+that converts its walks named them: how a peer's own marker is spelled
+beside the recipe's, and what a lookup returns when two documents carry one
+marker. Until now every walk spelled the lookup itself.
+
+**Ruled.**
+1. `bin/foundry-capture.mjs` does the lookup. `api.fixture(marker, kind,
+   data, {parent})` returns the one document carrying the marker, in the
+   world's collections or in `parent`'s embedded `kind` collection, and does
+   not track it; with none, it builds `data` carrying the marker and tracks
+   that. A second run's ledger therefore holds only what that run built.
+   `api.retire(marker, kind)` is a setup check's delete of a kept fixture:
+   the lookup's one document, tracked and swept alone
+   (`sweepTracked({only})`), so the run's other fixtures stand.
+   `api.mark(uuid, marker)` marks what a setup check's feature produced and
+   tracks it. `close()` prints what the run built, each with its marker, and
+   the kept fixtures it reused.
+2. A marker is `<feature>/<name>` in lowercase letters, digits and dashes.
+   A session that builds its own beside a peer connects with `own: <tag>`,
+   and every marker it looks up or builds is `<feature>/<name>@<tag>`. The
+   lookup is exact, so the recipe's marker and a session's own never meet,
+   and the base stays the recipe's, so an owner reading the world can tell
+   what a tagged one stands in for.
+3. Two documents carrying one marker is a fault, and `fixture`, `retire`
+   and `mark` each throw naming both. A marker found on a document of
+   another kind than asked throws too.
+
+**Rejected — return the older of two.** It converges two racing runs on
+one document, but it hides the twin the marker exists to expose and leaves
+the newer one standing for good, carrying a marker no lookup will return
+again. The twin is the trace of two runs that both missed and both built
+(`live-testing.md`, Concurrency: a presence claim is per client), and the
+run whose log tracked it retires it by that uuid once.
+
+**Rejected — the tag inside the name, `<feature>/<name>-<tag>`.** A dash
+already belongs to a recipe's own names, so a recipe's `party-s2` and peer
+`s2`'s own `party` would be one marker. No recipe marker holds `@`.
+
+**Rejected — looking only in the asked kind's collection.** A walk that
+passes the wrong kind would miss its own kept fixture and build a twin
+beside it in another collection. The lookup reads every world collection
+and calls a hit of another kind an error.
+
+**Cost.**
+- Each lookup reads every document in every world collection, the chat log
+  included, in page context. Inferred cheap at this world's size; not
+  measured.
+- A twin stops every walk that looks its marker up until a run retires one
+  by uuid; no session clears it by marker.
+- An embedded fixture's marker is unique within its parent only.
+- `bin/test-foundry-capture.mjs` drives the ledger against a scripted
+  world; each case fails under the edit it guards against, made to a
+  scratch copy of the driver.

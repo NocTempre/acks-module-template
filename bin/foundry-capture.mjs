@@ -35,11 +35,10 @@
  *   const api = await connect({ browser: EDGE, origin: ORIGIN, user: "Gamemaster" });
  *   try {
  *     await api.compose();                       // clear popups from other modules
- *     const marker = { world: { fixture: "location/inn" } };   // a kept fixture is found by its marker
- *     const inn = await api.eval(`game.actors.find((a) => a.flags.world?.fixture === "location/inn")?.uuid ?? ""`)
- *       || (await api.create("Actor", { name: "Inn", type: "acks-extras.location", flags: marker })).uuid;
+ *     // The kept fixture marked "location/inn", or a new one built and marked.
+ *     const inn = await api.fixture("location/inn", "Actor", { name: "Inn", type: "acks-extras.location" });
  *     const sel = await api.eval(`(async () => {
- *       const a = await fromUuid(${JSON.stringify(inn)});
+ *       const a = await fromUuid(${JSON.stringify(inn.uuid)});
  *       await a.sheet.render(true);
  *       return "#" + a.sheet.id;
  *     })()`);
@@ -67,6 +66,22 @@
  * the next run re-tracks those ids and sweeps — it never goes looking by
  * name. A session driving a browser pane instead keeps the same list and
  * runs `pageSweep(entries)` there — the very expression the driver uses.
+ *
+ * A KEPT FIXTURE IS FOUND BY ITS MARKER. `fixture(marker, kind, data)`
+ * returns the one document whose `flags.world.fixture` is the marker, or
+ * builds one from `data` carrying it and tracks that; what it finds it does
+ * not track, so a second run's ledger holds only what that run built.
+ * `retire(marker, kind)` is a setup check's delete of a kept fixture: the
+ * lookup's one document, tracked and swept alone. `mark(uuid, marker)` puts
+ * the marker on what a setup check's feature produced. A marker is
+ * `<feature>/<name>` as the recipe gives it. A session that builds its own
+ * beside a peer's (step 4, a fixture you drive) connects with `own: <tag>`,
+ * and every marker it looks up or builds is `<feature>/<name>@<tag>`; the
+ * lookup is exact, so the recipe's marker and a peer's never meet. Two
+ * documents carrying one marker is a fault and the lookup throws, naming
+ * both, rather than pick: a run handed either would build on a fixture the
+ * next run may not be handed, and the twin is the trace of two runs that
+ * both missed and both built.
  *
  * A FRAME IS TAKEN OF A FOREGROUND PAGE WITH NO TOAST ON IT. A page that loses
  * the foreground is hidden: it paints no frames, its transitions never end and
@@ -169,15 +184,85 @@ function pageCreate(kind, data, parentUuid = null) {
 }
 
 /**
+ * Page-side expression listing every document that carries `marker` as its
+ * `flags.world.fixture`: in every world collection, or, with `parentUuid`, in
+ * that document's embedded `kind` collection. Returns JSON `{hits: [{uuid, id,
+ * name, kind}]}`, or `{error}` when the parent or its collection does not
+ * resolve.
+ */
+function pageMarked(marker, kind, parentUuid = null) {
+  return `(async () => {
+    const marker = ${JSON.stringify(marker)}, kind = ${JSON.stringify(kind)}, parentUuid = ${JSON.stringify(parentUuid)};
+    let collections;
+    if (parentUuid) {
+      const parent = await fromUuid(parentUuid);
+      if (!parent) return JSON.stringify({ error: "parent not found: " + parentUuid });
+      try { collections = [parent.getEmbeddedCollection(kind)]; }
+      catch (err) { return JSON.stringify({ error: "no embedded " + kind + " collection in " + parentUuid }); }
+    } else collections = [...game.collections.values()];
+    const hits = [];
+    for (const collection of collections) {
+      for (const doc of collection.values()) {
+        if (doc.flags?.world?.fixture === marker) hits.push({ uuid: doc.uuid, id: doc.id, name: doc.name ?? null, kind: doc.documentName });
+      }
+    }
+    return JSON.stringify({ hits });
+  })()`;
+}
+
+/**
+ * Page-side expression writing `marker` to the document at `uuid` as its
+ * `flags.world.fixture` and reading it back. Returns JSON `{marked: true}`, or
+ * `{error}` when the document does not resolve or the write did not land.
+ */
+function pageMark(uuid, marker) {
+  return `(async () => {
+    const doc = await fromUuid(${JSON.stringify(uuid)});
+    if (!doc) return JSON.stringify({ error: "not found" });
+    await doc.update({ "flags.world.fixture": ${JSON.stringify(marker)} });
+    const back = (await fromUuid(${JSON.stringify(uuid)}))?.flags?.world?.fixture;
+    return JSON.stringify(back === ${JSON.stringify(marker)} ? { marked: true } : { error: "the marker did not land (reads " + JSON.stringify(back ?? null) + ")" });
+  })()`;
+}
+
+/**
  * The fixture ledger behind `api.create` / `api.track` / `api.tracked` /
- * `api.sweepTracked`: uuid → `{uuid, kind}` in creation order, bound to an
+ * `api.sweepTracked` and the marker helpers `api.fixture` / `api.retire` /
+ * `api.mark`: uuid → `{uuid, kind, marker?}` in creation order, bound to an
  * `evaluate(expression)` that runs page-side code and returns its value.
+ * `own` is the tag a session builds its own fixtures under (`<marker>@<own>`).
  * `connect()` composes it into the capture handle; it is exported so the same
  * ledger can be driven against any page evaluator, a test's included.
  */
-export function fixtureLedger(evaluate) {
+export function fixtureLedger(evaluate, { own = null } = {}) {
   const ledger = new Map();
+  // Kept fixtures this run found by marker and did not build: reported, never deleted.
+  const reused = new Map();
   const isTypeName = (kind) => /^[A-Z][A-Za-z]+$/.test(kind ?? "");
+  const PART = /^[a-z0-9][a-z0-9-]*$/;
+  if (own !== null && !PART.test(own)) throw new Error(`foundry-capture: own tag "${own}" is not lowercase letters, digits and dashes`);
+  // A recipe's `<feature>/<name>`, suffixed with the session's tag when it builds its own.
+  const markerOf = (marker) => {
+    const parts = typeof marker === "string" ? marker.split("/") : [];
+    if (parts.length !== 2 || !parts.every((p) => PART.test(p))) throw new Error(`foundry-capture: marker "${marker}" is not <feature>/<name> in lowercase letters, digits and dashes`);
+    return own ? `${marker}@${own}` : marker;
+  };
+  // A fixture is a world document or one embedded in a world document; a compendium's is neither.
+  const parentOf = (uuid) => {
+    if (uuid.startsWith("Compendium.")) throw new Error(`foundry-capture: "${uuid}" is in a compendium — a fixture is a world document`);
+    const parts = uuid.split(".");
+    return parts.length > 2 ? parts.slice(0, -2).join(".") : null;
+  };
+  // The one document carrying `full` in its collection; throws on a twin, or on a hit of another kind.
+  const lookup = async (full, kind, parent) => {
+    const result = JSON.parse(await evaluate(pageMarked(full, kind, parent)));
+    if (result.error) throw new Error(`foundry-capture: looking up "${full}" — ${result.error}`);
+    const { hits } = result;
+    if (hits.length > 1) throw new Error(`foundry-capture: ${hits.length} documents carry the marker "${full}" (${hits.map((h) => h.uuid).join(", ")}) — a marker names one fixture; the run whose log tracked a twin retires it by that uuid`);
+    const [hit] = hits;
+    if (hit && hit.kind !== kind) throw new Error(`foundry-capture: the marker "${full}" is on a ${hit.kind} (${hit.uuid}), not a ${kind}`);
+    return hit ?? null;
+  };
   // A bare id needs its document type to become a uuid; a uuid carries its
   // type two segments from the end (`Actor.a`, `Actor.a.Item.b`,
   // `Compendium.scope.pack.Actor.a`), and a `kind` given beside one must agree.
@@ -203,18 +288,99 @@ export function fixtureLedger(evaluate) {
      * uuid; prints it, so the run's log holds every id even if the run dies
      * before its sweep.
      */
-    track(uuidOrId, kind) {
+    track(uuidOrId, kind, marker = null) {
       const entry = normalize(uuidOrId, kind);
       if (!ledger.has(entry.uuid)) {
-        ledger.set(entry.uuid, entry);
-        console.log(`  track: ${entry.uuid}`);
+        ledger.set(entry.uuid, marker ? { ...entry, marker } : entry);
+        console.log(`  track: ${entry.uuid}${marker ? ` [${marker}]` : ""}`);
       }
       return entry.uuid;
     },
 
-    /** The ledger as it stands: `[{uuid, kind}]` in creation order. */
+    /** The ledger as it stands: `[{uuid, kind, marker?}]` in creation order. */
     tracked() {
       return [...ledger.values()];
+    },
+
+    /** The kept fixtures this run found by marker and did not build: `[{uuid, kind, marker}]`. */
+    reused() {
+      return [...reused.values()];
+    },
+
+    /**
+     * The run's record, as the lines `close()` prints: what it built and the
+     * world keeps (the ledger, with each marker), then what it found and reused.
+     */
+    report() {
+      const label = (e) => `${e.uuid}${e.marker ? ` [${e.marker}]` : ""}`;
+      return [
+        `  kept: ${ledger.size} fixture(s) built this run${ledger.size ? `: ${[...ledger.values()].map(label).join(", ")}` : ""}`,
+        `  reused: ${reused.size} kept fixture(s)${reused.size ? `: ${[...reused.values()].map(label).join(", ")}` : ""}`,
+      ];
+    },
+
+    /**
+     * The kept fixture marked `marker`, or one built now. Looks the marker up
+     * in the world's `kind` collection, or in `parent`'s embedded one, and
+     * returns `{uuid, id, name, marker, built: false}` for the one document
+     * carrying it, untracked. With none, creates `data` carrying the marker
+     * (`create`, so it is tracked) and returns it with `built: true`. Throws on
+     * two documents carrying the marker, on a hit of another kind, and on
+     * `data` that carries a marker of its own.
+     */
+    async fixture(marker, kind, data, { parent = null } = {}) {
+      if (!isTypeName(kind)) throw new Error(`foundry-capture: fixture() needs a document type name, got "${kind}"`);
+      const full = markerOf(marker);
+      const stated = data?.flags?.world?.fixture;
+      if (stated !== undefined && stated !== full) throw new Error(`foundry-capture: fixture("${full}") was handed data marked "${stated}"`);
+      const hit = await lookup(full, kind, parent);
+      if (hit) {
+        if (!ledger.has(hit.uuid)) reused.set(hit.uuid, { uuid: hit.uuid, kind, marker: full });
+        console.log(`  found: ${full} = ${hit.uuid}`);
+        return { uuid: hit.uuid, id: hit.id, name: hit.name, marker: full, built: false };
+      }
+      const flags = { ...data?.flags, world: { ...data?.flags?.world, fixture: full } };
+      const doc = await api.create(kind, { ...data, flags }, { parent });
+      return { ...doc, marker: full, built: true };
+    },
+
+    /**
+     * A setup check's delete of the kept fixture marked `marker`: the one
+     * document the lookup returns is tracked and swept alone, so nothing else
+     * on the ledger goes with it. Resolves to the sweep's `{removed, missing,
+     * failed}`, all empty when nothing carries the marker.
+     */
+    async retire(marker, kind, { parent = null } = {}) {
+      const full = markerOf(marker);
+      const hit = await lookup(full, kind, parent);
+      if (!hit) {
+        console.log(`  retire: ${full} — none standing`);
+        return { removed: [], missing: [], failed: [] };
+      }
+      reused.delete(hit.uuid);
+      api.track(hit.uuid, kind, full);
+      return api.sweepTracked({ only: [hit.uuid] });
+    },
+
+    /**
+     * Put `marker` on the document at `uuid` — what a setup check's feature
+     * produced, which is the fixture from then on — and track it. Throws when
+     * another document carries the marker already, or the write does not land.
+     */
+    async mark(uuid, marker) {
+      const entry = normalize(uuid);
+      const full = markerOf(marker);
+      const hit = await lookup(full, entry.kind, parentOf(entry.uuid));
+      if (hit && hit.uuid !== entry.uuid) throw new Error(`foundry-capture: mark(${entry.uuid}) — the marker "${full}" is on ${hit.uuid} already`);
+      if (!hit) {
+        const result = JSON.parse(await evaluate(pageMark(entry.uuid, full)));
+        if (result.error) throw new Error(`foundry-capture: mark(${entry.uuid}, "${full}") — ${result.error}`);
+      }
+      reused.delete(entry.uuid);
+      if (ledger.has(entry.uuid)) ledger.set(entry.uuid, { ...ledger.get(entry.uuid), marker: full });
+      api.track(entry.uuid, entry.kind, full);
+      console.log(`  marked: ${full} = ${entry.uuid}`);
+      return entry.uuid;
     },
 
     /**
@@ -232,19 +398,26 @@ export function fixtureLedger(evaluate) {
       const result = JSON.parse(await evaluate(pageCreate(kind, createPayload(kind, data), parent)));
       if (result.error) throw new Error(`foundry-capture: create(${kind}) — ${result.error}`);
       if (!result.doc) throw new Error(`foundry-capture: ${kind}.create resolved to nothing — a sub-type the server has not loaded (relaunch the world), or a type this seat may not create`);
-      api.track(result.doc.uuid, kind);
+      api.track(result.doc.uuid, kind, data?.flags?.world?.fixture ?? null);
       return result.doc;
     },
 
     /**
-     * Delete every tracked document, newest first, proving each is gone.
-     * Resolves to `{removed, missing, failed}`: `missing` resolved to nothing
-     * (already deleted, or never the id you thought); `failed` refused or is
-     * still present, and stays in the ledger so a retry re-runs exactly it.
-     * Deletes nothing the ledger does not name.
+     * Delete every tracked document, newest first, proving each is gone; with
+     * `only`, just the tracked uuids it lists, so a setup section deletes what
+     * it set up and leaves the run's kept fixtures standing. Resolves to
+     * `{removed, missing, failed}`: `missing` resolved to nothing (already
+     * deleted, or never the id you thought); `failed` refused or is still
+     * present, and stays in the ledger so a retry re-runs exactly it. Deletes
+     * nothing the ledger does not name, and throws on an `only` uuid it does
+     * not.
      */
-    async sweepTracked() {
-      const entries = [...ledger.values()].reverse();
+    async sweepTracked({ only = null } = {}) {
+      if (only) {
+        const strays = only.filter((uuid) => !ledger.has(uuid));
+        if (strays.length) throw new Error(`foundry-capture: sweepTracked({only}) names ${strays.join(", ")}, which this run has not tracked`);
+      }
+      const entries = [...ledger.values()].filter((e) => !only || only.includes(e.uuid)).reverse();
       if (!entries.length) return { removed: [], missing: [], failed: [] };
       const out = JSON.parse(await evaluate(pageSweep(entries)));
       for (const e of [...out.removed, ...out.missing]) ledger.delete(e.uuid);
@@ -469,8 +642,10 @@ const openWs = (url) => new Promise((resolve, reject) => {
 /**
  * Launch a throwaway browser, join the world, and return a capture handle.
  * Resolves only once `game.ready` is true, so callers never race the load.
+ * `own` is the tag the handle's fixture helpers build and look up under
+ * (`fixtureLedger`); without it they use the recipe's markers.
  */
-export async function connect({ browser, origin, user, port = 9333, width = 1600, height = 1000, readySeconds = 90 }) {
+export async function connect({ browser, origin, user, port = 9333, width = 1600, height = 1000, readySeconds = 90, own = null }) {
   for (const [k, v] of Object.entries({ browser, origin, user })) {
     if (!v) throw new Error(`foundry-capture: missing required option "${k}"`);
   }
@@ -554,7 +729,7 @@ export async function connect({ browser, origin, user, port = 9333, width = 1600
       evaluate,
     });
     // The ledger's evaluator resolves `api` lazily; the handle is defined just below.
-    const fixtures = fixtureLedger((expression) => api.eval(expression));
+    const fixtures = fixtureLedger((expression) => api.eval(expression), { own });
     const api = {
       /** Evaluate an expression in page context; awaits promises, throws on page errors. */
       async eval(expression) {
@@ -608,10 +783,9 @@ export async function connect({ browser, origin, user, port = 9333, width = 1600
 
       ...fixtures,
 
-      /** Tear the session down (see `cleanup`), printing the ledger: the fixtures this run built and the world keeps. */
+      /** Tear the session down (see `cleanup`), printing the ledger: the fixtures this run built and the world keeps, and the kept ones it reused. */
       close() {
-        const kept = fixtures.tracked();
-        if (kept.length) console.log(`  kept: ${kept.length} fixture(s): ${kept.map((e) => e.uuid).join(", ")}`);
+        for (const line of fixtures.report()) console.log(line);
         cleanup();
       },
     };

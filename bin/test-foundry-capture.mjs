@@ -4,9 +4,13 @@
  * run depends on: that the page is put back in front before its windows are
  * closed or a frame is taken, that no close waits on an animation, that a
  * toast cannot be in the frame, and that a capture nothing answers is given
- * up and tried once more. The scripted page runs the driver's own page-side
- * expressions, in a `vm` context holding the few DOM and Foundry members they
- * touch, so an expression that does not parse fails here.
+ * up and tried once more. It drives the fixture ledger against a scripted
+ * world, and checks what a kept fixture depends on: that a marker finds the
+ * one document carrying it and nothing else, that what is found is never
+ * tracked, and that a delete takes only what the run names. The scripted page
+ * and world run the driver's own page-side expressions, in `vm` contexts
+ * holding the few DOM and Foundry members they touch, so an expression that
+ * does not parse fails here.
  *
  * Nothing here launches a browser: what a real page does when it is hidden is
  * outside this file, and only a live run shows it.
@@ -21,7 +25,7 @@ import vm from "node:vm";
 
 const TEMPLATE_ROOT = path.dirname(path.dirname(url.fileURLToPath(import.meta.url)));
 const DRIVER = path.resolve(process.argv[2] ?? path.join(TEMPLATE_ROOT, "bin", "foundry-capture.mjs"));
-const { Cdp, pageKeeper, strayPages } = await import(url.pathToFileURL(DRIVER).href);
+const { Cdp, fixtureLedger, pageKeeper, strayPages } = await import(url.pathToFileURL(DRIVER).href);
 
 const OWN = "target-own";
 const TRAY = "#notifications";
@@ -143,6 +147,78 @@ function scriptedPage({ visibility = "visible", frames = true, pages = [], captu
   return page;
 }
 
+/**
+ * A scripted world for the fixture ledger. `docs` are `{kind, id, name,
+ * marker, parent}`, where `parent` is the uuid of a world document listed
+ * earlier and `marker` becomes its `flags.world.fixture`. The context holds
+ * the members the ledger's page-side expressions touch: `game.collections`,
+ * `fromUuid`, `foundry.utils.getDocumentClass` and `parseUuid`, and each
+ * document's `getEmbeddedCollection`, `update` and `delete` (a delete takes
+ * the documents embedded in it). The returned object's `evaluate` runs an
+ * expression there; `has(uuid)` says whether a document stands, `marker(uuid)`
+ * reads its marker, and `evaluations`, `creates`, `updates` and `deletes`
+ * record each call in order.
+ */
+function scriptedWorld(docs = []) {
+  const KINDS = new Set(["Actor", "Item", "Scene", "ChatMessage"]);
+  const EMBEDDED = new Set(["Item"]);
+  const world = { evaluations: 0, creates: [], updates: [], deletes: [] };
+  const byUuid = new Map();
+  const collections = new Map([...KINDS].map((kind) => [kind, new Map()]));
+  let next = 0;
+  const add = (kind, data, parent = null) => {
+    const id = data._id ?? `new${++next}`;
+    const uuid = parent ? `${parent.uuid}.${kind}.${id}` : `${kind}.${id}`;
+    const embedded = new Map();
+    const doc = {
+      id, uuid, documentName: kind, name: data.name ?? null, flags: structuredClone(data.flags ?? {}),
+      getEmbeddedCollection(name) {
+        if (!EMBEDDED.has(name)) throw new Error(`${name} is not embedded in ${kind}`);
+        if (!embedded.has(name)) embedded.set(name, new Map());
+        return embedded.get(name);
+      },
+      async update(changes) {
+        world.updates.push({ uuid, changes });
+        for (const [key, value] of Object.entries(changes)) {
+          const path = key.split(".");
+          let at = doc;
+          for (const part of path.slice(0, -1)) at = at[part] ??= {};
+          at[path.at(-1)] = value;
+        }
+        return doc;
+      },
+      async delete() {
+        world.deletes.push(uuid);
+        (parent ? parent.getEmbeddedCollection(kind) : collections.get(kind)).delete(id);
+        for (const key of [...byUuid.keys()]) if (key === uuid || key.startsWith(`${uuid}.`)) byUuid.delete(key);
+        return doc;
+      },
+    };
+    (parent ? parent.getEmbeddedCollection(kind) : collections.get(kind)).set(id, doc);
+    byUuid.set(uuid, doc);
+    return doc;
+  };
+  for (const { kind, id, name, marker, parent } of docs) {
+    add(kind, { _id: id, name, flags: marker ? { world: { fixture: marker } } : {} }, parent ? byUuid.get(parent) : null);
+  }
+  const context = vm.createContext({
+    game: { collections },
+    fromUuid: async (uuid) => byUuid.get(uuid) ?? null,
+    foundry: {
+      utils: {
+        parseUuid: (uuid) => ({ collection: KINDS.has(uuid.split(".").at(-2)) ? {} : null }),
+        getDocumentClass: (kind) => (KINDS.has(kind)
+          ? { create: async (data, options) => { world.creates.push({ kind, data, parent: options.parent?.uuid ?? null }); return add(kind, data, options.parent ?? null); } }
+          : null),
+      },
+    },
+  });
+  world.evaluate = async (expression) => { world.evaluations++; return vm.runInContext(expression, context); };
+  world.has = (uuid) => byUuid.has(uuid);
+  world.marker = (uuid) => byUuid.get(uuid)?.flags?.world?.fixture ?? null;
+  return world;
+}
+
 /** A stand-in WebSocket: keeps what was sent, and delivers a reply on demand. */
 function scriptedSocket() {
   const listeners = [];
@@ -165,6 +241,20 @@ async function collectWarnings(step) {
     return { error, lines };
   } finally {
     console.warn = original;
+  }
+}
+
+/** Run `step` with console.log collected: `{value, lines}`, or `{error, lines}` when it throws. */
+async function collectLog(step) {
+  const lines = [];
+  const original = console.log;
+  console.log = (...args) => lines.push(args.join(" "));
+  try {
+    return { value: await step(), lines };
+  } catch (error) {
+    return { error, lines };
+  } finally {
+    console.log = original;
   }
 }
 
@@ -385,6 +475,173 @@ const CASES = [
       const { value, lines } = await collectWarnings(() => pageKeeper(page.channels).capture({ subject: "#sheet" }));
       same(problems, "data", value, PNG);
       matches(problems, "warnings", lines, [/could not restore the notification tray: timeout: Runtime\.evaluate$/]);
+    },
+  },
+  {
+    name: "a fixture nothing carries is built carrying its marker and tracked; the next run finds it and tracks nothing",
+    async run(problems) {
+      const world = scriptedWorld([{ kind: "Actor", id: "named", name: "Inn" }]);
+      const first = fixtureLedger(world.evaluate);
+      const built = await collectLog(() => first.fixture("location/inn", "Actor", { name: "Inn", type: "location" }));
+      same(problems, "built", built.value, { uuid: "Actor.new1", id: "new1", name: "Inn", marker: "location/inn", built: true });
+      same(problems, "creates", world.creates.map((c) => c.data.flags), [{ world: { fixture: "location/inn" } }]);
+      same(problems, "marker on the document", world.marker("Actor.new1"), "location/inn");
+      same(problems, "first ledger", first.tracked(), [{ uuid: "Actor.new1", kind: "Actor", marker: "location/inn" }]);
+      matches(problems, "first run's log", built.lines, [/^ {2}track: Actor\.new1 \[location\/inn\]$/]);
+      const { value: again } = await collectLog(() => first.fixture("location/inn", "Actor", { name: "Inn", type: "location" }));
+      same(problems, "asked again in the same run", { built: again?.built, uuid: again?.uuid, creates: world.creates.length }, { built: false, uuid: "Actor.new1", creates: 1 });
+      same(problems, "first run reuses what it built", first.reused(), []);
+      const second = fixtureLedger(world.evaluate);
+      const found = await collectLog(() => second.fixture("location/inn", "Actor", { name: "Inn", type: "location" }));
+      same(problems, "found", found.value, { uuid: "Actor.new1", id: "new1", name: "Inn", marker: "location/inn", built: false });
+      same(problems, "creates after the second run", world.creates.length, 1);
+      same(problems, "second ledger", second.tracked(), []);
+      same(problems, "second run reused", second.reused(), [{ uuid: "Actor.new1", kind: "Actor", marker: "location/inn" }]);
+      matches(problems, "second run's log", found.lines, [/^ {2}found: location\/inn = Actor\.new1$/]);
+      same(problems, "second run's report", second.report(), ["  kept: 0 fixture(s) built this run", "  reused: 1 kept fixture(s): Actor.new1 [location/inn]"]);
+      same(problems, "first run's report", first.report(), ["  kept: 1 fixture(s) built this run: Actor.new1 [location/inn]", "  reused: 0 kept fixture(s)"]);
+    },
+  },
+  {
+    name: "two documents carrying one marker throw, naming both, and nothing is built, retired or marked",
+    async run(problems) {
+      const world = scriptedWorld([
+        { kind: "Actor", id: "a", marker: "henchmen/employer" },
+        { kind: "Actor", id: "b", marker: "henchmen/employer" },
+        { kind: "Actor", id: "c" },
+      ]);
+      const ledger = fixtureLedger(world.evaluate);
+      const twin = /2 documents carry the marker "henchmen\/employer" \(Actor\.a, Actor\.b\)/;
+      for (const [what, step] of [
+        ["fixture", () => ledger.fixture("henchmen/employer", "Actor", { name: "Employer" })],
+        ["retire", () => ledger.retire("henchmen/employer", "Actor")],
+        ["mark", () => ledger.mark("Actor.c", "henchmen/employer")],
+      ]) {
+        const { error } = await collectLog(step);
+        if (!twin.test(error?.message ?? "")) problems.push(`${what}: expected the twin error, got ${error?.message ?? "no error"}`);
+      }
+      same(problems, "writes", { creates: world.creates.length, updates: world.updates.length, deletes: world.deletes.length }, { creates: 0, updates: 0, deletes: 0 });
+      same(problems, "ledger", ledger.tracked(), []);
+    },
+  },
+  {
+    name: "a marker on a document of another kind is an error, not a miss",
+    async run(problems) {
+      const world = scriptedWorld([{ kind: "Item", id: "i", marker: "markets/stock" }]);
+      const { error } = await collectLog(() => fixtureLedger(world.evaluate).fixture("markets/stock", "Actor", { name: "Stock" }));
+      same(problems, "error", error?.message ?? null, 'foundry-capture: the marker "markets/stock" is on a Item (Item.i), not a Actor');
+      same(problems, "creates", world.creates.length, 0);
+    },
+  },
+  {
+    name: "a session's own tag builds beside the recipe's fixture, and neither lookup meets the other",
+    async run(problems) {
+      const world = scriptedWorld([{ kind: "Actor", id: "party", marker: "formation/party" }]);
+      const peer = fixtureLedger(world.evaluate, { own: "s2" });
+      const own = await collectLog(() => peer.fixture("formation/party", "Actor", { name: "Party" }));
+      same(problems, "own built", { uuid: own.value?.uuid, marker: own.value?.marker, built: own.value?.built }, { uuid: "Actor.new1", marker: "formation/party@s2", built: true });
+      same(problems, "own marker on the document", world.marker("Actor.new1"), "formation/party@s2");
+      const recipe = await collectLog(() => fixtureLedger(world.evaluate).fixture("formation/party", "Actor", { name: "Party" }));
+      same(problems, "recipe's lookup", { uuid: recipe.value?.uuid, built: recipe.value?.built, error: recipe.error?.message ?? null }, { uuid: "Actor.party", built: false, error: null });
+      const { value: ownAgain } = await collectLog(() => fixtureLedger(world.evaluate, { own: "s2" }).fixture("formation/party", "Actor", { name: "Party" }));
+      same(problems, "own found again", { uuid: ownAgain?.uuid, built: ownAgain?.built }, { uuid: "Actor.new1", built: false });
+      same(problems, "creates", world.creates.length, 1);
+      let refused = null;
+      try { fixtureLedger(world.evaluate, { own: "S 2" }); } catch (err) { refused = err.message; }
+      same(problems, "a tag that is not a slug", refused, 'foundry-capture: own tag "S 2" is not lowercase letters, digits and dashes');
+    },
+  },
+  {
+    name: "an embedded fixture is looked up inside its parent and built there",
+    async run(problems) {
+      const world = scriptedWorld([
+        { kind: "Actor", id: "beast", marker: "lib/beast" },
+        { kind: "Actor", id: "other" },
+        { kind: "Item", id: "elsewhere", marker: "lib/power", parent: "Actor.other" },
+      ]);
+      const first = fixtureLedger(world.evaluate);
+      const { value: power } = await collectLog(() => first.fixture("lib/power", "Item", { name: "Keen Nose", type: "ability" }, { parent: "Actor.beast" }));
+      same(problems, "built inside the parent", { uuid: power?.uuid, built: power?.built, parent: world.creates[0]?.parent }, { uuid: "Actor.beast.Item.new1", built: true, parent: "Actor.beast" });
+      same(problems, "first ledger", first.tracked(), [{ uuid: "Actor.beast.Item.new1", kind: "Item", marker: "lib/power" }]);
+      const { value: again } = await collectLog(() => fixtureLedger(world.evaluate).fixture("lib/power", "Item", { name: "Keen Nose", type: "ability" }, { parent: "Actor.beast" }));
+      same(problems, "found inside the parent", { uuid: again?.uuid, built: again?.built }, { uuid: "Actor.beast.Item.new1", built: false });
+      const { error } = await collectLog(() => first.fixture("lib/power", "Item", { name: "Keen Nose" }, { parent: "Actor.gone" }));
+      same(problems, "a parent that does not resolve", error?.message ?? null, 'foundry-capture: looking up "lib/power" — parent not found: Actor.gone');
+      same(problems, "creates", world.creates.length, 1);
+    },
+  },
+  {
+    name: "a marker is <feature>/<name>, data cannot carry another, and a bad one reaches no page",
+    async run(problems) {
+      const world = scriptedWorld();
+      const ledger = fixtureLedger(world.evaluate);
+      for (const marker of ["inn", "Location/inn", "a/b/c", "a/b@s2", "a/", "/b", null]) {
+        const { error } = await collectLog(() => ledger.fixture(marker, "Actor", { name: "X" }));
+        if (!/is not <feature>\/<name>/.test(error?.message ?? "")) problems.push(`marker ${JSON.stringify(marker)}: got ${error?.message ?? "no error"}`);
+      }
+      const stated = await collectLog(() => ledger.fixture("location/inn", "Actor", { name: "X", flags: { world: { fixture: "location/tavern" } } }));
+      same(problems, "data marked otherwise", stated.error?.message ?? null, 'foundry-capture: fixture("location/inn") was handed data marked "location/tavern"');
+      const kind = await collectLog(() => ledger.fixture("location/inn", "actor", { name: "X" }));
+      same(problems, "a kind that is not a type name", kind.error?.message ?? null, 'foundry-capture: fixture() needs a document type name, got "actor"');
+      same(problems, "page evaluations", world.evaluations, 0);
+    },
+  },
+  {
+    name: "retire deletes the one kept fixture alone, and the run's other fixtures stand",
+    async run(problems) {
+      const world = scriptedWorld([{ kind: "Actor", id: "employer", marker: "henchmen/employer" }]);
+      const ledger = fixtureLedger(world.evaluate);
+      const { value: hench } = await collectLog(() => ledger.fixture("henchmen/hench", "Actor", { name: "Hench" }));
+      const retired = await collectLog(() => ledger.retire("henchmen/employer", "Actor"));
+      same(problems, "removed", retired.value?.removed?.map((e) => e.uuid), ["Actor.employer"]);
+      same(problems, "deletes", world.deletes, ["Actor.employer"]);
+      same(problems, "the run's own fixture stands", { stands: world.has(hench?.uuid), ledger: ledger.tracked().map((e) => e.uuid) }, { stands: true, ledger: [hench?.uuid] });
+      const none = await collectLog(() => ledger.retire("henchmen/employer", "Actor"));
+      same(problems, "nothing standing", none.value, { removed: [], missing: [], failed: [] });
+      matches(problems, "nothing standing, said", none.lines, [/^ {2}retire: henchmen\/employer — none standing$/]);
+      same(problems, "deletes after the second retire", world.deletes.length, 1);
+    },
+  },
+  {
+    name: "a sweep limited to named uuids deletes those alone, and a uuid off the ledger is refused",
+    async run(problems) {
+      const world = scriptedWorld([{ kind: "Actor", id: "theirs" }]);
+      const ledger = fixtureLedger(world.evaluate);
+      const made = [];
+      await collectLog(async () => { for (const name of ["A", "B", "C"]) made.push((await ledger.create("Actor", { name })).uuid); });
+      const one = await ledger.sweepTracked({ only: [made[1]] });
+      same(problems, "removed", one.removed.map((e) => e.uuid), [made[1]]);
+      same(problems, "ledger after", ledger.tracked().map((e) => e.uuid), [made[0], made[2]]);
+      const { error } = await collectLog(() => ledger.sweepTracked({ only: ["Actor.theirs"] }));
+      same(problems, "off the ledger", error?.message ?? null, "foundry-capture: sweepTracked({only}) names Actor.theirs, which this run has not tracked");
+      same(problems, "theirs stands", world.has("Actor.theirs"), true);
+      await ledger.sweepTracked();
+      same(problems, "deletes, newest first", world.deletes, [made[1], made[2], made[0]]);
+    },
+  },
+  {
+    name: "mark puts the marker on what a setup produced and tracks it; a marker already elsewhere is refused",
+    async run(problems) {
+      const world = scriptedWorld([
+        { kind: "Actor", id: "made" },
+        { kind: "Actor", id: "old", marker: "importer/pregen" },
+        { kind: "Actor", id: "keeper", marker: "importer/keeper" },
+      ]);
+      const ledger = fixtureLedger(world.evaluate);
+      const taken = await collectLog(() => ledger.mark("Actor.made", "importer/pregen"));
+      same(problems, "taken", taken.error?.message ?? null, 'foundry-capture: mark(Actor.made) — the marker "importer/pregen" is on Actor.old already');
+      same(problems, "updates after the refusal", world.updates.length, 0);
+      const marked = await collectLog(() => ledger.mark("Actor.made", "importer/made"));
+      same(problems, "marked", { value: marked.value, marker: world.marker("Actor.made"), updates: world.updates.length }, { value: "Actor.made", marker: "importer/made", updates: 1 });
+      matches(problems, "marked, said", marked.lines, [/^ {2}track: Actor\.made \[importer\/made\]$/, /^ {2}marked: importer\/made = Actor\.made$/]);
+      await collectLog(() => ledger.mark("Actor.keeper", "importer/keeper"));
+      same(problems, "a document already carrying its marker is not written", world.updates.length, 1);
+      same(problems, "ledger", ledger.tracked(), [
+        { uuid: "Actor.made", kind: "Actor", marker: "importer/made" },
+        { uuid: "Actor.keeper", kind: "Actor", marker: "importer/keeper" },
+      ]);
+      const pack = await collectLog(() => ledger.mark("Compendium.acks.pack.Actor.x", "importer/pack"));
+      same(problems, "a compendium document", pack.error?.message ?? null, 'foundry-capture: "Compendium.acks.pack.Actor.x" is in a compendium — a fixture is a world document');
     },
   },
 ];
