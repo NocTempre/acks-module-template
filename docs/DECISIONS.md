@@ -3713,3 +3713,33 @@ and calls a hit of another kind an error.
 - `bin/test-foundry-capture.mjs` drives the ledger against a scripted
   world; each case fails under the edit it guards against, made to a
   scratch copy of the driver.
+
+## 2026-10-29 — A run's own leavings are its own to remove; the 2026-10-26 ruling relaxed the asking and preserved nothing — IN FORCE
+
+**Owner ruling, relayed from the 11.12.0 release coordination.** "Multiple
+times it has been requested for permission to delete test fixtures. The
+rule change was to not require it, not they must be preserved." Three
+sessions in one afternoon put a delete to the owner: a hung markets walk
+had left six chat cards carrying one marker and fifty more on the walk's
+own fixtures, a wages walk could not start over them, and the walk whose
+run made them listed them read-only and waited for a word. Each read step
+4's "every delete is by the run's own ids" as forbidding a delete of
+anything the ledger did not name, and the 2026-10-26 entry's "emptying the
+test world is the owner's call" as the only door left.
+
+**Ruled.** Step 4 gains a paragraph: what a run made before it could track
+it is that session's, clearing it is teardown, and the session lists those
+documents by id with what places each in its own run and sweeps the list.
+The keys the rule forbids are forbidden as a delete key, not as a way to
+find one's own leavings. The owner is asked for one thing, emptying the
+world. An ask before sweeping one's own leavings is a misreading, and the
+rule now says so.
+
+**Rejected — a driver helper that deletes by speaker or by time window.**
+It would be the name-keyed delete the 2026-09-05 ruling exists to refuse,
+with a new name. The listing stays a session's own read, and the sweep
+stays `pageSweep`/`sweepTracked` over ids it wrote down.
+
+**Cost.** A session decides for itself whether a leaving is its own, and a
+wrong call takes a peer's card. The listing's columns (speaker, marker,
+minute) are what makes the call checkable afterwards, in the run's log.
