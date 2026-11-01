@@ -84,7 +84,62 @@ Hooks.once("init", () => {
 });
 `;
 
+// A stylesheet that defines the scroll contract, as 8a reads one.
+const SCROLL_CONTRACT = `.acks-fixture-scroll.application .window-content {
+  overflow-y: auto;
+}
+`;
+
 const CASES = [
+  {
+    name: "a dialog with no classes key fails at its call, a bare, aliased or built one alike",
+    files: {
+      "styles/lib.css": SCROLL_CONTRACT,
+      "scripts/dialogs.mjs": `const Dialog = foundry.applications.api.DialogV2;
+export const bare = () => foundry.applications.api.DialogV2.confirm({
+  window: { title: "Bare" },
+});
+export const aliased = () => Dialog.prompt({ content: "<p>Aliased</p>" });
+export const built = () => new foundry.applications.api.DialogV2({ content: "<p>Built</p>" });
+`,
+    },
+    exit: 1,
+    fails: [
+      /^FAIL scripts\/dialogs\.mjs: line 2: dialog declares no classes/,
+      /^FAIL scripts\/dialogs\.mjs: line 5: dialog declares no classes/,
+      /^FAIL scripts\/dialogs\.mjs: line 6: dialog declares no classes/,
+    ],
+  },
+  {
+    name: "a dialog that names classes, waives them or passes its bag by name passes",
+    files: {
+      "styles/lib.css": SCROLL_CONTRACT,
+      "scripts/dialogs.mjs": `const CLASSES = ["acks-fixture-scroll"];
+const { DialogV2 } = foundry.applications.api;
+export const named = () => DialogV2.confirm({ classes: CLASSES });
+export const literal = () => DialogV2.wait({ classes: ["acks-fixture-scroll"] });
+// no-scroll: a single line of text and one button
+export const waived = () => DialogV2.confirm({ content: "<p>Sure?</p>" });
+export const spread = (more) => DialogV2.prompt({ ...more });
+export const byName = (bag) => DialogV2.prompt(bag);
+`,
+    },
+    exit: 0,
+  },
+  {
+    name: "a compound selector makes its last class the contract, not the bare module class",
+    files: {
+      "styles/lib.css": `.acks-fixture.acks-fixture-sheet.application .window-content {
+  overflow-y: auto;
+}
+`,
+      "scripts/sheet.mjs": `export const OPTIONS = { classes: ["acks-fixture", "acks-fixture-sheet"] };
+export const BARE = { classes: ["acks-fixture"] };
+`,
+    },
+    exit: 1,
+    fails: [/^FAIL scripts\/sheet\.mjs: line 2: classes array joins no scroll contract/],
+  },
   {
     name: "a helper nothing registers, called with an argument, fails at its line",
     files: {
