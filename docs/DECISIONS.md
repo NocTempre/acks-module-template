@@ -3743,3 +3743,26 @@ stays `pageSweep`/`sweepTracked` over ids it wrote down.
 **Cost.** A session decides for itself whether a leaving is its own, and a
 wrong call takes a peer's card. The listing's columns (speaker, marker,
 minute) are what makes the call checkable afterwards, in the run's log.
+
+## 2026-11-04 — A printed value found in source is fixed by the work that finds it — IN FORCE
+
+**Owner ruling, from the acks-extras 11.14 batch.** Asked whether the light
+radii and burn times hard-coded in acks-extras `lib/light.mjs` should move in
+that minor or wait for the value-extraction program, the owner answered: "Fix
+backed values to imports and also expose somewhere as editable (this is a
+global rule applying here, fix whenever caught)". Constants caught in passing
+had sat on the bug ledger since 2026-09 under that program, each one shipping
+in every release while it waited.
+
+**Ruled.** `ip-doctrine.md` gains the section "A printed value found in source
+is fixed by the work that finds it": the value arrives through the importer,
+a Judge can edit it, and with nothing imported the surface says so and shows
+no figure. A finding inside another session's in-flight file goes to that
+session.
+
+**Rejected — leaving caught values to a dedicated program.** That is the state
+the ruling ends: a program that never reaches a row leaves the value shipping.
+
+**Cost.** A change that finds a value grows by an import, an edit surface and
+a fallback, which can be larger than the change itself; a release's scope
+grows with what its work happens to touch.
