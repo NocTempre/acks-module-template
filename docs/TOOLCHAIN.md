@@ -603,8 +603,9 @@ Full ruling and its corollaries: DECISIONS, 2026-07-19.
     dispositions), `acks-hotfix` (patch scoping), `acks-minor` (minor
     scoping), `acks-release` (mechanics for all three kinds), `acks-commit`
     (one session's change out of a shared tree, and the tool that builds and
-    gates it), `acks-hygiene-sweep` (standing audit + its tooling), `acks-new-module`
-    and `acks-sync-toolchain` (run from this repo). There is **no user-level
+    gates it), `acks-hygiene-sweep` (standing audit + its tooling),
+    `acks-printed-value` (a printed value in source moved onto the importer),
+    `acks-new-module` and `acks-sync-toolchain` (run from this repo). There is **no user-level
     install**: a `~/.claude/skills/acks-*` copy sits outside every drift gate
     and once silently clobbered newer text — delete any found.
   - `.claude/rules/` — always-true doctrine loaded on demand:
