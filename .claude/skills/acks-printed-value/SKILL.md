@@ -83,8 +83,8 @@ there.
 - **No page prints the number at all.** Whether it is structural or printed
   is a doctrine call, and it goes to the owner with the search that was made.
   It is never delegated (`delegation.md`, Tier C).
-- **The read cannot be made reliable on this machine's printing.** The
-  literal still goes. The consumer declares its table, so the Judge has an
-  empty placeholder to fill by hand (`expectTables`), the surface says not
-  imported until then, and the ROADMAP row now names the missing read, with
-  what the attempt found.
+- **The read cannot be made reliable on this machine's printing.** Both
+  ways out cost something: the doctrine forbids leaving the literal on a
+  ledger row, and pulling it leaves a working surface saying not imported
+  until a Judge fills the declared table's placeholder by hand. That is the
+  owner's call; take it to them with what the attempt found.
