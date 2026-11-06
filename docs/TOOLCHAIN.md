@@ -559,11 +559,10 @@ the point); the firing module also publishes its hook names on its API object.
 Every module is an **ACKS II App** under the **ACKS II App License**. Two rules
 are non-negotiable and enforced by canon: (1) the code is proprietary — **no**
 open-source/Open-Game/compatibility license may ever be applied to it (nothing
-that lets others take the registered code); (2) the mandatory disclaimers
-(unofficial, registration number, required books, free, trademark) are stated
-clearly in each README. The canonical **`LICENSE`** (a `COPY` file, CI-enforced)
-carries the code terms; the per-module registration number and required
-publications live in the README "## License" section. Full rules and rationale:
+that lets others take the code); (2) the mandatory disclaimers (unofficial,
+required books, free, trademark) are stated clearly in each README. The
+canonical **`LICENSE`** (a `COPY` file, CI-enforced) carries the code terms; the
+per-module required publications live in the README "## License" section. Full rules and rationale:
 `docs/LICENSING.md`.
 
 ## 6. Design doctrine
@@ -729,8 +728,7 @@ one and fails the build; that strictness is what makes a missed token loud, so
 nothing else may use the shape. Handlebars quoted in prose is not a token and
 passes: `validate.mjs` has to tell an author to write `{{@root.partId}}` or
 `{{!-- helper-ok: … --}}`. Human fill-in prompts use `_[brackets]_` — the
-skeleton README's registration and required-publications lines are the
-pattern. The §10f "Getting started" prompts shipped as `{{step one: …}}`,
+skeleton README's required-publications line is the pattern. The §10f "Getting started" prompts shipped as `{{step one: …}}`,
 which `new-module.mjs` does not render (it knows only `MODULE_ID`,
 `MODULE_TITLE`, `MODULE_DESCRIPTION`, `LANG_PREFIX`, `MODULE_KEY`,
 `MODULE_NAMESPACE`), and broke template CI for three runs.

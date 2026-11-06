@@ -3811,3 +3811,27 @@ entry names.
 written with the entry at step 2. Both preflight calls in the release
 procedure take `--kind`. A gap written as `no-shot` passes the gate, and only
 a reviewer catches it.
+
+## 2026-11-06 — The disclaimer carries no registration number — IN FORCE
+
+**Owner ruling.** Autarch revised the ACKS II App License and issues no
+registration ids: an app that follows the terms needs none. The canon still
+required one — the skeleton `LICENSE` §4 said the number MUST appear in the
+public disclaimer before release, `LICENSING.md` Rule 2 forbade shipping
+without it, and the skeleton README seeded a `_[pending registration]_` line.
+acks-extras carried that placeholder through every release to 11.14.4, and
+it surfaced while drafting the module's Foundry package listing.
+
+**Ruled.** The registration clause leaves the skeleton `LICENSE` (§4 is now
+the required publications alone, and §1 no longer calls the code
+"registered"), `LICENSING.md` Rule 2, TOOLCHAIN §5c, and the skeleton README.
+A module README carries no registration line and no placeholder. The other
+disclaimers are unchanged.
+
+**Rejected — keeping the placeholder until Autarch publishes the revised
+text.** A placeholder for a number that will never be issued reads as an
+unmet obligation on every public page that quotes the README.
+
+**Cost.** `LICENSE` is a byte-identical `COPY` file, so every module's copy
+changes on its next sync, and a module pushed before the template is pushed
+fails `toolchain-check`.

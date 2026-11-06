@@ -35,29 +35,27 @@ any in-app "about"/credits surface where practical):
 
 1. **Unofficial** — not published or endorsed by Autarch LLC; the module's own
    name and developer identity stay more prominent than "ACKS II".
-2. **Registration number** — assigned by Autarch at registration; it MUST appear
-   before public release. Until assigned, carry the fill-in placeholder
-   `_[pending registration]_` — never ship a released build without the real
-   number.
-3. **Required ACKS II publications** — name the book(s) the module needs; state
+2. **Required ACKS II publications** — name the book(s) the module needs; state
    that users must own them and the module is not a substitute.
-4. **Free** — free to access and use; donations (if any) buy no advantage.
-5. **Trademark** — ACKS, ACKS II, and Adventurer Conqueror King System are
+3. **Free** — free to access and use; donations (if any) buy no advantage.
+4. **Trademark** — ACKS, ACKS II, and Adventurer Conqueror King System are
    trademarks of Autarch LLC; ACKS II content is used under the ACKS II App
    License.
+
+No registration number: Autarch issues none under the App License, so a
+disclaimer carries no number and no placeholder for one (DECISIONS 2026-11-06).
 
 ## How this is enforced (mechanism, not discipline)
 
 - **`LICENSE`** is a **canonical `COPY` file** (`manifest.mjs`): byte-identical in
   every module and checked by `toolchain-check.yml` CI. A module that deletes it
   or swaps in a permissive license **fails CI**. It carries the code-ownership
-  terms + the generic disclaimer, and points to the README for the two
-  per-module variables (registration number, required publications) — those live
-  in the README precisely because they must differ per module and so must **not**
-  sit in the byte-identical file.
+  terms + the generic disclaimer, and points to the README for the per-module
+  variable (required publications) — it lives in the README precisely because it
+  must differ per module and so must **not** sit in the byte-identical file.
 - **`README` "## License"** (module-owned, not synced) carries the per-module
-  disclaimer: registration number, required publications, unofficial/free/
-  trademark statements, and a link to `LICENSE`. The skeleton seeds the standard
+  disclaimer: required publications, unofficial/free/trademark statements, and a
+  link to `LICENSE`. The skeleton seeds the standard
   wording for new modules; keep existing modules matching it.
 - **`module.json`** sets `"license": "LICENSE"` so Foundry surfaces it in the
   module browser.

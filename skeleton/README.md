@@ -67,8 +67,6 @@ Adventurer Conqueror King System are trademarks of **Autarch LLC**.
 **Unofficial** — this is an unofficial fan module, not published or endorsed by
 Autarch LLC.
 
-**Registration #:** _[pending registration]_
-
 **Requires:** Adventurer Conqueror King System II (ACKS II) _[name the specific
 publication(s) this module needs]_. You must own them; this module is not a
 substitute for the books and is free to use.
