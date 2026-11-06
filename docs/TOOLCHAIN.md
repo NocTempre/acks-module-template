@@ -195,14 +195,18 @@ go-live gate.
 Release procedure (also encoded in the `acks-release` skill):
 
 1. Establish the release kind (above) and bump `module.json` version
-   (+ changelog if present). **Then run `node tools/release-preflight.mjs`**
-   (synced gate — it reads the bumped version): it refuses a tag that
+   (+ changelog if present). **Then run `node tools/release-preflight.mjs
+   --kind <kind> --shots-pending`** (synced gate — it reads the bumped
+   version, and refuses a run that declares no kind): it refuses a tag that
    already exists — **a published version is never retagged**; a version
    that needs fixing gets a new patch number — and requires a
    `docs/<feature>/TESTING.md` live-test recipe for every `scripts/` surface
    changed since the last tag — **changed in the working tree, committed or
    not, tracked or not**, because a release is normally prepared uncommitted.
-   The live-verify session (step 4) walks exactly those recipes.
+   The live-verify session (step 4) walks exactly those recipes. On a major
+   or minor it also holds the changelog section to §4b's shot markers and
+   lists the shots step 5 takes; the same command without `--shots-pending`,
+   run again before the tag, refuses a shot that was not taken.
 2. `npm run build:packs` — commit `packs/_source` if it changed. The compiled
    dirs are gitignored build output; there is nothing to review or discard.
 3. `npm run validate` (and `npm test` where present).
@@ -281,8 +285,19 @@ and it dates from a build nobody gated.
   advertises a UI that has since moved.
 - **Minor** — one shot per Added/Changed changelog entry that has a user-visible
   surface. An entry with no UI (an API addition, an internal refactor) gets no
-  shot; record that in the report rather than inventing a frame for it.
+  shot, and says so rather than inventing a frame for it.
 - **Hotfix** — none, unless the fix is visible in the UI *and* the user asks.
+
+**Each entry names its shot, and the preflight holds it to that.** On a major
+or a minor, every top-level Added or Changed bullet in the version's changelog
+section carries `<!-- shot: <feature-slug> -->`, one per shot it owns, naming
+`docs/releases/v<X.Y.Z>/<feature-slug>.png`, or `<!-- no-shot: <reason> -->`.
+Both are HTML comments, so neither shows in the rendered changelog or on the
+release page built from the section. `tools/release-preflight.mjs` refuses a
+bullet with neither, a reason left empty, and, on its run before the tag, a
+named PNG that is not there; its header carries the mechanics. A shot marker on
+a bullet under another heading is checked the same way without being owed. One
+shot may serve two entries when a single frame shows both.
 
 **Where they live.** `docs/releases/v<X.Y.Z>/<feature-slug>.png`, committed.
 The whole of `docs/` is on the zip denylist (§4) — the release artifact carries
@@ -382,11 +397,15 @@ the reason this driver exists.
 
 If `TEST_ENVIRONMENT.md` is absent there is no test server — so there is no
 verification session and no snapshots. Say so in the report, exactly as §4a
-already requires.
+already requires; the run before the tag then keeps `--shots-pending`, and the
+shots it lists as still to take are the gaps the report names.
 
 **Report** which shots you took and which obligations you could not meet. An
-entry with no user-visible surface is a legitimate "no shot"; a feature you
-could not get on screen is a gap, and naming it is the whole point.
+entry with no user-visible surface is a legitimate "no shot", and its marker is
+the record; a feature you could not get on screen is a gap, and naming it is
+the whole point. A gap is never written as a `no-shot`: that marker says the
+entry has no surface, and on one that has a surface it turns the gap into a
+false record.
 
 ## 5. Dev harness
 

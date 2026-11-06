@@ -3766,3 +3766,48 @@ the ruling ends: a program that never reaches a row leaves the value shipping.
 **Cost.** A change that finds a value grows by an import, an edit surface and
 a fallback, which can be larger than the change itself; a release's scope
 grows with what its work happens to touch.
+
+## 2026-11-06 — A changelog entry names its release shot, and the preflight refuses one that does not — IN FORCE
+
+**Incident.** acks-extras 11.14.0 shipped the Added entry "Overhead tokens
+from an installed compendium" with no shot in `docs/releases/v11.14.0/`, and a
+tester could not find the control it named. The tag holds 21 Added entries
+and 14 shots. §4b's one-shot-per-entry rule was prose, and
+`release-preflight.mjs` read the version, the tag and the recipes and nothing
+under `docs/releases/`. A rule written down that was broken anyway becomes a
+gate.
+
+**Ruled.** On a major or a minor, every top-level Added or Changed bullet in
+the version's CHANGELOG section carries `<!-- shot: <feature-slug> -->` or
+`<!-- no-shot: <reason> -->`. The preflight refuses a bullet with neither, a
+reason left empty, and, on its run before the tag, a named PNG that
+`docs/releases/v<version>/` does not hold in that letter case. A shot marker
+on a bullet under any other heading is checked without being owed, which is
+how acks-minor's fix-driven Fixed entry carries one. One shot may serve two
+entries. The preflight takes `--kind` and refuses a run without one, since
+the kind sets the obligation and §4 has it declared. `--shots-pending` lists a
+missing shot instead of refusing it, for the run at release step 2, before
+the live session, and for a machine with no test server.
+
+The markers are HTML comments. GitHub's Markdown API, given invented text,
+rendered a marker on its own line, one inline, and one spanning two lines all
+to nothing, so neither the changelog nor the release page built from its
+section shows them.
+
+**Rejected — counting.** Refusing when the directory holds fewer PNGs than
+the section has entries would have stopped 11.14.0, but it names no entry, it
+still needs a declaration to tell an entry with no surface from one without a
+shot, and any unrelated PNG in the directory turns it green.
+
+**Rejected — a visible link from the entry to its PNG.** §4b keeps raw PNG
+paths out of release notes so a re-shoot never breaks a published page, and
+a link would put one on every release page.
+
+**Rejected — skipping the check when no kind is given.** A gate that waives
+itself on the run that forgot a flag is the silent waiver the 2026-08-20
+entry names.
+
+**Cost.** Every Added and Changed entry of a major or minor carries a marker,
+written with the entry at step 2. Both preflight calls in the release
+procedure take `--kind`. A gap written as `no-shot` passes the gate, and only
+a reviewer catches it.
