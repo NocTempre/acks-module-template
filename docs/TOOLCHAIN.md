@@ -134,12 +134,8 @@ acks-<feature>/
 - `manifest`/`download`: `https://github.com/NocTempre/<id>/releases/latest/download/module.json|zip`.
 - Every repo keeps a `CHANGELOG.md` (newest-first `## X.Y.Z` entries; update it
   as part of every release). Repos whose history predates the file say so in a
-  preamble instead of backfilling.
-  **A bullet or guide step that names a control says where it is**, as a path
-  from what Foundry itself shows: a sidebar tab, a scene control, a sheet, or
-  `Settings tab → Game Settings → <module title> → <menu name>` (core 14's
-  labels). A guide states a window's path once and later mentions name the
-  window; a changelog bullet carries the path itself, since it is read alone.
+  preamble instead of backfilling. A bullet that names a control gives its
+  path: `.claude/rules/docs-doctrine.md`, at its `docs/guides/` bullet.
 - **Declare a pack in `packs` only once it has content** (the build harness
   skips empty packs; CI fails on declared-but-missing packs).
 - `languages`: at least `en` → `lang/en.json`.
