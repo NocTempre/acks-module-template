@@ -39,6 +39,45 @@ jobs:
             exit 1
           fi
 
+      # The release page's body is the version's own CHANGELOG section, so the
+      # notes a user finds on GitHub are the ones the release wrote. Relative
+      # links are pointed at the tag, since a release page resolves nothing
+      # relative. A version with no section still publishes (its tag is already
+      # pushed and cannot be retaken), with a body pointing at CHANGELOG.md and
+      # a warning on the run. A dry run writes the same notes to its summary.
+      - name: Release notes from CHANGELOG
+        env:
+          NOTES: ${{ runner.temp }}/release-notes.md
+          REF: ${{ inputs.dry_run && github.sha || github.ref_name }}
+        run: |
+          node -e '
+            const fs = require("fs");
+            const version = require("./module.json").version;
+            const base = `https://github.com/${process.env.GITHUB_REPOSITORY}`;
+            const at = (p) => `${base}/${fs.statSync(p).isDirectory() ? "tree" : "blob"}/${process.env.REF}/${p}`;
+            const esc = version.replace(/[.*+?^$()|[\]\\]/g, "\\$&");
+            const heading = new RegExp(`^##\\s+(?:Release\\s+)?\\[?v?${esc}\\]?(?:\\s|$)`);
+            const lines = fs.existsSync("CHANGELOG.md") ? fs.readFileSync("CHANGELOG.md", "utf8").split(/\r?\n/) : [];
+            const start = lines.findIndex((l) => heading.test(l));
+            let body;
+            if (start < 0) {
+              console.log(`::warning::CHANGELOG.md has no section for ${version}; the release page points at the file instead.`);
+              body = fs.existsSync("CHANGELOG.md") ? `See [CHANGELOG.md](${at("CHANGELOG.md")}).` : "";
+            } else {
+              let end = lines.findIndex((l, i) => i > start && /^##\s/.test(l));
+              if (end < 0) end = lines.length;
+              body = lines.slice(start + 1, end).join("\n").trim()
+                .replace(/\]\((?![a-z][a-z0-9+.-]*:|#|\/)(?:\.\/)?([^)\s#]+)(#[^)\s]*)?\)/gi,
+                  (m, p, hash = "") => fs.existsSync(p) ? `](${at(p)}${hash})` : m);
+            }
+            const footer = [["docs/GALLERY.md", "Screenshots"], ["docs/guides", "Guides"], ["CHANGELOG.md", "Full changelog"]]
+              .filter(([p]) => fs.existsSync(p)).map(([p, t]) => `[${t}](${at(p)})`);
+            if (footer.length) body += `\n\n---\n${footer.join(" · ")}`;
+            fs.writeFileSync(process.env.NOTES, body + "\n");
+          '
+          cat "$NOTES" >> "$GITHUB_STEP_SUMMARY"
+          echo "release notes: $(wc -c < "$NOTES") bytes"
+
       - name: Install dev dependencies
         run: npm ci
 
@@ -155,6 +194,7 @@ jobs:
         if: ${{ !inputs.dry_run && steps.ipscan_tree.outputs.result == 'clean' && steps.ipscan_zip.outputs.result == 'clean' }}
         uses: softprops/action-gh-release@v2
         with:
+          body_path: ${{ runner.temp }}/release-notes.md
           files: |
             module.json
             module.zip
