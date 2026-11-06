@@ -42,9 +42,11 @@ jobs:
       # The release page's body is the version's own CHANGELOG section, so the
       # notes a user finds on GitHub are the ones the release wrote. Relative
       # links are pointed at the tag, since a release page resolves nothing
-      # relative. A version with no section still publishes (its tag is already
-      # pushed and cannot be retaken), with a body pointing at CHANGELOG.md and
-      # a warning on the run. A dry run writes the same notes to its summary.
+      # relative, and hard-wrapped lines are joined, since a release page
+      # renders every newline as a break. A version with no section still
+      # publishes (its tag is already pushed and cannot be retaken), with a body
+      # pointing at CHANGELOG.md and a warning on the run. A dry run writes the
+      # same notes to its summary.
       - name: Release notes from CHANGELOG
         env:
           NOTES: ${{ runner.temp }}/release-notes.md
@@ -57,6 +59,28 @@ jobs:
             const at = (p) => `${base}/${fs.statSync(p).isDirectory() ? "tree" : "blob"}/${process.env.REF}/${p}`;
             const esc = version.replace(/[.*+?^$()|[\]\\]/g, "\\$&");
             const heading = new RegExp(`^##\\s+(?:Release\\s+)?\\[?v?${esc}\\]?(?:\\s|$)`);
+            const fenceLine = /^(```|~~~)/;
+            const opensBlock = /^(#{1,6}\s|[-*+]\s|\||>|!\[|```|~~~|-{3,}$|_{3,}$|\*{3,}$)/;
+            const ordered = /^\d+[.)]\s/;
+            // As in CommonMark, a number opens a list item after a text line
+            // only when it is 1 or the list is already open, so a wrapped line
+            // that happens to begin "15. " stays in its sentence.
+            const unwrap = (text) => {
+              const out = [];
+              let fenced = false;
+              let inOrdered = false;
+              for (const line of text.split("\n")) {
+                const t = line.trim();
+                const prev = out.length ? out[out.length - 1].trim() : "";
+                if (fenceLine.test(t)) fenced = !fenced;
+                const opens = opensBlock.test(t) || (ordered.test(t) && (/^1[.)]\s/.test(t) || inOrdered));
+                const joins = !fenced && t && prev && !opens && !/^(#{1,6}\s|\||```|~~~)/.test(prev);
+                if (joins) { out[out.length - 1] = `${out[out.length - 1].trimEnd()} ${t}`; continue; }
+                out.push(line);
+                if (t) inOrdered = ordered.test(t) && (!prev || opens);
+              }
+              return out.join("\n");
+            };
             const lines = fs.existsSync("CHANGELOG.md") ? fs.readFileSync("CHANGELOG.md", "utf8").split(/\r?\n/) : [];
             const start = lines.findIndex((l) => heading.test(l));
             let body;
@@ -66,7 +90,7 @@ jobs:
             } else {
               let end = lines.findIndex((l, i) => i > start && /^##\s/.test(l));
               if (end < 0) end = lines.length;
-              body = lines.slice(start + 1, end).join("\n").trim()
+              body = unwrap(lines.slice(start + 1, end).join("\n").trim())
                 .replace(/\]\((?![a-z][a-z0-9+.-]*:|#|\/)(?:\.\/)?([^)\s#]+)(#[^)\s]*)?\)/gi,
                   (m, p, hash = "") => fs.existsSync(p) ? `](${at(p)}${hash})` : m);
             }
