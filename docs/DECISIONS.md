@@ -3835,3 +3835,27 @@ unmet obligation on every public page that quotes the README.
 **Cost.** `LICENSE` is a byte-identical `COPY` file, so every module's copy
 changes on its next sync, and a module pushed before the template is pushed
 fails `toolchain-check`.
+
+## 2026-11-10 — A module's generated developer reference ships in the zip — IN FORCE
+
+**Owner ruling.** acks-extras gained a module map and an API reference
+generated from `scripts/`, and the owner asked for both on the docs site and
+in what ships, rebuilt by a release of any size.
+
+**Ruled.** The release workflow runs `npm run build:reference --if-present`
+after the declared-pack check and before the zip. A module that defines the
+script writes a gitignored `reference/` at its root, which the ship-by-default
+zip then carries. The script exits non-zero when the reference cannot be read
+whole, and that stops the release.
+
+**Rejected — committing the generated pages.** Several sessions edit
+`scripts/` at once; a committed copy fails a drift check at every export a
+peer adds. **Rejected — putting them under `docs/`.** `docs/` is excluded
+whole, and "nothing under `docs/` ships" stays true. **Rejected — chaining the
+build onto `build:packs`.** That script is canon (`CANONICAL_SCRIPTS`), and a
+pack build that also writes documentation hides the second job.
+
+**Cost.** TOOLCHAIN §4's "Foundry never reads a markdown file, so none ships"
+now has one exception, stated beside it. extras' reference is about 1.2 MB of
+markdown before compression. The step is live for every module the moment
+this template is pushed, and does nothing in a module without the script.

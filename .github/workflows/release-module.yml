@@ -146,10 +146,19 @@ jobs:
             if (missing) process.exit(1);
           '
 
+      # A module that defines `build:reference` writes its developer reference
+      # (a gitignored `reference/` at the module root) from the tree being
+      # released, so the zip below carries pages that match its scripts/. The
+      # script exits non-zero when the reference cannot be read whole, which
+      # stops the release before anything is zipped.
+      - name: Build the developer reference
+        run: npm run build:reference --if-present
+
       - name: Create module.zip
         run: |
           # The zip carries the FOUNDRY RUNTIME plus the root README/LICENSE that
-          # the package listing consumes — nothing else. Runtime is scripts/,
+          # the package listing consumes, and a module's generated `reference/`
+          # where it builds one — nothing else. Runtime is scripts/,
           # styles/, templates/, lang/, vendor/, ruledata/, the compiled packs/
           # and module.json; Foundry never reads a markdown file out of the
           # module directory, so docs/ in its entirety is repo-only and is read

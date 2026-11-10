@@ -151,7 +151,8 @@ matters more than propagation.)
 
 Trigger: push tag `v*`. Steps: tag/version match check → `npm ci` →
 `build:packs` → `validate` → `test` (each `--if-present`) → declared-pack
-existence check → **ship-by-default zip** → publish `module.json` + `module.zip`
+existence check → `build:reference` (`--if-present`) → **ship-by-default zip** →
+publish `module.json` + `module.zip`
 to the GitHub release. A manual "Run workflow" on a module performs a
 **dry run**: full build + validation, no tag check, no publish.
 
@@ -172,6 +173,14 @@ listing consumes, and nothing else. **Foundry never reads a markdown file out of
 a module directory** — every in-repo document (MODEL, DECISIONS, ROADMAP,
 guides, the snapshot gallery) is read on GitHub, so shipping it would add weight
 to every user's download for no consumer.
+
+A module's **generated developer reference** is the one document set that does
+ship, where the module builds one: `npm run build:reference` writes a gitignored
+`reference/` at the module root from the tree being released, on the footing of
+the compiled packs (build output, untracked, in the zip). Its consumer is the
+person reading the installed module's code, who has the scripts and not the
+repo. It is never committed and never under `docs/`. Ruling:
+[DECISIONS.md](DECISIONS.md), 2026-11-10.
 
 ### Release kinds
 
