@@ -3836,7 +3836,7 @@ unmet obligation on every public page that quotes the README.
 changes on its next sync, and a module pushed before the template is pushed
 fails `toolchain-check`.
 
-## 2026-11-10 — A module's generated developer reference ships in the zip — IN FORCE
+## 2026-11-10 — A module's generated developer reference ships in the zip — SUPERSEDED 2026-11-10, never pushed
 
 **Owner ruling.** acks-extras gained a module map and an API reference
 generated from `scripts/`, and the owner asked for both on the docs site and
@@ -3859,3 +3859,14 @@ pack build that also writes documentation hides the second job.
 now has one exception, stated beside it. extras' reference is about 1.2 MB of
 markdown before compression. The step is live for every module the moment
 this template is pushed, and does nothing in a module without the script.
+
+## 2026-11-10 — The developer reference is published, not shipped — IN FORCE
+
+**Supersedes the entry above, the same day.** New evidence: the owner had read
+the first answer as saying the pages would not reach the docs site, and asked
+for the zip so they would exist somewhere. They are on the site, and the zip
+copy has no reader the site does not serve better.
+
+**Ruled.** The release workflow's `build:reference` step is removed, with
+TOOLCHAIN §4's exception. No markdown ships beyond the root README and
+LICENSE. acks-extras' ruling is its `docs/DECISIONS.md` §27.
