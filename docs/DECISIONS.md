@@ -3908,3 +3908,25 @@ shortening any of them, and the family is single-branch by an earlier ruling.
 A fresh agent re-reads what the last one knew, and a new session re-reads the
 ledger; both are paid once per slice or batch, where a resumed agent pays its
 whole history on every call.
+
+## 2026-11-12 — Unpushed commits are named at the end of a turn — IN FORCE
+
+**Evidence.** `shared-tree.md` already has every commit reported by sha with
+whether it is pushed. A `/insights` pass over 178 sessions (2026-07-14 to
+2026-11-12) still counted about 15 that ended with commits left local, and
+one of them, a fix meant to ride a release, forced acks-extras v11.13.2. A
+lesson that recurs while written down becomes a gate.
+
+**Ruled.** A `Stop` hook, `.claude/hooks/unpushed-report.mjs`, names the
+commits the project's checkout holds that its upstream does not, and the
+template's beside it. It emits a message and no decision, shows a listing
+once per session and again when it changes, and never fetches or pushes.
+`bin/test-unpushed-report.mjs` holds it to that.
+
+**Rejected — pushing in the turn that commits.** A push waits for the owner's
+go-ahead (TOOLCHAIN §2); the hook closes the gap in what the owner is told,
+not in who decides.
+
+**Not verified.** That the desktop app shows a `Stop` hook's `systemMessage`
+is read from the hooks reference, not seen: the hook loads in sessions
+started after the sync.

@@ -108,6 +108,12 @@ jobs:
           for f in .claude/hooks/*.mjs; do node --check "$f"; done
           node bin/test-shared-tree-hooks.mjs
 
+      # The Stop hook runs at the end of every turn in every repo, so the one
+      # thing it must never do is hold a turn open or speak twice for one
+      # listing.
+      - name: Unpushed commits are named once, by sha, and the hook asks for nothing
+        run: node bin/test-unpushed-report.mjs
+
       # The sync writes canon into every module repo and its check gates every
       # push they make, and each of its guards fires only in a tree no run
       # stands in by default: an edit nobody has committed, a commit nobody has

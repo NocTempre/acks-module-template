@@ -634,10 +634,13 @@ Full ruling and its corollaries: DECISIONS, 2026-07-19.
   - `.claude/hooks/` — `single-branch-guard.mjs` (single-branch convention),
     `no-windows-path-heredoc.mjs` (Windows paths never enter Bash
     heredocs), `edit-ledger.mjs` (records each Edit and Write under its
-    session, in the git directory, for the commit tool to read) and
+    session, in the git directory, for the commit tool to read),
     `shared-tree-guard.mjs` (refuses a hand-run `git add`, `git commit` or
-    discard in a repository that carries the commit tool), wired in the
-    synced `.claude/settings.json`.
+    discard in a repository that carries the commit tool) and
+    `unpushed-report.mjs` (at the end of a turn, names by sha the commits
+    the checkout and the template beside it hold that their upstreams do
+    not; it reports and never pushes), wired in the synced
+    `.claude/settings.json`.
   - `.claude/agents/` — the model/effort routing tier: `scout` (haiku,
     search), `implementer` (sonnet, scoped changes), `architect` (opus,
     read-only design/diagnosis), `live-tester` (sonnet, drives the test
