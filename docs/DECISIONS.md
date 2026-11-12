@@ -3870,3 +3870,41 @@ copy has no reader the site does not serve better.
 **Ruled.** The release workflow's `build:reference` step is removed, with
 TOOLCHAIN §4's exception. No markdown ships beyond the root README and
 LICENSE. acks-extras' ruling is its `docs/DECISIONS.md` §27.
+
+## 2026-11-12 — One slice per agent, about ten ledger rows per session — IN FORCE
+
+**Owner ruling, after a review of the acks-extras alpha close-out
+(2026-11-08 to 2026-11-12).** One session ran the whole campaign. It minted 83
+ledger rows, 60 of them from its own findings, and resumed finished agents
+with further slices until one implementer had made 1,038 model calls. Each
+call replays the agent's whole history, so the cost of a slice rose with every
+slice before it: the session read 3.68 billion cached tokens and cost about
+$1,384 at list price. Nine implementers were started with an Opus override,
+and Opus subagents cost more than the Sonnet ones on fewer calls. One owner
+ruling was relayed to an agent in a paraphrase and built wrong.
+
+**Ruled.** The rendered `CLAUDE.md`, "Sizing the task", gains four rules, and
+the `implementer` definition (`5afd885`) carries its half of the first:
+
+- One slice, one agent; a finished agent is not resumed with new work. The
+  owner: "Adopt the two proposed sizing rules for CLAUDE.md when the drafts
+  are applied".
+- A session works about ten ledger rows and hands the next batch on; findings
+  are registered and fixed in the batch that picks them up. Same ruling.
+- The agent definition picks the model; an `implementer` takes no override.
+- An owner ruling is quoted in the brief and restated in the report. These
+  two were proposed with the review and landed on the owner's word to apply
+  the rest of it, 2026-11-12.
+
+**The exception.** The ten-row rule meets the 2026-11-04 entry, which has the
+work that finds a printed value fix it. Asked which wins, the owner answered
+"Fix on the spot". The printed-value rule stands and `ip-doctrine.md` is
+unchanged.
+
+**Rejected — one worktree per ledger row.** It isolates agents without
+shortening any of them, and the family is single-branch by an earlier ruling.
+
+**Cost.** A batch that finds a printed value grows past ten rows by that fix.
+A fresh agent re-reads what the last one knew, and a new session re-reads the
+ledger; both are paid once per slice or batch, where a resumed agent pays its
+whole history on every call.
