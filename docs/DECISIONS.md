@@ -3930,3 +3930,31 @@ not in who decides.
 **Not verified.** That the desktop app shows a `Stop` hook's `systemMessage`
 is read from the hooks reference, not seen: the hook loads in sessions
 started after the sync.
+
+## 2026-11-12 — The release workflow scans the tree once — IN FORCE
+
+**Owner ruling.** "All recommended" (2026-11-12), on the Public Beta plan's
+release-procedure design: "In CI the tree `ip-scan` step stays as the owner
+of the three-way verdict; `validate` stands down its own scan when
+`ACKS_IP_SCAN_VERDICT` is exactly `clean`; the zip scan stays."
+
+**Ruled.** The release workflow's validate step passes the tree scan's
+`result` output in as `ACKS_IP_SCAN_VERDICT`, and `validate` starts no scan
+of its own (§10) when that variable is exactly `clean`; it prints one line
+saying so. Any other value, or none, runs the scan as before, so a run by
+hand, the commit tool's gate and `ci.yml` are unchanged. The scan of the
+built zip stays. `bin/test-validate.mjs` holds the stand-down to a stub that
+leaves a marker if it ever starts, and six near-miss values to a stub that
+must.
+
+**Rejected — dropping the workflow's tree scan and keeping `validate`'s.**
+The quarantine and publish steps read the tree step's three-way verdict
+(clean, leak, tooling error), and `validate` folds the scanner's exit 1 and
+exit 2 into one failure, so a crashed scanner would read as a leak and flip
+a repo private.
+
+**Cost.** One environment variable the validator trusts: a caller that sets
+it to `clean` without scanning skips the scan. Only the workflow sets it,
+right after a scan that returned `clean`. Saved: one whole-tree scan per
+release. A module still on the old `validate.mjs` ignores the variable and
+scans twice until its next sync.

@@ -63,7 +63,9 @@
  *      tests, compares or looks the key up passes, and either failure may
  *      state why with `legacy-key-ok: <reason>`.
  *   10. IP leak scan (tools/ip-scan.mjs): local-only rules extracts, extraction
- *      pipeline state, and publisher attribution inside data files.
+ *      pipeline state, and publisher attribution inside data files. Not run
+ *      when ACKS_IP_SCAN_VERDICT is exactly `clean`, the verdict the release
+ *      workflow's own tree scan passes in.
  *   11. Optional module-owned tools/validate-extra.mjs — run last if present;
  *      a non-zero exit fails validation.
  *
@@ -153,7 +155,9 @@ function resolveSpecifier(fromFile, specifier) {
 /* The IP scan (§10) and the module's own validator (§11) are processes of
  * their own that read what the checks here read and write none of it. Both
  * are started now and run beside those checks; what each printed is shown at
- * its place below, whole, and its exit status counted there. */
+ * its place below, whole, and its exit status counted there. The IP scan is
+ * not started at all when the caller already holds a clean verdict on this
+ * tree: only the exact string `clean` in ACKS_IP_SCAN_VERDICT stands it down. */
 function runApart(script) {
   return new Promise((resolve) => {
     const child = spawn(process.execPath, [script], { stdio: ["ignore", "pipe", "pipe"] });
@@ -168,7 +172,8 @@ function runApart(script) {
 }
 const ipScan = path.join(ROOT, "tools", "ip-scan.mjs");
 const extraValidator = path.join(ROOT, "tools", "validate-extra.mjs");
-const scanning = fs.existsSync(ipScan) ? runApart(ipScan) : null;
+const scanStandsDown = process.env.ACKS_IP_SCAN_VERDICT === "clean";
+const scanning = fs.existsSync(ipScan) && !scanStandsDown ? runApart(ipScan) : null;
 const validatingExtra = fs.existsSync(extraValidator) ? runApart(extraValidator) : null;
 
 /* 1. JS syntax of every script/tool module. Each file is checked by a node of
@@ -2223,12 +2228,16 @@ function legacyKeyUses(tokens) {
 }
 
 /* 10. IP leak scan — licensed book material must never reach a public repo or a
- *    release artifact. CI runs this again against the built zip and quarantines
- *    the repo if it trips; running it here means you find out before the push. */
+ *    release artifact. The release workflow scans the tree as a step of its own
+ *    and passes that verdict in as ACKS_IP_SCAN_VERDICT, so the same scan is
+ *    not repeated here when it is `clean`; it then scans the built zip after.
+ *    Run by hand, the scan runs here and you find out before the push. */
 if (scanning) {
   const scan = await scanning;
   process.stdout.write(scan.output);
   if (scan.status !== 0) failed = true; // its own output already names the offending paths
+} else if (scanStandsDown && fs.existsSync(ipScan)) {
+  console.log("validate: IP leak scan not run here: ACKS_IP_SCAN_VERDICT=clean, the workflow's tree scan already returned clean");
 }
 
 /* 11. Optional module-owned extra validation. A repo drops tools/validate-extra.mjs

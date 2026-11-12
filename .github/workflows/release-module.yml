@@ -126,6 +126,8 @@ jobs:
 
       - name: Validate scripts, templates, JSON, and packs
         if: ${{ steps.ipscan_tree.outputs.result == 'clean' }}
+        env:
+          ACKS_IP_SCAN_VERDICT: ${{ steps.ipscan_tree.outputs.result }}
         run: npm run validate --if-present
 
       - name: Run logic tests

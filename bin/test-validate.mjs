@@ -815,6 +815,30 @@ await actor.update({ "-=old": null });
     out: [/scan: nothing flagged\r?\nextra: read the fixture/, /extra: found a problem/],
     absent: [/validate: scripts, templates, /],
   },
+  {
+    // The stub writes a marker beside the tools directory and fails; a scan that
+    // never started leaves no marker and cannot fail the run.
+    name: "a clean verdict from the caller stands the IP scan down: no child starts, one line says so, and it is no failure",
+    env: { ACKS_IP_SCAN_VERDICT: "clean" },
+    files: {
+      "tools/ip-scan.mjs": 'import fs from "node:fs";\nfs.writeFileSync(new URL("../scan-ran.marker", import.meta.url), "ran");\nconsole.log("scan: ran");\nprocess.exit(1);\n',
+    },
+    exit: 0,
+    out: [/^validate: IP leak scan not run here: ACKS_IP_SCAN_VERDICT=clean, the workflow's tree scan already returned clean$/m, /validate: scripts, templates, /],
+    absent: [/scan: ran/],
+    noFiles: ["scan-ran.marker"],
+  },
+  ...["leak", "error", "", "CLEAN", " clean", "clean "].map((verdict) => ({
+    name: `a verdict other than exactly "clean" (${JSON.stringify(verdict)}) leaves the IP scan running, and its failure fails validation`,
+    env: { ACKS_IP_SCAN_VERDICT: verdict },
+    files: {
+      "tools/ip-scan.mjs": 'import fs from "node:fs";\nfs.writeFileSync(new URL("../scan-ran.marker", import.meta.url), "ran");\nconsole.log("scan: ran");\nprocess.exit(1);\n',
+    },
+    exit: 1,
+    out: [/scan: ran/],
+    absent: [/IP leak scan not run here/, /validate: scripts, templates, /],
+    hasFiles: ["scan-ran.marker"],
+  })),
 ];
 
 const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "acks-validate-"));
@@ -832,7 +856,13 @@ try {
     fs.mkdirSync(path.join(root, "tools"), { recursive: true });
     fs.copyFileSync(VALIDATOR, path.join(root, "tools", "validate.mjs"));
 
-    const run = spawnSync(process.execPath, [path.join(root, "tools", "validate.mjs")], { encoding: "utf8" });
+    // A case declares the variables it sets; the verdict variable is stripped
+    // from the inherited env first, so a developer shell holding it changes no case.
+    const { ACKS_IP_SCAN_VERDICT: _inherited, ...inheritedEnv } = process.env;
+    const run = spawnSync(process.execPath, [path.join(root, "tools", "validate.mjs")], {
+      encoding: "utf8",
+      env: { ...inheritedEnv, ...testCase.env },
+    });
     const output = `${run.stdout}${run.stderr}`;
     const failLines = output.split(/\r?\n/).filter((line) => line.startsWith("FAIL "));
     const problems = [];
@@ -841,6 +871,8 @@ try {
     for (const line of failLines) if (!(testCase.fails ?? []).some((re) => re.test(line))) problems.push(`unexpected ${line}`);
     for (const re of testCase.out ?? []) if (!re.test(output)) problems.push(`output lacks ${re}`);
     for (const re of testCase.absent ?? []) if (re.test(output)) problems.push(`output carries ${re}`);
+    for (const rel of testCase.noFiles ?? []) if (fs.existsSync(path.join(root, rel))) problems.push(`${rel} exists`);
+    for (const rel of testCase.hasFiles ?? []) if (!fs.existsSync(path.join(root, rel))) problems.push(`${rel} is missing`);
 
     if (problems.length) {
       failures++;
