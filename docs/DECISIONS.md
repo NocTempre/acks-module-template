@@ -3958,3 +3958,50 @@ it to `clean` without scanning skips the scan. Only the workflow sets it,
 right after a scan that returned `clean`. Saved: one whole-tree scan per
 release. A module still on the old `validate.mjs` ignores the variable and
 scans twice until its next sync.
+
+## 2026-11-12 — A release is versioned by its day — IN FORCE
+
+**Owner ruling.** For the Public Beta: a release on 15 December 2026 is
+`2026.12.15`, tagged `v2026.12.15`, under the heading
+`## 2026.12.15 — Public Beta`; a fix released that afternoon is
+`2026.12.15.1`. On the design's open questions the owner answered "All
+recommended" (2026-11-12): the local clock of the machine that cuts the
+release names the day (R4); a version whose date is not today warns, never
+refuses (R5); the kind is recorded in the release commit's subject,
+`Release 2026.12.15 (major) — …` (R6); "Public Beta" is on every heading and
+title until the owner names a new stage (R7).
+
+**Ruled.** `validate` checks only a shape Foundry can order: three numeric
+parts, an optional fourth from 1, no leading zero. It still passes `11.14.5`
+and the skeleton's `0.1.0`. The preflight owns the date, at release time:
+`version-date` refuses a version that is not `YYYY.M.D[.N]`, a date that
+does not exist and a date after today, and warns on one before today;
+`version-order` refuses a version not newer than every `v*` tag, local and on
+origin, by Foundry's numeric part compare, and one that is not the day's next
+(the bare date, else the highest `.N` plus one), and prints the version it
+expects. A retag refusal names today's next version instead of "a new patch".
+The release workflow titles the GitHub release with the version's CHANGELOG
+heading text, so the stage label reaches the release page, and with the tag
+where there is no section. TOOLCHAIN §2–§4b, the release, minor, hotfix and
+triage skills, `shared-tree.md` and the skeleton's `CLAUDE.md` say
+`v<version>` and "the day's next version". The kind keeps its meaning; what
+each kind requires is a later entry.
+
+**Rejected.** The full date grammar in `validate`: every module's commit gate
+would go red between the sync and its first date bump, and the scaffold's
+`0.1.0` would fail CI. A stage word inside the version: Foundry compares a
+non-numeric part as a string, so `2026.12.15-beta` reads older than
+`2026.12.9`. A refusal when the date is not today: re-dating edits
+`module.json`, the heading and the shot folder after the tree was gated. A
+date check in CI, which runs on UTC. Marking the GitHub release a
+prerelease: a prerelease cannot be "latest", so the manifest URL would keep
+serving the last full release. `git describe` as the last version: it is the
+nearest tag in history, not the highest; it still drives the recipe check.
+
+**Cost.** A one-way door: once a date version ships, every semver number
+reads older to Foundry for good. The number no longer says how big a release
+is; the commit subject carries the kind instead. A release cut in the
+evening carries a date GitHub does not show (its timestamps are UTC). A
+module whose `module.json` still holds a semver number fails the preflight's
+`version-date` until it bumps to a date, which is the bump its next release
+makes anyway.

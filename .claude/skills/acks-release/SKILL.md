@@ -20,7 +20,7 @@ to capture on screen:
 | **Hotfix** | None, unless the fix is UI-visible *and* the user asks |
 
 **A major release is always explicit.** Never infer one from a large diff, a
-long changelog, or a `1.0.0`-looking bump — ask. Everything else in this
+long changelog, or the shape of the version number — ask. Everything else in this
 procedure is identical for all three kinds: a hotfix does not skip the live
 gate.
 
@@ -34,7 +34,7 @@ tag.
 **Keep a checkpoint, and resume from what the world says.** A release often
 outlasts its session: a limit lands between the commit and the push, or after
 the tag and before the checks. As each step below ends, append one line to
-`C:\Proj\acks-rules\release-checkpoints\<repo>-v<X.Y.Z>.md` (LOCAL-ONLY, beside
+`C:\Proj\acks-rules\release-checkpoints\<repo>-v<version>.md` (LOCAL-ONLY, beside
 the intake ledger; the session's scratch space where that shelf is absent):
 the step, its result, the output line that shows it, `HEAD`, and from step 6
 the gated tree id and the release commit's sha.
@@ -45,7 +45,7 @@ believed, and a peer may have committed, tagged or published since:
 
 | Question | Read |
 |---|---|
-| Is the version still free, or already this release? | `git fetch -q --tags origin`, then `git tag -l v<X.Y.Z>` and `git ls-remote --tags origin v<X.Y.Z>` |
+| Is the version still free, or already this release? | `git fetch -q --tags origin`, then `git tag -l v<version>` and `git ls-remote --tags origin v<version>` |
 | Is the release committed, and is it the gated tree? | `git log --oneline -8`; `git rev-parse <sha>^{tree}` against the checkpoint |
 | Is the commit on origin? | `git branch -r --contains <sha>` |
 | Did every workflow pass? | step 7a's call |
@@ -84,15 +84,17 @@ the full pipeline (build + validate, no publish) is available anytime:
    firing on anything runnable here means this step was skipped.
 2. Read `git tag --sort=-v:refname | head -3` first: an open CHANGELOG
    heading reserves nothing, and a peer may have shipped the number it names.
-   Bump `version` in `module.json` (plain semver X.Y.Z). Update `CHANGELOG.md`
+   Set `version` in `module.json` to the release day, `YYYY.M.D`, with `.N`
+   for a later release that day (the preflight prints the day's next version
+   and refuses any other). Update `CHANGELOG.md`
    if the repo has one. On a major or minor, every Added and Changed bullet
    names its shot as it is written: `<!-- shot: <feature-slug> -->` for
-   `docs/releases/v<X.Y.Z>/<feature-slug>.png`, or `<!-- no-shot: <reason> -->`
+   `docs/releases/v<version>/<feature-slug>.png`, or `<!-- no-shot: <reason> -->`
    where the entry has no user-visible surface (TOOLCHAIN §4b). **Then run
    `node tools/release-preflight.mjs --kind <kind> --shots-pending` — a red
    result stops the release.** It refuses a run with no kind, reads the bumped
-   version, refuses a tag that already exists (never retag; bump a new patch
-   instead), lists the `docs/<feature>/TESTING.md` recipes for every surface
+   version, refuses a tag that already exists (never retag; the release is
+   the day's next version, which it prints), lists the `docs/<feature>/TESTING.md` recipes for every surface
    changed since the last tag — step 5 walks exactly those recipes, and a
    changed surface with no recipe means writing the recipe IS part of this
    release — and refuses a bullet with no marker, then lists the shots step
@@ -113,7 +115,7 @@ the full pipeline (build + validate, no publish) is available anytime:
    this same live session, before you shut the world down.** A shot staged
    later proves nothing about the release. Skip only for a hotfix with no
    requested shot, or where §4a itself was skipped for want of a test server.
-   - Save to `docs/releases/v<X.Y.Z>/<feature-slug>.png` (PNG, cropped to the
+   - Save to `docs/releases/v<version>/<feature-slug>.png` (PNG, cropped to the
      window, ~300 KB ceiling). A previous release's directory may be rewritten
      where its surface changed; a minor never re-captures surfaces its
      changes did not touch.
@@ -143,16 +145,17 @@ the full pipeline (build + validate, no publish) is available anytime:
      before the commit. Where §4a was skipped for want of a test server, keep
      the flag; what it lists as still to take is the report's list of gaps.
 6. Commit through **`acks-commit`**, `land --no-push` (snapshots and
-   `docs/GALLERY.md` included); the push is this step's own, below. Its gate
+   `docs/GALLERY.md` included), with the subject
+   `Release <version> (<kind>) — …`; the push is this step's own, below. Its gate
    runs steps 3–4 again on the release's own tree in a
    clone, which is the tree CI will build; step 4's run in the working tree
    read every session's in-flight hunks. A release takes no carried base: a
    commit that lands under the gate means the gate runs again.
    Then run step 5a's preflight command once more, immediately before
    the tag: a peer may have published the number since step 2, and the answer
-   is the next patch. Tag the release commit's own sha, exactly
+   is the day's next version. Tag the release commit's own sha, exactly
    `v<module.json version>`, and push that sha with its tag in one motion:
-   `git tag v<X.Y.Z> <sha> && git push --atomic origin <sha>:refs/heads/<branch> refs/tags/v<X.Y.Z>`
+   `git tag v<version> <sha> && git push --atomic origin <sha>:refs/heads/<branch> refs/tags/v<version>`
    (CI fails the release if tag and manifest version differ. Never
    `--tags`: it pushes every tag the clone holds.)
    - If the remote rejects the push with a server error
@@ -161,7 +164,7 @@ the full pipeline (build + validate, no publish) is available anytime:
      its status page all answer. Do not look for a local cause first. The
      push is atomic, so nothing is published; read both refs once to
      confirm it:
-     `git ls-remote origin refs/heads/<branch> refs/tags/v<X.Y.Z>`
+     `git ls-remote origin refs/heads/<branch> refs/tags/v<version>`
      Then repeat the push alone (the tag is made, and the line above would
      stop at `git tag`) every ~90s for at most ~15 minutes, in the
      background as step 7 polls. Read both refs before each attempt and
@@ -181,7 +184,7 @@ the full pipeline (build + validate, no publish) is available anytime:
      then `git branch -r --contains <sha>` names `origin/<branch>`), and
      the atomic push is refused as a non-fast-forward. Only the tag is
      left, and it goes alone:
-     `git push origin refs/tags/v<X.Y.Z>`
+     `git push origin refs/tags/v<version>`
      If step 2's read now shows a later version, stop and report instead:
      an older release is not published behind a newer one. The companion
      workflows ran on the peer's push, so 7a reads them at the sha origin's
@@ -190,7 +193,7 @@ the full pipeline (build + validate, no publish) is available anytime:
    `gh run watch`** (it blocks forever through GitHub API outages, which
    happen; 2026-07-16 stranded several agents this way). Poll with your
    harness's non-blocking waiting (background until-loop or Monitor with a
-   timeout), checking `gh release view v<X.Y.Z> --json assets` every ~30s
+   timeout), checking `gh release view v<version> --json assets` every ~30s
    for at most ~5 minutes. The workflow itself takes ~30s when healthy.
    - If the API returns 5xx: GitHub is down, not the release. The tag is
      pushed; CI fires or finishes on its own. Report "published pending
@@ -229,8 +232,8 @@ the full pipeline (build + validate, no publish) is available anytime:
    only, not checked, and what the release left stale. Each status is quoted
    from the command that returned it.
 
-Never force-push tags over a published release; cut a new patch version
-instead.
+Never force-push tags over a published release; the release is the day's
+next version, which the preflight prints.
 
 There is no release-cadence rule: ship whenever the gates pass, as often as
 the work warrants. The quality control is the preflight's recipe walk, not a

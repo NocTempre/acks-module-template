@@ -119,7 +119,7 @@ never derived. Ask if unclear; a major is always explicit. All three pass the
 same gates (build, validate, live-verify, snapshot obligations by kind);
 `/acks-release` walks the procedure and TOOLCHAIN §4 is canon. Never
 `gh run watch` (it hangs) — bounded polls only. Never retag a published
-release — cut a new patch.
+release — the release is the day's next version.
 
 **A release ships the JUDGE TOOLS for what it adds, unless the user says
 otherwise.** A schema a Judge cannot populate and an importer that never writes
@@ -133,7 +133,7 @@ renders and hides exactly this.
 
 ## Conventions
 
-- **Single branch: `main`**; tags `v<semver>` are the only other refs. Never
+- **Single branch: `main`**; tags `v<version>` are the only other refs. Never
   create a branch or a worktree — `.claude/hooks/single-branch-guard.mjs`
   enforces it and warns a misplaced session at startup. `worktree.bgIsolation`
   is `none` (read at daemon start — restart the app after changing it).

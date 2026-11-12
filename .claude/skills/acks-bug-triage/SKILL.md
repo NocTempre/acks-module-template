@@ -240,7 +240,7 @@ Nothing resolves silently. Two audiences:
   ```
 
   The comment is plain second person, present tense, and says what now
-  holds: a code fix names the version that carries it ("Fixed in v3.6.4 —
+  holds: a code fix names the version that carries it ("Fixed in v2026.12.15.1 —
   ...") and waits until that version is actually published; a docs gap
   links the page that now says it; a false report explains the behaviour and
   cites where it is documented, without condescension — they read the code's

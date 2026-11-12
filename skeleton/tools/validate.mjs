@@ -20,7 +20,10 @@
  *      (which must carry an `id`), packs/_source/**.
  *   4. Pack-source invariants: 16-char alphanumeric _id, _key ending in _id,
  *      no duplicate _id within a pack.
- *   5. module.json invariants: semver version, compatibility.minimum present,
+ *   5. module.json invariants: a version of three or four dot-separated
+ *      numbers with no leading zero and no fourth part of 0 (the shape Foundry
+ *      can order; the release preflight owns the date rules),
+ *      compatibility.minimum present,
  *      declared esmodules/scripts/styles/languages/packs paths exist (checked
  *      CASE-SENSITIVELY against the real directory entries, since existsSync
  *      follows the local filesystem's case rules and NTFS lets a mismatch
@@ -707,7 +710,8 @@ if (fs.existsSync(sourceRoot)) {
 if (module_) {
   const m = module_;
   if (!m.id) fail("module.json", "missing id");
-  if (!/^\d+\.\d+\.\d+$/.test(m.version ?? "")) fail("module.json", `version "${m.version}" is not plain semver X.Y.Z`);
+  // Only the shape Foundry can order; the date rules belong to the release preflight.
+  if (!/^(0|[1-9]\d*)(\.(0|[1-9]\d*)){2}(\.[1-9]\d*)?$/.test(m.version ?? "")) fail("module.json", `version "${m.version}" is not a version Foundry can order — YYYY.M.D, with an optional .N from 1 for a later release that day, and no leading zeros`);
   if (!m.compatibility?.minimum) fail("module.json", "missing compatibility.minimum");
   for (const field of ["esmodules", "scripts", "styles"]) {
     for (const p of m[field] ?? []) {

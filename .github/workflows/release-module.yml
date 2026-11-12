@@ -48,6 +48,7 @@ jobs:
       # pointing at CHANGELOG.md and a warning on the run. A dry run writes the
       # same notes to its summary.
       - name: Release notes from CHANGELOG
+        id: notes
         env:
           NOTES: ${{ runner.temp }}/release-notes.md
           REF: ${{ inputs.dry_run && github.sha || github.ref_name }}
@@ -83,6 +84,11 @@ jobs:
             };
             const lines = fs.existsSync("CHANGELOG.md") ? fs.readFileSync("CHANGELOG.md", "utf8").split(/\r?\n/) : [];
             const start = lines.findIndex((l) => heading.test(l));
+            // The release page is titled by the heading text of the section, so
+            // a label the heading carries reaches the page; with no section the
+            // title is the tag.
+            const title = start < 0 ? `v${version}` : lines[start].replace(/^##\s+/, "").trim();
+            fs.appendFileSync(process.env.GITHUB_OUTPUT, `title=${title}\n`);
             let body;
             if (start < 0) {
               console.log(`::warning::CHANGELOG.md has no section for ${version}; the release page points at the file instead.`);
@@ -220,6 +226,7 @@ jobs:
         if: ${{ !inputs.dry_run && steps.ipscan_tree.outputs.result == 'clean' && steps.ipscan_zip.outputs.result == 'clean' }}
         uses: softprops/action-gh-release@v2
         with:
+          name: ${{ steps.notes.outputs.title || github.ref_name }}
           body_path: ${{ runner.temp }}/release-notes.md
           files: |
             module.json

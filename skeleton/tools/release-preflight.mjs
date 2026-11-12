@@ -8,7 +8,8 @@
  *      refused rather than guessed.
  *   2. The tag (v<module.json version>, or --tag) does not already exist,
  *      locally or on origin. A published tag is never reused — a version that
- *      needs fixing gets a new patch number, not a retag.
+ *      needs fixing is released as the day's next version (check 6), not
+ *      retagged.
  *   3. Every feature surface changed since the last v* tag has a live-test
  *      recipe: `scripts/<feature>/**` maps to `docs/<feature>/TESTING.md`,
  *      and files directly under `scripts/` map to `docs/TESTING.md`. The
@@ -37,12 +38,25 @@
  *      a machine with no test server, where no session takes them and the
  *      release report names each one. A hotfix owes no shot and skips the
  *      check.
+ *   5. `version-date`, on every kind: module.json's version is a release day,
+ *      `YYYY.M.D` with no leading zeros and an optional `.N` from 1 for a
+ *      later release that day. The date must exist and must not be after
+ *      today; a date before today warns and never fails. Today is the local
+ *      date of the machine running the preflight, so CI, which runs on UTC,
+ *      never judges the date.
+ *   6. `version-order`, on every kind: the version is newer than every v* tag,
+ *      local and on origin, whose version has the shape validate accepts,
+ *      compared part by part as Foundry compares versions, and it is the
+ *      day's next version: the bare date when no tag names that day, else the
+ *      highest `.N` on that day plus one. A refusal prints the version it
+ *      expects. Tags are never sorted as strings and `git describe` is not
+ *      the last version: it names the nearest tag in history, not the highest.
  *
  * Exit 0 prints the recipes to walk and the shots the entries name; exit 1
  * lists every failure. A repo with no v* tag yet (first release) skips
  * check 3.
  *
- * Usage: node tools/release-preflight.mjs --kind major|minor|hotfix [--tag vX.Y.Z] [--shots-pending]
+ * Usage: node tools/release-preflight.mjs --kind major|minor|hotfix [--tag v<version>] [--shots-pending]
  */
 import { execFileSync } from "node:child_process";
 import fs from "node:fs";
@@ -70,15 +84,77 @@ if (tagArg && tagArg !== `v${moduleJson.version}`) {
   fail(`tag ${tagArg} does not match module.json version ${moduleJson.version}`);
 }
 
-if (git("tag", "-l", tag)) {
-  fail(`tag ${tag} already exists locally — never retag; bump to a new patch version`);
+/** The shape of a version Foundry can order; validate.mjs holds the same test. */
+const ORDERABLE = /^(0|[1-9]\d*)(\.(0|[1-9]\d*)){2}(\.[1-9]\d*)?$/u;
+/** A release day, `YYYY.M.D`, with an optional `.N` from 1 for a later release that day. */
+const DATE_SHAPE = /^([1-9]\d{3})\.([1-9]|1[0-2])\.([1-9]|[12]\d|3[01])(?:\.([1-9]\d*))?$/u;
+
+/**
+ * Foundry's version compare, part by part: two numeric parts that differ
+ * order numerically, parts that are equal as numbers but differ as strings
+ * and non-numeric parts order as strings, and a longer version whose leading
+ * parts are equal is the newer. Returns 1, -1 or 0.
+ */
+function compareVersions(a, b) {
+  const pa = a.split(".");
+  const pb = b.split(".");
+  for (let i = 0; i < Math.max(pa.length, pb.length); i++) {
+    if (pa[i] === undefined) return -1;
+    if (pb[i] === undefined) return 1;
+    if (/^\d+$/u.test(pa[i]) && /^\d+$/u.test(pb[i]) && Number(pa[i]) !== Number(pb[i])) return Number(pa[i]) > Number(pb[i]) ? 1 : -1;
+    if (pa[i] !== pb[i]) return pa[i] > pb[i] ? 1 : -1;
+  }
+  return 0;
 }
+
+/** The release day a version names, as `{ y, m, d, n, day }`, or null where its shape is not a day or the day does not exist. */
+function releaseDay(version) {
+  const m = DATE_SHAPE.exec(version);
+  if (!m) return null;
+  const [y, mo, d] = [Number(m[1]), Number(m[2]), Number(m[3])];
+  const real = new Date(y, mo - 1, d);
+  if (real.getFullYear() !== y || real.getMonth() !== mo - 1 || real.getDate() !== d) return null;
+  return { y, m: mo, d, n: m[4] ? Number(m[4]) : 0, day: `${y}.${mo}.${d}` };
+}
+
+const nowDate = new Date();
+const today = { y: nowDate.getFullYear(), m: nowDate.getMonth() + 1, d: nowDate.getDate() };
+today.day = `${today.y}.${today.m}.${today.d}`;
+
+// Every v* tag, local and on origin. Both are read whole: the retag check and
+// the version order need the same list, and one unreachable origin is noted once.
+const tagNames = new Set(git("tag", "-l", "v*").split("\n").filter(Boolean));
+const localTags = new Set(tagNames);
+const remoteTags = new Set();
 try {
-  if (execFileSync("git", ["-C", ROOT, "ls-remote", "--tags", "origin", tag], { encoding: "utf8" }).trim()) {
-    fail(`tag ${tag} already exists on origin — never retag; bump to a new patch version`);
+  for (const line of execFileSync("git", ["-C", ROOT, "ls-remote", "--tags", "origin", "v*"], { encoding: "utf8" }).split("\n")) {
+    const name = line.split("\t")[1]?.replace(/^refs\/tags\//u, "").replace(/\^\{\}$/u, "");
+    if (name) {
+      remoteTags.add(name);
+      tagNames.add(name);
+    }
   }
 } catch {
   console.log("note: could not reach origin to check remote tags — verify manually");
+}
+const tagVersions = [...tagNames].map((t) => t.slice(1)).filter((v) => ORDERABLE.test(v));
+
+/** The day's next version: the bare date where no tag names that day, else the day's highest `.N` plus one. */
+function nextOfDay(day) {
+  let highest = -1;
+  for (const v of tagVersions) {
+    if (v === day) highest = Math.max(highest, 0);
+    else if (v.startsWith(`${day}.`) && /^\d+$/u.test(v.slice(day.length + 1))) highest = Math.max(highest, Number(v.slice(day.length + 1)));
+  }
+  return highest < 0 ? day : `${day}.${highest + 1}`;
+}
+
+const todaysNext = nextOfDay(today.day);
+if (localTags.has(tag)) {
+  fail(`tag ${tag} already exists locally — never retag; this release is ${todaysNext}`);
+}
+if (remoteTags.has(tag)) {
+  fail(`tag ${tag} already exists on origin — never retag; this release is ${todaysNext}`);
 }
 
 let lastTag = "";
@@ -190,6 +266,29 @@ if (kind === "major" || kind === "minor") {
       if (!exists && !shotsPending) fail(`${where} names ${file}, which does not exist — take the shot in the live session (TOOLCHAIN §4b); --shots-pending lists it instead, before that session or where this machine has no test server (§4a)`);
       shots.push({ file, where, exists });
     }
+  }
+}
+
+const releaseVersion = String(moduleJson.version);
+const releaseOn = releaseDay(releaseVersion);
+if (!releaseOn) {
+  fail(`version-date: ${releaseVersion} ${DATE_SHAPE.test(releaseVersion) ? "names a date that does not exist" : "is not a release day — YYYY.M.D, with no leading zeros and an optional .N from 1 for a later release that day"}`);
+} else {
+  const sign = Math.sign(releaseOn.y - today.y || releaseOn.m - today.m || releaseOn.d - today.d);
+  if (sign > 0) fail(`version-date: ${releaseVersion} is after today (${today.day}) — a version names the day it is released`);
+  else if (sign < 0) console.log(`warn version-date: ${releaseVersion} names ${releaseOn.day}, before today (${today.day})`);
+}
+
+if (ORDERABLE.test(releaseVersion)) {
+  const notNewer = tagVersions.filter((t) => compareVersions(releaseVersion, t) <= 0).sort(compareVersions);
+  const newest = [...tagVersions].sort(compareVersions).at(-1);
+  const own = releaseOn ? nextOfDay(releaseOn.day) : null;
+  if (notNewer.length) {
+    // The day's next on the version's own day is expected only where it is itself newer than every tag.
+    const expected = own && compareVersions(own, newest) > 0 ? own : todaysNext;
+    fail(`version-order: ${releaseVersion} is not newer than tag v${notNewer.at(-1)} — this release is ${expected}`);
+  } else if (own && releaseVersion !== own) {
+    fail(`version-order: ${releaseVersion} is not the day's next version — this release is ${own}`);
   }
 }
 

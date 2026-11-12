@@ -83,7 +83,7 @@ acks-<feature>/
   so the ask names them. A go-ahead to push never covers a force-push,
   anything that could carry licensed text, or publishing a previously-private
   repo: each is asked for by name.
-- **Tags: `v<semver>`** and the tag MUST equal `module.json` `version`
+- **Tags: `v<version>`** and the tag MUST equal `module.json` `version`
   (CI enforces this).
 - **Compiled LevelDB packs are NOT committed** (changed 2026-07-19; they were,
   for no benefit). `packs/*` is gitignored except `packs/_source/`. They are
@@ -109,7 +109,19 @@ acks-<feature>/
 ## 3. module.json conventions
 
 - `id` == repo name == npm package name; `title` = `ACKS II — <Feature>`.
-- `version`: plain semver `X.Y.Z`. Bump before tagging.
+- `version`: the release day, `YYYY.M.D` (no leading zeros), with a fourth
+  part `.N` (from 1) for a later release that day — a release on 15 December
+  2026 is `2026.12.15`, a fix released that afternoon `2026.12.15.1`. The
+  local clock of the machine that cuts the release names the day. Set it
+  before tagging. `validate` checks only a shape Foundry can order (three
+  numeric parts, an optional fourth from 1, no leading zero); the preflight's
+  `version-date` check refuses a date that does not exist or is after today
+  and warns on one before today, and its `version-order` check refuses a
+  version not newer than every `v*` tag (Foundry's numeric part compare) or
+  not the day's next — the bare date, else the highest `.N` plus one — and
+  prints the version it expects. A date version is a one-way door: once one
+  ships, any semver number reads older to Foundry. `package.json`'s version
+  is never the release version.
 - `compatibility`: `minimum: "14"`, `verified: "14.364"` (raise `verified` as
   tested, and recapture validate.mjs's core helper list with it — §5; existing
   modules keep their historical minimums until retested).
@@ -124,7 +136,7 @@ acks-<feature>/
   module (none today — the importer → extras edge closed 2026-09-01): declare
   it in `requires`, but do NOT compute or bump `compatibility.minimum`. Let a real
   incompatibility surface in live testing and roll the floor into that module's
-  own next patch, naturally. (Third-party deps like lib-wrapper/socketlib still
+  own next release, naturally. (Third-party deps like lib-wrapper/socketlib still
   carry their real minimums — this waiver is intra-family only.)
 - A dependency the module can genuinely run without (a native fallback exists
   and is maintained — e.g. the `game.socket` path when socketlib is inactive)
@@ -132,8 +144,10 @@ acks-<feature>/
   module cannot degrade around.
 - `url`: `https://github.com/NocTempre/<id>` (the repo), on every module.
 - `manifest`/`download`: `https://github.com/NocTempre/<id>/releases/latest/download/module.json|zip`.
-- Every repo keeps a `CHANGELOG.md` (newest-first `## X.Y.Z` entries; update it
-  as part of every release). Repos whose history predates the file say so in a
+- Every repo keeps a `CHANGELOG.md` (newest-first `## <version> — <stage>` entries,
+  e.g. `## 2026.12.15 — Public Beta`; update it as part of every release). The
+  stage label is on every heading until the owner names a new one, and the
+  heading's text is the release's title. Repos whose history predates the file say so in a
   preamble instead of backfilling. A bullet that names a control gives its
   path: `.claude/rules/docs-doctrine.md`, at its `docs/guides/` bullet.
 - **Declare a pack in `packs` only once it has content** (the build harness
@@ -176,16 +190,17 @@ to every user's download for no consumer.
 ### Release kinds
 
 Every release is one of three kinds, and the kind is **declared, not derived**.
-It is not read off the version number — this family is pre-1.0, so the semver
-major digit says nothing about how big a release is. Ask which kind is intended
+It is not read off the version number — the number is a date and says nothing
+about how big a release is; the kind is recorded in the release commit's
+subject (`Release 2026.12.15 (major) — …`). Ask which kind is intended
 whenever the user has not said. A **major release is only ever explicit**; it is
 never inferred from the size of a diff.
 
-| Kind | Typical bump | Snapshot obligation (§4b) |
-|---|---|---|
-| **Major** | headline release, declared | **Full gallery refresh** — re-shoot every feature area, changed or not |
-| **Minor** | new features, `0.X.0` | **Changed features only** — one shot per user-visible changelog entry |
-| **Hotfix** | patch, `0.0.X` | **None**, unless the fix is UI-visible *and* the user asks for a shot |
+| Kind | Snapshot obligation (§4b) |
+|---|---|
+| **Major** | **Full gallery refresh** — re-shoot every feature area, changed or not |
+| **Minor** | **Changed features only** — one shot per user-visible changelog entry |
+| **Hotfix** | **None**, unless the fix is UI-visible *and* the user asks for a shot |
 
 The kind sets the snapshot obligation and nothing else. Every other gate —
 build, validate, test, the §4a live-verification gate, the bounded publication
@@ -198,8 +213,9 @@ Release procedure (also encoded in the `acks-release` skill):
    (+ changelog if present). **Then run `node tools/release-preflight.mjs
    --kind <kind> --shots-pending`** (synced gate — it reads the bumped
    version, and refuses a run that declares no kind): it refuses a tag that
-   already exists — **a published version is never retagged**; a version
-   that needs fixing gets a new patch number — and requires a
+   already exists — **a published version is never retagged**; the release
+   is then the day's next version, which the preflight computes and prints
+   — and requires a
    `docs/<feature>/TESTING.md` live-test recipe for every `scripts/` surface
    changed since the last tag — **changed in the working tree, committed or
    not, tracked or not**, because a release is normally prepared uncommitted.
@@ -215,7 +231,8 @@ Release procedure (also encoded in the `acks-release` skill):
    test environment, and must then be stated explicitly in the release report.
 5. **Capture the release snapshots the kind calls for — §4b** — during that
    same live-verify session, and update `docs/GALLERY.md`.
-6. Commit, tag the release commit `v<version>`, and push that commit with
+6. Commit with the subject `Release <version> (<kind>) — …`, tag the
+   release commit `v<version>`, and push that commit with
    its tag in one atomic push. A push the remote refuses is the skill's
    step 6.
 7. Confirm publication with BOUNDED checks (never `gh run watch` — it hangs
@@ -291,7 +308,7 @@ and it dates from a build nobody gated.
 **Each entry names its shot, and the preflight holds it to that.** On a major
 or a minor, every top-level Added or Changed bullet in the version's changelog
 section carries `<!-- shot: <feature-slug> -->`, one per shot it owns, naming
-`docs/releases/v<X.Y.Z>/<feature-slug>.png`, or `<!-- no-shot: <reason> -->`.
+`docs/releases/v<version>/<feature-slug>.png`, or `<!-- no-shot: <reason> -->`.
 Both are HTML comments, so neither shows in the rendered changelog or on the
 release page built from the section. `tools/release-preflight.mjs` refuses a
 bullet with neither, a reason left empty, and, on its run before the tag, a
@@ -299,7 +316,7 @@ named PNG that is not there; its header carries the mechanics. A shot marker on
 a bullet under another heading is checked the same way without being owed. One
 shot may serve two entries when a single frame shows both.
 
-**Where they live.** `docs/releases/v<X.Y.Z>/<feature-slug>.png`, committed.
+**Where they live.** `docs/releases/v<version>/<feature-slug>.png`, committed.
 The whole of `docs/` is on the zip denylist (§4) — the release artifact carries
 the Foundry runtime plus the root README/LICENSE and nothing else, because
 Foundry never reads a markdown file out of a module directory. So snapshots stay
@@ -313,7 +330,7 @@ did not touch.
 **`docs/GALLERY.md` is the index and the provenance record.** One row per
 feature area: the feature, a one-line caption, and a link to its current shot.
 A major release rewrites every row; a minor release rewrites only the rows it
-re-shot. A row still pointing into an older `v<X.Y.Z>/` directory is therefore a
+re-shot. A row still pointing into an older `v<version>/` directory is therefore a
 truthful statement of how stale that image is — which is the audit, visible at a
 glance. README and release notes link to `GALLERY.md`, never to a raw PNG path,
 so the links survive the next refresh.
@@ -421,7 +438,7 @@ false record.
 - `tools/validate.mjs` (synced) checks: JS syntax of `scripts/**` + `tools/**`,
   Handlebars compilation of `templates/**`, JSON validity of `module.json` /
   `package.json` / `lang/*.json` / `ruledata/**` / `packs/_source/**`,
-  pack `_id`/`_key` invariants, `module.json` invariants (semver, paths exist,
+  pack `_id`/`_key` invariants, `module.json` invariants (version shape, paths exist,
   manifest URL shape), and that every i18n key referenced in code exists in
   `lang/en.json` (dynamic-suffix tolerant). The i18n pass reads keys through the
   two indirections the family actually writes — a root interpolated from a

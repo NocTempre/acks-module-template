@@ -156,7 +156,7 @@ test, and the preflight then holds that shot to the same file check.
 
 When a feature is re-shot, **two referrers move**: its `docs/GALLERY.md` row and
 the inline embeds in its guide. Rows you did not re-shoot keep pointing at older
-`v<X.Y.Z>/` directories — that staleness is the audit and is meant to be left
+`v<version>/` directories — that staleness is the audit and is meant to be left
 alone. Never rewrite a past release's snapshot directory.
 
 ## 5. Repo rules that bite
@@ -180,19 +180,19 @@ Hand off to **`acks-release`** with kind = **minor**.
 ### Voice
 
 Commit subject and changelog use the family register. A minor's subject is
-`Release <X.Y.0> — ` followed by a lowercase clause naming what now holds; two
-clauses joined by *and* when the release has two headlines. Never "Hotfix" for a
-minor.
+`Release <version> (minor) — ` followed by a lowercase clause naming what now
+holds; two clauses joined by *and* when the release has two headlines. Never
+"Hotfix" for a minor.
 
 ```
-Release 2.1.0 — coin goes where the rest of your gear goes, and a vault can be asked for
-Release 1.4.0 — a line as wide as the corridor, and a stack that marches as the men it holds
-Release 1.2.0 — gear declares where it is worn
+Release 2026.12.15 (minor) — coin goes where the rest of your gear goes, and a vault can be asked for
+Release 2026.12.9 (minor) — a line as wide as the corridor, and a stack that marches as the men it holds
+Release 2026.11.30 (minor) — gear declares where it is worn
 ```
 
 Sections are `### Fixed` / `### Added` / `### Changed` / `### Removed`. **Lead
-with `### Fixed` when the release is fix-driven** — that is the honest ordering
-and what v2.1.0 does. Each entry opens with a **bold sentence stating the rule as
+with `### Fixed` when the release is fix-driven** — that is the honest
+ordering. Each entry opens with a **bold sentence stating the rule as
 it now holds**, then plain prose: what the player saw, what happens instead, and
 what deliberately did not change. Present tense. No dates, no attribution, no
 issue numbers, no "fixed a bug where".

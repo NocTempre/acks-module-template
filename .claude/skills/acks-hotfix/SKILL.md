@@ -254,9 +254,9 @@ easy to get wrong. The subject is a lowercase clause naming the restored rule �
 not a ticket, not a component tag:
 
 ```
-Hotfix 1.3.2 — a stand-in power is claimed by the box it fills, and named once
-Hotfix 1.3.1 — an ability counts once per page, not once per source
-Hotfix 1.2.1 — capacity belongs to gear, not to containers
+Release 2026.12.15.1 (hotfix) — a stand-in power is claimed by the box it fills, and named once
+Release 2026.12.9.1 (hotfix) — an ability counts once per page, not once per source
+Release 2026.11.30.2 (hotfix) — capacity belongs to gear, not to containers
 ```
 
 Each `### Fixed` entry opens with a **bold sentence stating the rule as it now

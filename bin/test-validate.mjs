@@ -839,6 +839,17 @@ await actor.update({ "-=old": null });
     absent: [/IP leak scan not run here/, /validate: scripts, templates, /],
     hasFiles: ["scan-ran.marker"],
   })),
+  ...["2026.12.05", "2026.12.15.0", "2026.12.15-beta"].map((version) => ({
+    name: `a version Foundry cannot order (${version}) fails at module.json`,
+    files: { "module.json": JSON.stringify({ ...JSON.parse(BASE["module.json"]), version }, null, 2) },
+    exit: 1,
+    fails: [new RegExp(`^FAIL module\\.json: version "${version.replaceAll(".", "\\.")}" is not a version Foundry can order`)],
+  })),
+  ...["2026.12.15.1", "11.14.5"].map((version) => ({
+    name: `a version Foundry can order (${version}) passes`,
+    files: { "module.json": JSON.stringify({ ...JSON.parse(BASE["module.json"]), version }, null, 2) },
+    exit: 0,
+  })),
 ];
 
 const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "acks-validate-"));

@@ -60,7 +60,7 @@ tree.
 
 - **An open CHANGELOG heading reserves nothing.** Only the tag list says what
   shipped. Read it before writing into a section and again before staging; a
-  version a peer published is spent, and the answer is the next patch.
+  version a peer published is spent, and the answer is the day's next version.
 - **A release tags its own commit's sha, never `HEAD`,** and pushes that sha
   with its tag in one atomic push, so a commit that landed above it stays
   local for the session that made it.
