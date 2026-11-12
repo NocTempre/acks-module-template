@@ -51,6 +51,28 @@
  *      highest `.N` on that day plus one. A refusal prints the version it
  *      expects. Tags are never sorted as strings and `git describe` is not
  *      the last version: it names the nearest tag in history, not the highest.
+ *   7. `changelog-compiled`, on every kind: no tracked file is left under
+ *      `changelog.d/` (`node tools/logs.mjs compile` writes the section and
+ *      deletes the fragments), no file there has a name that does not parse,
+ *      and where runtime files (`scripts/`, `templates/`, `styles/`, `lang/`,
+ *      `packs/_source/`) changed since the previous tag the version's CHANGELOG
+ *      section holds a bullet. An untracked fragment is noted, not refused.
+ *      The previous tag is the highest local v* tag by the check-6 compare,
+ *      excluding this release's own; with none, the changed-files clause is
+ *      silent.
+ *   8. `logs-rolled`, on a major: for each CHANGELOG.md and
+ *      `docs/**\/DECISIONS.md` present at the previous tag, its
+ *      `<NAME>-through-v<prev>.md` archive exists beside it with the tag's
+ *      blob hash (`node tools/logs.mjs roll` writes it); the live CHANGELOG
+ *      holds no section for a version that has a tag and links the archive;
+ *      the live DECISIONS links its archive, opens with `## In force`, has
+ *      index links that resolve to a heading of the archive, shares no heading
+ *      with it, and heads every entry `## YYYY-MM-DD — <title>`. Each
+ *      `docs/**\/ROADMAP.md` present at the tag carries a `Re-issued
+ *      <YYYY-MM-DD>.` stamp dated on or after the tag's commit, and every
+ *      `docs/releases/v*` folder is linked from a guide or the GALLERY;
+ *      --shots-pending lists an unlinked one instead of refusing it. A path
+ *      that did not exist at the tag is not asked for.
  *
  * Exit 0 prints the recipes to walk and the shots the entries name; exit 1
  * lists every failure. A repo with no v* tag yet (first release) skips
@@ -291,6 +313,156 @@ if (ORDERABLE.test(releaseVersion)) {
     fail(`version-order: ${releaseVersion} is not the day's next version — this release is ${own}`);
   }
 }
+
+// The tag the logs are cut at: the highest local v* tag by Foundry's compare,
+// never `git describe` (the nearest), and never the release's own tag.
+const prevTag =
+  [...localTags]
+    .filter((t) => ORDERABLE.test(t.slice(1)) && t !== `v${releaseVersion}`)
+    .sort((a, b) => compareVersions(a.slice(1), b.slice(1)))
+    .at(-1) ?? "";
+const notes = [];
+const escapeRe = (s) => s.replace(/[.*+?^${}()|[\]\\]/gu, "\\$&");
+
+/** NUL-separated git listing, so a path is never quoted or split. */
+const gitZ = (...a) => execFileSync("git", ["-C", ROOT, ...a], { encoding: "utf8", maxBuffer: 1 << 28 }).split("\0").filter(Boolean);
+
+/** Every file under a directory, as posix paths relative to ROOT; empty where it is absent. */
+function walk(rel) {
+  const abs = path.join(ROOT, rel);
+  if (!fs.existsSync(abs)) return [];
+  return fs.readdirSync(abs, { withFileTypes: true }).flatMap((d) => (d.isDirectory() ? walk(`${rel}/${d.name}`) : [`${rel}/${d.name}`]));
+}
+
+/** GitHub's heading slug: lowercase, all but letters, numbers, spaces, hyphens and underscores dropped, spaces to hyphens. */
+function slugOf(text) {
+  return text
+    .replace(/\[([^\]]*)\]\([^)]*\)/gu, "$1")
+    .replace(/[`*]/gu, "")
+    .toLowerCase()
+    .replace(/[^\p{L}\p{N} _-]/gu, "")
+    .replaceAll(" ", "-");
+}
+
+/**
+ * Every ATX heading outside a fenced block, as `{ level, text, anchor }`. A
+ * repeated slug gains `-1`, `-2` in document order, across every level.
+ */
+function headingsOf(text) {
+  const out = [];
+  const seen = new Map();
+  let fence = null;
+  for (const raw of text.replace(/^﻿/u, "").split("\n")) {
+    const l = raw.replace(/\r$/u, "");
+    const f = /^ {0,3}(`{3,}|~{3,})/u.exec(l);
+    if (f) {
+      if (!fence) fence = f[1][0];
+      else if (f[1][0] === fence) fence = null;
+      continue;
+    }
+    if (fence) continue;
+    const m = /^(#{1,6})[ \t]+(.*?)(?:[ \t]+#+)?[ \t]*$/u.exec(l);
+    if (!m || !m[2]) continue;
+    const slug = slugOf(m[2]);
+    const n = seen.get(slug) ?? 0;
+    seen.set(slug, n + 1);
+    out.push({ level: m[1].length, text: m[2], anchor: n ? `${slug}-${n}` : slug });
+  }
+  return out;
+}
+
+// changelog-compiled, every kind.
+{
+  const FRAGMENT_NAME = /^\d{4}-\d{2}-\d{2}-[A-Za-z0-9][A-Za-z0-9._-]*\.(upgrading|added|changed|removed|fixed)\.md$/u;
+  const tracked = new Set(gitZ("ls-files", "-z", "--", "changelog.d"));
+  for (const f of walk("changelog.d")) {
+    const name = f.slice("changelog.d/".length);
+    if (!FRAGMENT_NAME.test(name)) fail(`changelog-compiled: ${f} is not named <YYYY-MM-DD>-<row id or slug>.<upgrading|added|changed|removed|fixed>.md`);
+    else if (tracked.has(f)) fail(`changelog-compiled: ${f} is still on disk — run node tools/logs.mjs compile`);
+    else notes.push(`${f} is untracked — not compiled; it rides with whoever tracks it`);
+  }
+  if (prevTag) {
+    const touched = [...gitZ("diff", "-z", "--name-only", prevTag), ...gitZ("ls-files", "-z", "--others", "--exclude-standard")].filter((f) => /^(scripts|templates|styles|lang|packs\/_source)\//u.test(f));
+    if (touched.length) {
+      const hasLog = fs.existsSync(path.join(ROOT, "CHANGELOG.md"));
+      const entries = hasLog ? shotEntries(fs.readFileSync(path.join(ROOT, "CHANGELOG.md"), "utf8"), releaseVersion) : null;
+      if (!entries?.length) {
+        const first = `${touched[0]}${touched.length > 1 ? ` and ${touched.length - 1} more` : ""}`;
+        fail(`changelog-compiled: runtime files changed since ${prevTag} (${first}) but CHANGELOG.md ${entries ? `holds no bullet under ${releaseVersion}` : `has no section for ${releaseVersion}`} — write a changelog.d/ fragment and run node tools/logs.mjs compile`);
+      }
+    }
+  }
+}
+
+// logs-rolled, major only.
+if (kind === "major" && prevTag) {
+  const atTag = gitZ("ls-tree", "-r", "-z", "--name-only", prevTag);
+  const exists = (rel) => fs.existsSync(path.join(ROOT, rel));
+  const read = (rel) => fs.readFileSync(path.join(ROOT, rel), "utf8");
+  const tagged = (v) => localTags.has(`v${v}`);
+  const SHAPE = /^\d{4}-\d{2}-\d{2} — \S.*$/u;
+  for (const source of atTag.filter((f) => f === "CHANGELOG.md" || /^docs\/(?:.+\/)?DECISIONS\.md$/u.test(f))) {
+    const dir = path.posix.dirname(source);
+    const base = path.posix.basename(source, ".md");
+    const archiveName = `${base}-through-${prevTag}.md`;
+    const archive = dir === "." ? archiveName : `${dir}/${archiveName}`;
+    const archiveOk = exists(archive);
+    if (!archiveOk) fail(`logs-rolled: ${archive} is missing — a major archives ${source} as ${prevTag} shipped it; run node tools/logs.mjs roll`);
+    else if (git("hash-object", "--", archive) !== git("rev-parse", `${prevTag}:${source}`)) fail(`logs-rolled: ${archive} differs from ${source} at ${prevTag} — an archive is the tag's blob byte for byte; restore it with git show ${prevTag}:${source}`);
+    if (!exists(source)) {
+      fail(`logs-rolled: ${source} is missing, so nothing links ${archive}`);
+      continue;
+    }
+    const live = read(source);
+    const links = (name) => new RegExp(`\\]\\(\\s*<?(?:\\./)?${escapeRe(name)}(?:#[^)\\s]*)?>?\\s*\\)`, "u").test(live);
+    if (!links(archiveName)) fail(`logs-rolled: ${source} does not link ${archiveName}`);
+    const liveHeads = headingsOf(live);
+    if (base === "CHANGELOG") {
+      for (const h of liveHeads.filter((x) => x.level === 2)) {
+        const v = /^(?:Release\s+)?\[?v?(\d[^\]\s]*)\]?(?:\s|$)/u.exec(h.text)?.[1];
+        if (v && tagged(v)) fail(`logs-rolled: ${source} still holds "## ${h.text}", whose version has a tag — ${archiveName} holds it`);
+      }
+      continue;
+    }
+    const h2 = liveHeads.filter((h) => h.level === 2);
+    if (!h2.some((h) => h.text === "In force")) fail(`logs-rolled: ${source} has no "## In force" section — a live DECISIONS opens with its index of the rulings that still govern`);
+    else if (archiveOk) {
+      const lines = live.split("\n");
+      const at = lines.findIndex((l) => /^##[ \t]+In force[ \t]*\r?$/u.test(l));
+      const next = lines.findIndex((l, i) => i > at && /^##[ \t]+/u.test(l));
+      const index = lines.slice(at + 1, next < 0 ? lines.length : next).join("\n");
+      const anchors = new Map();
+      for (const m of index.matchAll(/\]\(\s*<?([^)#\s>]+)(?:#([^)\s>]*))?>?\s*\)/gu)) {
+        if (/^[a-z][a-z0-9+.-]*:/iu.test(m[1])) continue;
+        const target = path.posix.normalize(dir === "." ? m[1] : `${dir}/${m[1]}`);
+        if (!exists(target)) {
+          fail(`logs-rolled: ${source} index links ${m[1]}, which does not exist`);
+          continue;
+        }
+        if (m[2] === undefined) continue;
+        if (!anchors.has(target)) anchors.set(target, new Set(headingsOf(read(target)).map((h) => h.anchor)));
+        if (!anchors.get(target).has(m[2])) fail(`logs-rolled: ${source} index links ${m[1]}#${m[2]}, and no heading of ${m[1]} has that anchor`);
+      }
+      const archived = new Set(headingsOf(read(archive)).filter((h) => h.level === 2).map((h) => h.text));
+      for (const h of h2) if (h.text !== "In force" && archived.has(h.text)) fail(`logs-rolled: "## ${h.text}" is in both ${source} and ${archiveName} — a ruling lives in one`);
+    }
+    for (const h of h2) if (h.text !== "In force" && !SHAPE.test(h.text)) fail(`logs-rolled: ${source} heading "## ${h.text}" is not "## YYYY-MM-DD — <title>" — a live entry takes the one shape`);
+  }
+  const since = git("log", "-1", "--format=%cs", prevTag);
+  for (const road of atTag.filter((f) => /^docs\/(?:.+\/)?ROADMAP\.md$/u.test(f) && exists(f))) {
+    const stamps = [...read(road).matchAll(/Re-issued (\d{4}-\d{2}-\d{2})\./gu)].map((m) => m[1]);
+    if (!stamps.some((d) => d >= since)) fail(`logs-rolled: ${road} has no "Re-issued <YYYY-MM-DD>." stamp dated ${since} or later — built rows go, the rest carry, under the stamp`);
+  }
+  const linked = [...walk("docs/guides").filter((f) => f.endsWith(".md")), ...(exists("docs/GALLERY.md") ? ["docs/GALLERY.md"] : [])].map(read).join("\n");
+  const folders = exists("docs/releases") ? fs.readdirSync(path.join(ROOT, "docs/releases"), { withFileTypes: true }).filter((d) => d.isDirectory() && d.name.startsWith("v")) : [];
+  for (const d of folders) {
+    if (linked.includes(`releases/${d.name}/`)) continue;
+    if (shotsPending) notes.push(`docs/releases/${d.name}/ is linked by no guide or gallery row — delete it, or link it, before the release ships`);
+    else fail(`logs-rolled: docs/releases/${d.name}/ is linked by no guide and no GALLERY row — delete it (the tag keeps it); --shots-pending lists it instead while shots are pending`);
+  }
+}
+
+for (const n of notes) console.log(`note: ${n}`);
 
 if (failures.length) {
   console.error(`release-preflight: ${failures.length} blocker(s) for ${tag}:`);

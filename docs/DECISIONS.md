@@ -4005,3 +4005,55 @@ evening carries a date GitHub does not show (its timestamps are UTC). A
 module whose `module.json` still holds a semver number fails the preflight's
 `version-date` until it bumps to a date, which is the bump its next release
 makes anyway.
+
+## 2026-11-12 — Changelog fragments, and a major rolls the logs — IN FORCE
+
+**Owner ruling.** For the Public Beta: acks-extras' `CHANGELOG.md` as
+v11.14.5 shipped it becomes an archive file, byte for byte, and the
+importer's DECISIONS opens with the rulings still in force, each linking into
+its archive; shot folders no guide or GALLERY row links leave `main`, and the
+ledger's closed rows move to an archive. Fragments (2026-11-11): the session
+fixing a row adds `changelog.d/2026-11-20-T-0520.fixed.md`, one bullet, and
+never edits `CHANGELOG.md`. On the design's questions the owner answered "All
+recommended" (2026-11-12): no per-commit fragment rule, the release's check is
+the gate (R11); archives sit beside the live file (R12); a roll archives each
+log as the previous tag shipped it (R13); the first index keeps every
+archived ruling not superseded whole, and a reviewer rules the flagged ones
+(R21); every closed ledger status moves at a roll, with duplicates of closed
+rows (R23).
+
+**Ruled.** Each user-visible change writes one fragment,
+`changelog.d/<YYYY-MM-DD>-<row-id or slug>.<upgrading|added|changed|removed|fixed>.md`.
+`tools/logs.mjs compile --label "<stage>"` writes `## <version> — <stage>` from
+the tracked fragments, grouped by category, and deletes them; `## Unreleased`
+is retired. At a major, `tools/logs.mjs roll` archives each `CHANGELOG.md`
+and `docs/**/DECISIONS.md` as the previous tag holds it, beside itself as
+`<NAME>-through-v<prev>.md`, rewrites the live DECISIONS as its H1, a pointer
+line, `## In force` with one drafted row per archived ruling not superseded
+whole, and the entries landed after the tag, and lists for a person what it
+cannot decide: flagged rows, edits made inside old entries since the tag,
+ROADMAPs to re-issue, shot folders nothing links. It deletes nothing. The
+preflight gains `changelog-compiled` on every kind and `logs-rolled` on a
+major. `v<prev>` is the highest local `v*` tag by Foundry's compare, never the
+nearest one `git describe` names. A live DECISIONS entry opens
+`## YYYY-MM-DD — <title>`; a trailing `— IN FORCE` or `— SUPERSEDED …` is part
+of the title. `changelog.d/` and `CHANGELOG-through-*.md` join the zip's
+denylist, `docs-doctrine.md` takes the wording, and the release, triage and
+doc-scribe instructions write fragments and read the ledger's archives.
+
+**Rejected.** `history/` folders, which break every relative link the
+archived files hold unless the archives are edited. Normalising archived
+headings: that is an edit, and the archive is the tag's bytes. Keeping
+`## Unreleased`, where parallel sessions' hunks tie. A per-commit fragment
+gate: whether a change is user-visible is not decidable by a tool. Cutting
+the archive at "every entry dated before the roll": entries are out of date
+order and some carry no date.
+
+**Cost.** An archive frozen byte for byte never carries a supersession mark,
+so a grep that lands in it shows no sign a ruling is dead; only the live
+index says so. A source comment citing a superseded archived ruling finds
+nothing in the live file. The author's bullet order inside a category is
+lost. A hotfix between the roll and the major forces a second, small archive.
+The template's own DECISIONS (R22, "roll it at each family major") is not
+rolled by this tool as built: the template has no tags, and `roll` cuts at a
+tag.

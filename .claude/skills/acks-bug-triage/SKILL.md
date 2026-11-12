@@ -69,8 +69,13 @@ may quote licensed book text, and canon forbids a permanent in-repo artifact
 of this kind. Never committed, never shipped, never quoted into a repo.
 
 Columns: `id,opened,source,repo,title,status,fixed_in,dup_of,claim,notes`.
-Ids are `T-0001` onward, stable forever, never reused; rows are never deleted
-— the trail of what was once reported is the dedupe corpus. Keep `title` and
+Ids are `T-0001` onward, stable forever, never reused. Rows are not deleted:
+at a major's roll, once that major is verified published, the closed rows
+(every closed status in the table below, and duplicates of closed rows) move
+to `ledger-through-v<version>.csv` beside the ledger. New ids are minted past
+the highest id in the ledger and every archive, and dedupe reads the ledger
+and every archive — the trail of what was once reported is the dedupe corpus.
+Keep `title` and
 `notes` free of commas (use semicolons) so hand edits never break the quoting.
 
 | Status | Meaning |
@@ -92,7 +97,7 @@ Ids are `T-0001` onward, stable forever, never reused; rows are never deleted
 Three checks between intake and diagnosis, in order:
 
 1. **Match against the ledger.** Every new row against every existing row,
-   open *and* resolved — same subsystem, same surface, same misbehaviour. A
+   open *and* resolved, archives included — same subsystem, same surface, same misbehaviour. A
    match to `fixed-unreleased` or `released` is answered from the ledger:
    verify the reporter's version predates the fix (or that HEAD carries it)
    and close the new row as `duplicate`. A match to an open row joins it. Do
@@ -109,7 +114,7 @@ Three checks between intake and diagnosis, in order:
    `claimed` and `claim` to `<date> <batch-label>` — **before** the fan-out
    starts. Re-read the ledger immediately before every write-back; another
    session may have appended rows, and your ids continue from the highest
-   present, theirs included.
+   present, theirs included, and past every archive's.
 
 A claim from a session that plainly died (days old, no matching commits or
 uncommitted work in the repo) may be taken over — say so in the report rather

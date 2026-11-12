@@ -163,10 +163,12 @@ jobs:
           # module directory, so docs/ in its entirety is repo-only and is read
           # on GitHub. That also keeps the release-snapshot gallery
           # (docs/releases/, docs/guides/, docs/GALLERY.md — TOOLCHAIN §4b) and
-          # its megabytes of PNG out of every user's download.
+          # its megabytes of PNG out of every user's download. The changelog's
+          # fragments and its archives are repo-only for the same reason.
           zip -r module.zip . \
             -x '.git/*' '.github/*' '.claude/*' 'node_modules/*' \
                'packs/_source/*' 'tools/*' 'register/*' 'docs/*' \
+               'changelog.d/*' 'CHANGELOG-through-*.md' \
                'package.json' 'package-lock.json' \
                '.gitignore' '.gitattributes' 'CLAUDE.md' 'module.zip'
 

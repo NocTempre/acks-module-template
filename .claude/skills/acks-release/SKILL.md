@@ -86,9 +86,14 @@ the full pipeline (build + validate, no publish) is available anytime:
    heading reserves nothing, and a peer may have shipped the number it names.
    Set `version` in `module.json` to the release day, `YYYY.M.D`, with `.N`
    for a later release that day (the preflight prints the day's next version
-   and refuses any other). Update `CHANGELOG.md`
-   if the repo has one. On a major or minor, every Added and Changed bullet
-   names its shot as it is written: `<!-- shot: <feature-slug> -->` for
+   and refuses any other). Compile the changelog:
+   `node tools/logs.mjs compile --label "<stage>"` writes the version's section
+   from `changelog.d/` and deletes the fragments, which then go in the release
+   commit as removed files. On a major, `node tools/logs.mjs roll` runs first;
+   then the reviewer rules the flagged index rows, each ROADMAP is re-issued,
+   and the orphan shot folders `roll` lists are deleted after the new shots are
+   linked. On a major or minor, every Added and Changed bullet
+   names its shot as it is written, in its fragment: `<!-- shot: <feature-slug> -->` for
    `docs/releases/v<version>/<feature-slug>.png`, or `<!-- no-shot: <reason> -->`
    where the entry has no user-visible surface (TOOLCHAIN §4b). **Then run
    `node tools/release-preflight.mjs --kind <kind> --shots-pending` — a red
@@ -225,6 +230,8 @@ the full pipeline (build + validate, no publish) is available anytime:
    repo is `foundryvtt-acks-extras` (id `acks-extras`). The repo is public
    (since 2026-08); if it has been taken private (e.g. IP quarantine), the URL
    404s unauthenticated — use `gh release view` instead and note it.
+   A major, once verified published, then rolls the bug ledger: its closed
+   rows move to `ledger-through-v<version>.csv` (see `acks-bug-triage`).
 9. Report: release kind, version, release URL, the status of every triggered
    workflow, the snapshots captured (and any obligation you could not meet,
    with the reason), and anything skipped. The shape is

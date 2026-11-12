@@ -145,7 +145,10 @@ acks-<feature>/
 - `url`: `https://github.com/NocTempre/<id>` (the repo), on every module.
 - `manifest`/`download`: `https://github.com/NocTempre/<id>/releases/latest/download/module.json|zip`.
 - Every repo keeps a `CHANGELOG.md` (newest-first `## <version> — <stage>` entries,
-  e.g. `## 2026.12.15 — Public Beta`; update it as part of every release). The
+  e.g. `## 2026.12.15 — Public Beta`). Each release's section is compiled at
+  release from the `changelog.d/` fragments by `node tools/logs.mjs compile
+  --label "<stage>"`; nothing is written into `CHANGELOG.md` by hand, and
+  `## Unreleased` is not used. The
   stage label is on every heading until the owner names a new one, and the
   heading's text is the release's title. Repos whose history predates the file say so in a
   preamble instead of backfilling. A bullet that names a control gives its
@@ -174,8 +177,9 @@ it checks out this template and fails CI if any canonical file drifted from
 canon — hand-edits can't survive unnoticed.
 
 The zip includes *everything* except an explicit denylist (`.git*`, `.github`,
-`.claude`, `CLAUDE.md`, `node_modules`, `tools`, `register`, `packs/_source`,
-`package*.json`, and **all of `docs/`**). Rationale: the old allowlist zip
+`.claude`, `CLAUDE.md`, `.gitignore`, `.gitattributes`, `module.zip`,
+`node_modules`, `tools`, `register`, `packs/_source`, `package*.json`,
+`changelog.d/`, `CHANGELOG-through-*.md`, and **all of `docs/`**). Rationale: the old allowlist zip
 silently dropped new runtime dirs — a whole data directory had to be patched in
 by hand once — so new runtime content ships automatically; add to the denylist
 only for new *dev-only* paths.
@@ -209,10 +213,15 @@ go-live gate.
 
 Release procedure (also encoded in the `acks-release` skill):
 
-1. Establish the release kind (above) and bump `module.json` version
-   (+ changelog if present). **Then run `node tools/release-preflight.mjs
+1. Establish the release kind (above), set the `module.json` version and
+   compile the changelog (`node tools/logs.mjs compile --label "<stage>"`). A
+   major first rolls the logs (`node tools/logs.mjs roll`); the reviewer then
+   rules the flagged index rows, re-issues each ROADMAP under
+   `Re-issued <date>.`, and deletes the shot folders `roll` lists once the new
+   shots are linked. **Then run `node tools/release-preflight.mjs
    --kind <kind> --shots-pending`** (synced gate — it reads the bumped
-   version, and refuses a run that declares no kind): it refuses a tag that
+   version, and refuses a run that declares no kind; on every kind it runs
+   `changelog-compiled`, and on a major `logs-rolled`): it refuses a tag that
    already exists — **a published version is never retagged**; the release
    is then the day's next version, which the preflight computes and prints
    — and requires a
@@ -307,7 +316,9 @@ and it dates from a build nobody gated.
 
 **Each entry names its shot, and the preflight holds it to that.** On a major
 or a minor, every top-level Added or Changed bullet in the version's changelog
-section carries `<!-- shot: <feature-slug> -->`, one per shot it owns, naming
+section carries `<!-- shot: <feature-slug> -->`, one per shot it owns (the
+bullets arrive from `changelog.d/` fragments, and the marker is written in the
+fragment), naming
 `docs/releases/v<version>/<feature-slug>.png`, or `<!-- no-shot: <reason> -->`.
 Both are HTML comments, so neither shows in the rendered changelog or on the
 release page built from the section. `tools/release-preflight.mjs` refuses a
@@ -332,8 +343,10 @@ feature area: the feature, a one-line caption, and a link to its current shot.
 A major release rewrites every row; a minor release rewrites only the rows it
 re-shot. A row still pointing into an older `v<version>/` directory is therefore a
 truthful statement of how stale that image is — which is the audit, visible at a
-glance. README and release notes link to `GALLERY.md`, never to a raw PNG path,
-so the links survive the next refresh.
+glance. Between majors that is the whole story; a major deletes the
+`docs/releases/v<version>/` folders no guide and no GALLERY row links (the tag
+keeps them). README and release notes link to `GALLERY.md`, never to a raw PNG
+path, so the links survive the next refresh.
 
 ```markdown
 | Feature | What it shows | Shot |

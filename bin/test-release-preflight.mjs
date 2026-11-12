@@ -10,8 +10,14 @@
  * the run day's date, which the version checks accept; the cases that name
  * another version, and the tags beside it, decide the date and order checks.
  *
+ * The changelog-compiled cases stage fragments and a runtime file under
+ * `changelog.d/` and `lang/`; the logs-rolled cases build a fixture, run
+ * `logs.mjs roll` in it, and break one thing at a time. A case may name `base`
+ * files committed at the tag, `work` files written after it, `stage` paths to
+ * `git add`, and a `setup` hook that edits the tree before the preflight runs.
+ *
  * The preflight finds its repository from where it stands, so each case
- * copies it into the case's own `tools/` and starts it there.
+ * copies it, and `logs.mjs`, into the case's own `tools/` and starts it there.
  *
  * Usage:  node bin/test-release-preflight.mjs [<release-preflight.mjs>]
  *         (defaults to skeleton/tools/release-preflight.mjs; pass a modified
@@ -25,6 +31,8 @@ import url from "node:url";
 
 const TEMPLATE_ROOT = path.dirname(path.dirname(url.fileURLToPath(import.meta.url)));
 const PREFLIGHT = path.resolve(process.argv[2] ?? path.join(TEMPLATE_ROOT, "skeleton", "tools", "release-preflight.mjs"));
+// `roll` and `compile` prepare the fixtures the logs checks read.
+const LOGS = path.join(TEMPLATE_ROOT, "skeleton", "tools", "logs.mjs");
 
 // A caller's own repository variables would turn every git call toward the
 // caller's repository, and a runner has no identity to commit as.
@@ -83,6 +91,57 @@ const GREEN = `# Changelog
 const ALL_SHOTS = ["widget-sheet-tab.png", "widget-confirm.png", "widget-confirm-cancel.png", "widget-refusal.png"];
 const lineOf = (text, needle) => text.split("\n").findIndex((l) => l.includes(needle)) + 1;
 const UNMARKED = GREEN.replace(/ <!-- no-shot: API only,\n {2}nothing on screen -->/u, "");
+
+// The logs checks. A fixture at v11.14.5 holds a CHANGELOG, two DECISIONS (one
+// in a subdirectory), a ROADMAP and a guide linking the tag's shot folder; the
+// working tree then opens the release's section, adds a ruling after the tag
+// and runs the roll, which is what `logs-rolled` reads.
+const ISO_TODAY = `${NOW.getFullYear()}-${String(NOW.getMonth() + 1).padStart(2, "0")}-${String(NOW.getDate()).padStart(2, "0")}`;
+const LOG_BASE_CHANGELOG = "# Changelog\n\nPreamble.\n\n## 11.14.5\n\n- **Five.** Shipped at the tag.\n";
+const LOG_BASE = {
+  "CHANGELOG.md": LOG_BASE_CHANGELOG,
+  "docs/DECISIONS.md": "# Decisions\n\n## 2026-10-01 — First\n\nBody.\n\n## 2026-10-02 — Second — SUPERSEDED 2026-10-09\n\nGone.\n",
+  "docs/foo/DECISIONS.md": "# Foo decisions\n\n## 2026-09-01 — Only\n\nBody.\n",
+  "docs/foo/ROADMAP.md": "# Foo roadmap\n\n- [ ] not built\n",
+  "docs/guides/foo.md": "![shot](../releases/v11.14.5/foo.png)\n",
+  "docs/releases/v11.14.5/foo.png": "not a real png\n",
+};
+const ARCHIVE = "docs/DECISIONS-through-v11.14.5.md";
+/** Opens the release's section and a post-tag ruling, then rolls and stamps the ROADMAP unless told not to. */
+function prepareRolled(ctx, { roll = true, stamp = true } = {}) {
+  ctx.write("CHANGELOG.md", LOG_BASE_CHANGELOG.replace("## 11.14.5", `## ${TODAY}\n\n### Fixed\n\n- **A fix.** Nothing owed.\n\n## 11.14.5`));
+  ctx.write("docs/DECISIONS.md", `${LOG_BASE["docs/DECISIONS.md"]}\n## 2026-11-10 — After the tag\n\nNew.\n`);
+  if (roll) ctx.logs("roll");
+  if (roll && stamp) ctx.write("docs/foo/ROADMAP.md", `${ctx.read("docs/foo/ROADMAP.md")}\nRe-issued ${ISO_TODAY}.\n`);
+}
+/** A major case on the rolled fixture, with `mutate` applied after the roll. */
+const rolledCase = (name, { mutate, args = ["--kind", "major"], status = 1, ...rest }) => ({
+  name,
+  args,
+  base: LOG_BASE,
+  noShotDir: true,
+  shots: [],
+  status,
+  setup: (ctx) => {
+    prepareRolled(ctx);
+    mutate?.(ctx);
+  },
+  ...rest,
+});
+const FRAGMENT = `changelog.d/${ISO_TODAY}-widget-fix.fixed.md`;
+/** A hotfix case with a runtime file changed and a fragment staged, compiled or not. */
+const fragmentCase = (name, { compile = false, ...rest }) => ({
+  name,
+  args: ["--kind", "hotfix"],
+  base: { "CHANGELOG.md": LOG_BASE_CHANGELOG },
+  shots: [],
+  work: { "lang/en.json": "{}\n", [FRAGMENT]: "- **A fix.** Nothing owed.\n" },
+  stage: [FRAGMENT],
+  setup: (ctx) => {
+    if (compile) ctx.logs("compile");
+  },
+  ...rest,
+});
 
 const CASES = [
   {
@@ -317,7 +376,139 @@ const CASES = [
     status: 1,
     err: [/FAIL version-date: 11\.15\.0 is not a release day/u],
   },
+
+  // -- changelog-compiled, every kind -------------------------------------------
+  fragmentCase("a fragment still on disk is refused, with the command that compiles it", {
+    status: 1,
+    err: [/FAIL changelog-compiled: changelog\.d\/[^\n]*widget-fix\.fixed\.md is still on disk — run node tools\/logs\.mjs compile/u],
+  }),
+  fragmentCase("a fragment whose name does not parse is refused", {
+    work: { "changelog.d/notes.md": "- stray\n" },
+    stage: ["changelog.d/notes.md"],
+    status: 1,
+    err: [/FAIL changelog-compiled: changelog\.d\/notes\.md is not named <YYYY-MM-DD>-<row id or slug>\.<upgrading\|added\|changed\|removed\|fixed>\.md/u],
+    notErr: [/notes\.md is still on disk/u],
+  }),
+  fragmentCase("runtime changes with an empty section are refused", {
+    work: { "lang/en.json": "{}\n", "CHANGELOG.md": `${LOG_BASE_CHANGELOG.replace("## 11.14.5", `## ${TODAY}\n\n### Fixed\n\n## 11.14.5`)}` },
+    stage: [],
+    status: 1,
+    err: [new RegExp(`FAIL changelog-compiled: runtime files changed since v11\\.14\\.5 \\(lang/en\\.json\\) but CHANGELOG\\.md holds no bullet under ${TODAY_RE}`, "u")],
+    notErr: [/still on disk/u],
+  }),
+  fragmentCase("runtime changes with no CHANGELOG section are refused", {
+    work: { "lang/en.json": "{}\n" },
+    stage: [],
+    status: 1,
+    err: [new RegExp(`FAIL changelog-compiled: runtime files changed since v11\\.14\\.5 \\(lang/en\\.json\\) but CHANGELOG\\.md has no section for ${TODAY_RE}`, "u")],
+  }),
+  fragmentCase("the same change passes once the fragment is compiled", {
+    compile: true,
+    status: 0,
+    out: [/clear \(hotfix\)/u],
+    notErr: [/changelog-compiled/u],
+  }),
+  fragmentCase("an untracked fragment is noted and not refused", {
+    work: { [FRAGMENT]: "- **A peer's fix.**\n", "CHANGELOG.md": LOG_BASE_CHANGELOG.replace("## 11.14.5", `## ${TODAY}\n\n### Fixed\n\n- **Already compiled.**\n\n## 11.14.5`) },
+    stage: [],
+    status: 0,
+    out: [/note: changelog\.d\/[^\n]*widget-fix\.fixed\.md is untracked — not compiled/u, /clear \(hotfix\)/u],
+  }),
+
+  // -- logs-rolled, major only --------------------------------------------------
+  rolledCase("a major passes on a rolled fixture", {
+    status: 0,
+    out: [/release-preflight: v[\d.]+ clear \(major\)/u],
+    notErr: [/logs-rolled/u],
+  }),
+  rolledCase("a major refuses an archive edited after the roll", {
+    mutate: (ctx) => ctx.write(ARCHIVE, `${ctx.read(ARCHIVE)}An edit.\n`),
+    err: [/FAIL logs-rolled: docs\/DECISIONS-through-v11\.14\.5\.md differs from docs\/DECISIONS\.md at v11\.14\.5/u],
+  }),
+  rolledCase("a major refuses a missing archive", {
+    mutate: (ctx) => fs.rmSync(path.join(ctx.root, "docs/foo/DECISIONS-through-v11.14.5.md")),
+    err: [/FAIL logs-rolled: docs\/foo\/DECISIONS-through-v11\.14\.5\.md is missing/u],
+  }),
+  rolledCase("a major refuses a live DECISIONS with no In force section", {
+    mutate: (ctx) => ctx.write("docs/DECISIONS.md", ctx.read("docs/DECISIONS.md").replace("## In force", "## Index")),
+    err: [/FAIL logs-rolled: docs\/DECISIONS\.md has no "## In force" section/u],
+  }),
+  rolledCase("a major refuses an index link whose anchor leads nowhere", {
+    mutate: (ctx) => ctx.write("docs/DECISIONS.md", ctx.read("docs/DECISIONS.md").replace("#2026-10-01--first", "#2026-10-01--nothing")),
+    err: [/FAIL logs-rolled: docs\/DECISIONS\.md index links DECISIONS-through-v11\.14\.5\.md#2026-10-01--nothing, and no heading of DECISIONS-through-v11\.14\.5\.md has that anchor/u],
+  }),
+  rolledCase("a major refuses an index link to a file that is not there", {
+    mutate: (ctx) => ctx.write("docs/DECISIONS.md", ctx.read("docs/DECISIONS.md").replace("](DECISIONS-through-v11.14.5.md#2026-10-01--first", "](DECISIONS-through-v1.md#2026-10-01--first")),
+    err: [/FAIL logs-rolled: docs\/DECISIONS\.md index links DECISIONS-through-v1\.md, which does not exist/u],
+  }),
+  rolledCase("a major refuses a heading that is in both the live file and its archive", {
+    mutate: (ctx) => ctx.write("docs/DECISIONS.md", `${ctx.read("docs/DECISIONS.md")}\n## 2026-10-01 — First\n\nAgain.\n`),
+    err: [/FAIL logs-rolled: "## 2026-10-01 — First" is in both docs\/DECISIONS\.md and DECISIONS-through-v11\.14\.5\.md/u],
+  }),
+  rolledCase("a major refuses a live heading of another shape", {
+    mutate: (ctx) => ctx.write("docs/DECISIONS.md", `${ctx.read("docs/DECISIONS.md")}\n## Loose heading\n\nx.\n`),
+    err: [/FAIL logs-rolled: docs\/DECISIONS\.md heading "## Loose heading" is not "## YYYY-MM-DD — <title>"/u],
+    notErr: [/2026-11-10 — After the tag/u],
+  }),
+  rolledCase("a major refuses a live DECISIONS that does not link its archive", {
+    mutate: (ctx) => ctx.write("docs/foo/DECISIONS.md", ctx.read("docs/foo/DECISIONS.md").replaceAll("DECISIONS-through-v11.14.5.md", "gone.md")),
+    err: [/FAIL logs-rolled: docs\/foo\/DECISIONS\.md does not link DECISIONS-through-v11\.14\.5\.md/u],
+  }),
+  rolledCase("a major refuses a ROADMAP with no re-issue stamp", {
+    mutate: (ctx) => ctx.write("docs/foo/ROADMAP.md", LOG_BASE["docs/foo/ROADMAP.md"]),
+    err: [/FAIL logs-rolled: docs\/foo\/ROADMAP\.md has no "Re-issued <YYYY-MM-DD>\." stamp dated \d{4}-\d{2}-\d{2} or later/u],
+  }),
+  rolledCase("a major refuses a ROADMAP whose stamp predates the tag", {
+    mutate: (ctx) => ctx.write("docs/foo/ROADMAP.md", `${LOG_BASE["docs/foo/ROADMAP.md"]}\nRe-issued ${LAST_YEAR}-01-20.\n`),
+    err: [/FAIL logs-rolled: docs\/foo\/ROADMAP\.md has no "Re-issued/u],
+  }),
+  rolledCase("a major refuses a live CHANGELOG still holding the tagged version's section", {
+    mutate: (ctx) => ctx.write("CHANGELOG.md", `${ctx.read("CHANGELOG.md")}\n## 11.14.5\n\n- **Back again.**\n`),
+    err: [/FAIL logs-rolled: CHANGELOG\.md still holds "## 11\.14\.5", whose version has a tag/u],
+  }),
+  rolledCase("a major refuses a live CHANGELOG that does not link its archive", {
+    mutate: (ctx) => ctx.write("CHANGELOG.md", ctx.read("CHANGELOG.md").replace(/Changes through[^\n]*\n/u, "")),
+    err: [/FAIL logs-rolled: CHANGELOG\.md does not link CHANGELOG-through-v11\.14\.5\.md/u],
+  }),
+  rolledCase("a major refuses a shot folder no guide or gallery row links", {
+    mutate: (ctx) => ctx.write("docs/releases/v11.14.0/old.png", "not a real png\n"),
+    err: [/FAIL logs-rolled: docs\/releases\/v11\.14\.0\/ is linked by no guide and no GALLERY row/u],
+    notErr: [/releases\/v11\.14\.5\//u],
+  }),
+  rolledCase("--shots-pending lists the unlinked shot folder instead of refusing it", {
+    args: ["--kind", "major", "--shots-pending"],
+    mutate: (ctx) => ctx.write("docs/releases/v11.14.0/old.png", "not a real png\n"),
+    status: 0,
+    out: [/note: docs\/releases\/v11\.14\.0\/ is linked by no guide or gallery row/u, /clear \(major\)/u],
+  }),
+  rolledCase("a path that did not exist at the tag is not asked for", {
+    mutate: (ctx) => ctx.write("docs/bar/DECISIONS.md", "# Bar decisions\n\n## 2026-11-10 — New\n\nBody.\n"),
+    status: 0,
+    out: [/clear \(major\)/u],
+  }),
+  {
+    ...rolledCase("a minor skips logs-rolled", {}),
+    args: ["--kind", "minor"],
+    setup: (ctx) => prepareRolled(ctx, { roll: false }),
+    status: 0,
+    out: [/clear \(minor\)/u],
+    notErr: [/logs-rolled/u],
+  },
+  {
+    ...rolledCase("a hotfix skips logs-rolled", {}),
+    args: ["--kind", "hotfix"],
+    setup: (ctx) => prepareRolled(ctx, { roll: false }),
+    status: 0,
+    out: [/clear \(hotfix\)/u],
+    notErr: [/logs-rolled/u],
+  },
 ];
+
+/** Writes `content` at `rel` under `root`, creating its directories. */
+function put(root, rel, content) {
+  fs.mkdirSync(path.dirname(path.join(root, rel)), { recursive: true });
+  fs.writeFileSync(path.join(root, rel), content);
+}
 
 const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "acks-preflight-"));
 let failures = 0;
@@ -328,9 +519,12 @@ try {
       const root = path.join(tmp, `case-${i}`);
       fs.mkdirSync(path.join(root, "tools"), { recursive: true });
       fs.copyFileSync(PREFLIGHT, path.join(root, "tools", "release-preflight.mjs"));
+      fs.copyFileSync(LOGS, path.join(root, "tools", "logs.mjs"));
       const manifest = (version) => fs.writeFileSync(path.join(root, "module.json"), `${JSON.stringify({ id: "widget", version }, null, 2)}\n`);
       manifest("11.14.5");
+      for (const [rel, content] of Object.entries(testCase.base ?? {})) put(root, rel, content);
       git(root, ["init", "-q", "-b", "main"]);
+      git(root, ["config", "core.autocrlf", "false"]);
       git(root, ["add", "-A"]);
       git(root, ["commit", "-q", "--no-verify", "-m", "base"]);
       git(root, ["tag", "v11.14.5"]);
@@ -338,9 +532,23 @@ try {
       const version = testCase.version ?? TODAY;
       manifest(version);
       if (testCase.changelog !== undefined) fs.writeFileSync(path.join(root, "CHANGELOG.md"), testCase.changelog);
-      const shotDir = path.join(root, "docs", "releases", `v${version}`);
-      fs.mkdirSync(shotDir, { recursive: true });
-      for (const name of testCase.shots) fs.writeFileSync(path.join(shotDir, name), "not a real png\n");
+      if (!testCase.noShotDir) {
+        const shotDir = path.join(root, "docs", "releases", `v${version}`);
+        fs.mkdirSync(shotDir, { recursive: true });
+        for (const name of testCase.shots) fs.writeFileSync(path.join(shotDir, name), "not a real png\n");
+      }
+      for (const [rel, content] of Object.entries(testCase.work ?? {})) put(root, rel, content);
+      for (const rel of testCase.stage ?? []) git(root, ["add", "--", rel]);
+      testCase.setup?.({
+        root,
+        read: (rel) => fs.readFileSync(path.join(root, rel), "utf8"),
+        write: (rel, content) => put(root, rel, content),
+        git: (...a) => git(root, a),
+        logs: (...a) => {
+          const l = spawnSync(process.execPath, [path.join("tools", "logs.mjs"), ...a], { cwd: root, env: GIT_ENV, encoding: "utf8" });
+          if (l.status !== 0) throw new Error(`logs ${a.join(" ")} exited ${l.status}: ${l.stderr}`);
+        },
+      });
       const r = spawnSync(process.execPath, [path.join("tools", "release-preflight.mjs"), ...testCase.args], { cwd: root, env: GIT_ENV, encoding: "utf8" });
       if (r.status !== testCase.status) problems.push(`exited ${r.status}, expected ${testCase.status}`);
       for (const [stream, text, expected, forbidden] of [

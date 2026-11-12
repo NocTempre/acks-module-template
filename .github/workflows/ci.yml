@@ -73,6 +73,14 @@ jobs:
       - name: Release preflight holds a major or minor's changelog entries to their shots
         run: node bin/test-release-preflight.mjs
 
+      # Compile and roll rewrite a module's logs, and a wrong rewrite shows only
+      # when a release is cut: a fragment compiled out of order, an archive that
+      # differs from the tag's blob, an index row whose anchor points nowhere.
+      # Throwaway repositories tagged one version back run each command and
+      # compare what it wrote with what the tag holds.
+      - name: Logs tool compiles fragments and rolls the archives
+        run: node bin/test-logs.mjs
+
       # The capture driver's guards run only when a live page stops answering
       # or a toast lands late, which no run can be made to do on demand. A
       # scripted page pins the sequence they depend on: front the page, hide
