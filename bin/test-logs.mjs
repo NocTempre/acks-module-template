@@ -11,7 +11,10 @@
  * (untracked fragments, a preview's files). `roll` cases cover the archives
  * (byte-identical to the tag's blobs), the rewritten live DECISIONS and
  * CHANGELOG, the index anchors, what is flagged for a reviewer, the previous
- * tag's choice and a second run.
+ * tag's choice and a second run. A later roll, on a live DECISIONS an earlier
+ * roll already rewrote, is checked for the carried index, the new archive's
+ * rows, a row removed between the rolls, a repeat run and the preflight's
+ * `logs-rolled` verdict on the result.
  *
  * Usage:  node bin/test-logs.mjs [<logs.mjs>]
  *         (defaults to skeleton/tools/logs.mjs; pass a modified copy to
@@ -122,6 +125,42 @@ const ROLL_ARCHIVES = archivesMatch("v11.14.5", [
 ]);
 /** One commit holding ROLL_BASE, tagged as the two versions the CHANGELOG's sections name. */
 const ROLL_COMMITS = [{ files: ROLL_BASE, tags: ["v11.14.4", "v11.14.5"] }];
+
+// A module rolled twice: v2026.1.1 holds Alpha, v2026.1.2 holds the live file the
+// first roll left (an index row for Alpha) plus the Beta ruling made after it.
+const X_ARCHIVE_1 = "docs/x/DECISIONS-through-v2026.1.1.md";
+const X_ARCHIVE_2 = "docs/x/DECISIONS-through-v2026.1.2.md";
+const X_V1 = "# X decisions\n\n## 2026-01-01 — Alpha — IN FORCE\n\nalpha body\n";
+const X_POINTER_1 = "Rulings through v2026.1.1: [DECISIONS-through-v2026.1.1.md](DECISIONS-through-v2026.1.1.md).";
+const X_POINTER_2 = "Rulings through v2026.1.2: [DECISIONS-through-v2026.1.2.md](DECISIONS-through-v2026.1.2.md).";
+const X_ROW_ALPHA = "- 2026-01-01 — [Alpha — IN FORCE](DECISIONS-through-v2026.1.1.md#2026-01-01--alpha--in-force)";
+const X_ROW_BETA = "- 2026-01-02 — [Beta — IN FORCE](DECISIONS-through-v2026.1.2.md#2026-01-02--beta--in-force)";
+const X_BETA = "## 2026-01-02 — Beta — IN FORCE\n\nbeta body\n";
+const X_GAMMA = "## 2026-01-03 — Gamma — IN FORCE\n\ngamma body\n";
+const X_AFTER_FIRST = `# X decisions\n\n${X_POINTER_1}\n\n## In force\n\n${X_ROW_ALPHA}\n\n${X_BETA}`;
+const X_LIVE_WITH_GAMMA = `${X_AFTER_FIRST}\n${X_GAMMA}`;
+const X_LIVE_ALPHA_SUPERSEDED = `# X decisions\n\n${X_POINTER_1}\n\n## In force\n\n${X_BETA}`;
+const X_ROLLED_TWICE = `# X decisions\n\n${X_POINTER_1}\n\n${X_POINTER_2}\n\n## In force\n\n${X_ROW_ALPHA}\n${X_ROW_BETA}\n\n${X_GAMMA}`;
+const ROLL_TWICE_COMMITS = [
+  { files: { "docs/x/DECISIONS.md": X_V1 }, tags: ["v2026.1.1"] },
+  { files: { [X_ARCHIVE_1]: X_V1, "docs/x/DECISIONS.md": X_AFTER_FIRST }, tags: ["v2026.1.2"] },
+];
+
+/** A regex that matches exactly `text`. */
+const exact = (text) => new RegExp(`^${text.replace(/[.*+?^${}()|[\]\\]/gu, "\\$&")}$`, "u");
+
+/**
+ * Runs the template's release preflight (`--kind major --shots-pending`) in the
+ * case's repository and returns a problem for every `logs-rolled` line it
+ * prints, or for a run that printed nothing at all.
+ */
+function preflightLogsRolled(root) {
+  put(root, "tools/release-preflight.mjs", fs.readFileSync(path.join(TEMPLATE_ROOT, "skeleton", "tools", "release-preflight.mjs"), "utf8"));
+  const r = spawnSync(process.execPath, [path.join("tools", "release-preflight.mjs"), "--kind", "major", "--shots-pending"], { cwd: root, env: GIT_ENV, encoding: "utf8" });
+  const text = `${r.stdout}${r.stderr}`;
+  if (!text.trim()) return ["release-preflight printed nothing"];
+  return text.split("\n").filter((l) => /logs-rolled/u.test(l)).map((l) => `preflight: ${l.trim()}`);
+}
 
 const CASES = [
   // -- compile -----------------------------------------------------------------
@@ -343,9 +382,48 @@ const CASES = [
     again: true,
     args: ["roll"],
     status: 0,
-    out: [/archive already in place: docs\/DECISIONS-through-v11\.14\.5\.md\ndocs\/DECISIONS\.md: already has ## In force/u, /CHANGELOG\.md: already links CHANGELOG-through-v11\.14\.5\.md/u],
+    out: [/archive already in place: docs\/DECISIONS-through-v11\.14\.5\.md\ndocs\/DECISIONS\.md: already links DECISIONS-through-v11\.14\.5\.md/u, /CHANGELOG\.md: already links CHANGELOG-through-v11\.14\.5\.md/u],
     check: ROLL_ARCHIVES,
     files: { "docs/DECISIONS.md": [/^- 2026-10-06 — \[Quiet\]/mu] },
+  },
+
+  // -- a later roll, on a live DECISIONS an earlier roll already rewrote -------
+  {
+    name: "a later roll carries the live index forward, adds the new archive's rows and keeps what landed after the tag",
+    commits: ROLL_TWICE_COMMITS,
+    version: "2026.1.3",
+    work: { "docs/x/DECISIONS.md": X_LIVE_WITH_GAMMA },
+    args: ["roll"],
+    status: 0,
+    out: [/logs: rolling from v2026\.1\.2/u, /docs\/x\/DECISIONS\.md: 1 index row\(s\) drafted from 1 archived entry, 1 carried from the live index; 1 entry after v2026\.1\.2 kept/u],
+    check: (root) => [...archivesMatch("v2026.1.2", [[X_ARCHIVE_2, "docs/x/DECISIONS.md"]])(root), ...preflightLogsRolled(root)],
+    files: {
+      "docs/x/DECISIONS.md": [exact(X_ROLLED_TWICE), /^- 2026-01-02 — \[Beta — IN FORCE\]\(DECISIONS-through-v2026\.1\.2\.md#2026-01-02--beta--in-force\)$/mu],
+    },
+    filesNot: { "docs/x/DECISIONS.md": [/beta body/u, /^## 2026-01-02/mu] },
+  },
+  {
+    name: "a later roll leaves a row removed from the live index removed",
+    commits: [
+      { files: { "docs/x/DECISIONS.md": X_V1 }, tags: ["v2026.1.1"] },
+      { files: { [X_ARCHIVE_1]: X_V1, "docs/x/DECISIONS.md": X_LIVE_ALPHA_SUPERSEDED }, tags: ["v2026.1.2"] },
+    ],
+    version: "2026.1.3",
+    args: ["roll"],
+    status: 0,
+    files: { "docs/x/DECISIONS.md": [/^- 2026-01-02 — \[Beta — IN FORCE\]\(DECISIONS-through-v2026\.1\.2\.md#/mu, /Rulings through v2026\.1\.1:/u, /Rulings through v2026\.1\.2:/u] },
+    filesNot: { "docs/x/DECISIONS.md": [/^- 2026-01-01/mu] },
+  },
+  {
+    name: "a later roll run twice leaves the live file as the first run wrote it",
+    commits: ROLL_TWICE_COMMITS,
+    version: "2026.1.3",
+    work: { "docs/x/DECISIONS.md": X_LIVE_WITH_GAMMA },
+    again: true,
+    args: ["roll"],
+    status: 0,
+    out: [/archive already in place: docs\/x\/DECISIONS-through-v2026\.1\.2\.md\ndocs\/x\/DECISIONS\.md: already links DECISIONS-through-v2026\.1\.2\.md/u],
+    files: { "docs/x/DECISIONS.md": [exact(X_ROLLED_TWICE)] },
   },
 ];
 

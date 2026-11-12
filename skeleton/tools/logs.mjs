@@ -23,8 +23,14 @@
  *                                keeps its H1, a pointer line, `## In force` with one
  *                                drafted index row per archived ruling that is not
  *                                superseded whole, and every entry that landed after
- *                                the tag; a CHANGELOG keeps its preamble, a pointer
- *                                line and the sections whose version has no tag.
+ *                                the tag. A later roll, on a DECISIONS that already
+ *                                holds `## In force`, keeps the earlier pointer
+ *                                lines, adds its own, carries the live index rows
+ *                                forward as they stand and adds rows for the new
+ *                                archive's entries (the tag's own `## In force` is
+ *                                never drafted). A CHANGELOG keeps its preamble, a
+ *                                pointer line and the sections whose version has
+ *                                no tag.
  *                                Prints what a reviewer must rule on (undated
  *                                headings, `IN PART`, entries that mention
  *                                superseding), edits made after the tag inside
@@ -32,7 +38,8 @@
  *                                archive and leave the live file), each ROADMAP to
  *                                re-issue, and each `docs/releases/v*` folder no
  *                                guide or gallery links. It deletes nothing and
- *                                writes no ROADMAP. A log already rolled is skipped.
+ *                                writes no ROADMAP. A log whose live file already
+ *                                links the archive is skipped.
  *
  * The previous tag is the highest local `v*` tag by Foundry's version compare,
  * excluding `v<module.json version>`; `--prev` overrides it. `git describe` is
@@ -288,10 +295,13 @@ function rollDecisions({ source, archiveName, prev, blob }) {
   if (!fs.existsSync(livePath)) return [`${source}: not in the working tree — archive written, no live file to rewrite`];
   const live = fs.readFileSync(livePath, "utf8").replace(/^﻿/u, "");
   const liveSections = sections(live);
-  if (liveSections.all.some((h) => h.level === 2 && h.text === "In force")) return [`${source}: already has ## In force — live file left as it is`];
+  if (live.includes(`](${archiveName}`)) return [`${source}: already links ${archiveName} — live file left as it is`];
+  // An `## In force` the live file already holds is an earlier roll's index: a later roll carries it forward.
+  const carried = liveSections.entries.find((e) => e.text === "In force");
 
   const old = sections(blob.toString("utf8").replace(/^﻿/u, ""));
-  const h1 = liveSections.all.find((h) => h.level === 1) ?? old.all.find((h) => h.level === 1);
+  const liveH1 = liveSections.all.find((h) => h.level === 1);
+  const h1 = liveH1 ?? old.all.find((h) => h.level === 1);
   const h1Line = h1 ? `# ${h1.text}` : "# Decisions";
 
   // Occurrence-numbered keys, so two entries sharing a heading pair up in order.
@@ -303,8 +313,9 @@ function rollDecisions({ source, archiveName, prev, blob }) {
       return { ...e, key: `${e.text}\0${i}` };
     });
   };
-  const oldEntries = keyed(old.entries);
-  const liveEntries = keyed(liveSections.entries);
+  // Anchors come from `sections`, over every heading of the tag's blob, so an earlier roll's `## In force` still counts toward duplicate-slug numbering.
+  const oldEntries = keyed(old.entries.filter((e) => e.text !== "In force"));
+  const liveEntries = keyed(liveSections.entries.filter((e) => e.text !== "In force"));
   const oldKeys = new Map(oldEntries.map((e) => [e.key, e]));
 
   const rows = [];
@@ -332,12 +343,23 @@ function rollDecisions({ source, archiveName, prev, blob }) {
   }
   const kept = liveEntries.filter((e) => !oldKeys.has(e.key));
   const eol = eolOf(live);
-  const head = [h1Line, "", `Rulings through ${prev}: [${archiveName}](${archiveName}).`, "", "## In force", "", ...(rows.length ? [...rows, ""] : [])].join(eol);
+  const trimmed = (lines) => {
+    const out = lines.map(noCr);
+    while (out.length && !out[0].trim()) out.shift();
+    while (out.length && !out.at(-1).trim()) out.pop();
+    return out;
+  };
+  // A first roll drops the preamble; a later one keeps it, since it holds the earlier rolls' pointer lines.
+  const lead = carried && liveH1 ? trimmed(liveSections.preamble.slice(liveH1.line + 1)) : [];
+  const carriedRows = carried ? trimmed(carried.lines.slice(1)) : [];
+  const pointer = `Rulings through ${prev}: [${archiveName}](${archiveName}).`;
+  const allRows = [...carriedRows, ...rows];
+  const head = [h1Line, "", ...(lead.length ? [...lead, ""] : []), pointer, "", "## In force", "", ...(allRows.length ? [...allRows, ""] : [])].join(eol);
   let text = head + eol + kept.map((e) => e.lines.join("\n")).join("\n");
   if (!text.endsWith("\n")) text += eol;
   fs.writeFileSync(livePath, text);
 
-  report.push(`${source}: ${rows.length} index row(s) drafted from ${oldEntries.length} archived entr${oldEntries.length === 1 ? "y" : "ies"}; ${kept.length} entr${kept.length === 1 ? "y" : "ies"} after ${prev} kept`);
+  report.push(`${source}: ${rows.length} index row(s) drafted from ${oldEntries.length} archived entr${oldEntries.length === 1 ? "y" : "ies"}${carried ? `, ${carriedRows.length} carried from the live index` : ""}; ${kept.length} entr${kept.length === 1 ? "y" : "ies"} after ${prev} kept`);
   for (const r of review) report.push(`  review: ${r}`);
   for (const e of kept) if (!LIVE_HEADING.test(e.text)) report.push(`  review: kept entry heading is not "## YYYY-MM-DD — <title>": "${e.text}"`);
   for (const e of edits) {

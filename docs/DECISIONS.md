@@ -4057,3 +4057,24 @@ lost. A hotfix between the roll and the major forces a second, small archive.
 The template's own DECISIONS (R22, "roll it at each family major") is not
 rolled by this tool as built: the template has no tags, and `roll` cuts at a
 tag.
+
+## 2026-11-12 — A later roll carries the live index forward — IN FORCE
+
+**Evidence.** The entry above rules that "each later roll names its own
+previous tag". As first landed, `logs.mjs roll` treated any live DECISIONS
+holding `## In force` as already rolled. A second roll in a scratch repo
+wrote the new archive and left the live file alone, and the major's
+preflight then refused it twice: the live file did not link the new archive,
+and an entry stood in both files. The case arrives at the first hotfix
+tagged between a roll and its major, since that moves the previous tag.
+
+**Ruled.** A live DECISIONS counts as rolled only when it already links this
+roll's archive. A later roll keeps the earlier pointer lines and adds its
+own, carries the live `## In force` rows as they stand (a row a supersession
+removed stays removed), drafts rows for the new archive's entries, and keeps
+the entries after the new tag. The tag's own `## In force` is never drafted
+as a row. `bin/test-logs.mjs` holds a second roll, a removed row and a
+repeated roll to that, with the major preflight run on the result.
+
+**Cost.** The live index never shrinks on its own: rows from every earlier
+archive stay until an entry removes them.
