@@ -1,0 +1,331 @@
+/**
+ * Drives `.claude/skills/acks-branch/branch.mjs` against throwaway
+ * repositories under the OS temp directory (a bare remote, a clone as the main
+ * checkout, topic worktrees beside it) and checks what the tool exists to
+ * guarantee: a topic lands only as a fast-forward of the gated tip with `HEAD`
+ * read back, every refusal leaves `main` where it was and the landing lease
+ * released, and `close` never lets a worktree's removal empty `main`'s
+ * `node_modules`.
+ *
+ * Usage:  node bin/test-branch.mjs [--branch <branch.mjs>]
+ *         (defaults to the copy in this repository; pass a modified copy,
+ *         with `acks-commit/` beside its folder, to confirm a case fails when
+ *         the behaviour it guards is broken)
+ */
+import { execFileSync, spawnSync } from "node:child_process";
+import fs from "node:fs";
+import os from "node:os";
+import path from "node:path";
+import url from "node:url";
+
+const TEMPLATE_ROOT = path.dirname(path.dirname(url.fileURLToPath(import.meta.url)));
+const flag = process.argv.indexOf("--branch");
+const BRANCH = path.resolve(flag >= 0 ? process.argv[flag + 1] : (process.argv[2] && !process.argv[2].startsWith("--") ? process.argv[2] : path.join(TEMPLATE_ROOT, ".claude/skills/acks-branch/branch.mjs")));
+const tool = await import(url.pathToFileURL(BRANCH).href);
+const { acquire } = await import(url.pathToFileURL(path.join(TEMPLATE_ROOT, ".claude/skills/acks-commit/lease.mjs")).href);
+
+const ENV = Object.fromEntries(Object.entries(process.env).filter(([k]) => !/^GIT_(DIR|WORK_TREE|INDEX_FILE|PREFIX|COMMON_DIR)$/i.test(k)));
+const scratch = fs.mkdtempSync(path.join(os.tmpdir(), "branch-test-"));
+const remote = path.join(scratch, "remote.git");
+const main = path.join(scratch, "family", "module");
+const sh = (cwd, ...args) => execFileSync("git", args, { cwd, encoding: "utf8", stdio: ["ignore", "pipe", "pipe"], env: { ...ENV, GIT_EDITOR: "true" } }).trim();
+const wt = (slug) => `${main}.${slug}`;
+const commitIn = (dir, file, text, message = `edits ${file}`) => {
+  fs.writeFileSync(path.join(dir, file), text);
+  sh(dir, "add", file);
+  sh(dir, "commit", "-q", "-m", message);
+  return sh(dir, "rev-parse", "HEAD");
+};
+const head = () => sh(main, "rev-parse", "HEAD");
+const hasBranch = (name) => spawnSync("git", ["show-ref", "--verify", "--quiet", `refs/heads/${name}`], { cwd: main, env: ENV }).status === 0;
+const countFiles = (dir) => fs.readdirSync(dir, { withFileTypes: true }).reduce((n, e) => n + (e.isDirectory() ? countFiles(path.join(dir, e.name)) : 1), 0);
+const cli = (args, { cwd = main } = {}) => {
+  const r = spawnSync(process.execPath, [BRANCH, ...args], { cwd, encoding: "utf8", env: ENV });
+  return { status: r.status, out: r.stdout ?? "", err: r.stderr ?? "" };
+};
+const gitDir = path.join(main, ".git");
+/**
+ * Whether the landing lease is free: no lease file stands (a holder that has
+ * exited would be taken over by the next acquire, which would hide a lease
+ * never given up), and one can be taken and given up again.
+ */
+const leaseFree = async () => {
+  if (fs.existsSync(path.join(gitDir, "acks-lease", "landing.json"))) return false;
+  const lease = await acquire(gitDir, { session: "probe" }, { waitMs: 0 });
+  lease?.stop();
+  return Boolean(lease);
+};
+
+const results = [];
+const check = (name, ok, detail = "") => {
+  results.push(Boolean(ok));
+  console.log(`${ok ? "ok  " : "FAIL"} ${name}${ok ? "" : ` — ${detail}`}`);
+};
+const brief = (r) => JSON.stringify({ status: r.status, out: r.out.slice(-300), err: r.err.slice(-500) });
+
+// --- fixtures: a bare remote, a main checkout with the canon copied in and a real node_modules.
+fs.mkdirSync(path.dirname(main), { recursive: true });
+execFileSync("git", ["init", "-q", "--bare", "-b", "main", remote], { env: ENV });
+execFileSync("git", ["clone", "-q", remote, main], { stdio: "ignore", env: ENV });
+sh(main, "checkout", "-q", "-B", "main");
+for (const [k, v] of [["user.name", "t"], ["user.email", "t@example.invalid"], ["core.autocrlf", "false"]]) sh(main, "config", k, v);
+for (const skill of ["acks-commit", "acks-branch"]) fs.cpSync(path.join(TEMPLATE_ROOT, ".claude/skills", skill), path.join(main, ".claude/skills", skill), { recursive: true });
+fs.writeFileSync(path.join(main, ".gitignore"), "node_modules\n");
+for (const f of ["a.txt", "shared.txt", "peer.txt"]) fs.writeFileSync(path.join(main, f), "base\n");
+sh(main, "add", "-A");
+sh(main, "commit", "-q", "-m", "base");
+sh(main, "push", "-q", "-u", "origin", "main");
+const originMain = () => sh(remote, "rev-parse", "refs/heads/main");
+const originAtStart = originMain();
+const modules = path.join(main, "node_modules");
+const seedModules = () => {
+  fs.mkdirSync(path.join(modules, "pkg", "lib"), { recursive: true });
+  for (let i = 0; i < 6; i++) fs.writeFileSync(path.join(modules, "pkg", i % 2 ? "lib" : ".", `f${i}.js`), `// ${i}\n`);
+};
+seedModules();
+const modulesCount = countFiles(modules);
+const gate = (name, command) => {
+  const dir = path.join(scratch, `gate-${name}`);
+  fs.mkdirSync(dir);
+  fs.writeFileSync(path.join(dir, "change.json"), JSON.stringify({ gate: [command] }));
+  return dir;
+};
+const green = gate("green", 'node -e "process.exit(0)"');
+const red = gate("red", 'node -e "console.log(\'gate says no\'); process.exit(1)"');
+
+// --- open
+let r = cli(["open", "ff"]);
+check("open creates the branch, the sibling folder and the node_modules link", r.status === 0 && hasBranch("topic/ff") && fs.existsSync(wt("ff")) && fs.lstatSync(path.join(wt("ff"), "node_modules")).isSymbolicLink() && countFiles(path.join(wt("ff"), "node_modules")) === modulesCount, brief(r));
+check("open says what a session does next", /walked live/.test(r.out) && /by hand/.test(r.out) && /land ff/.test(r.out) && /build:packs/.test(r.out), brief(r));
+check("the branch starts at main", sh(main, "rev-parse", "topic/ff") === head());
+r = cli(["open", "Bad_Slug"]);
+check("a bad slug is a usage error", r.status === 2 && !fs.existsSync(`${main}.Bad_Slug`), brief(r));
+r = cli(["open", "ff"]);
+check("open refuses an existing branch", r.status === 1 && /already exists/.test(r.err), brief(r));
+fs.mkdirSync(wt("taken"));
+r = cli(["open", "taken"]);
+check("open refuses an existing folder and makes no branch", r.status === 1 && /already exists/.test(r.err) && !hasBranch("topic/taken"), brief(r));
+fs.rmdirSync(wt("taken"));
+sh(main, "checkout", "-q", "--detach");
+r = cli(["open", "detached"]);
+check("open refuses while main's checkout is not on main", r.status === 1 && !hasBranch("topic/detached"), brief(r));
+sh(main, "checkout", "-q", "main");
+r = cli(["open", "ff"], { cwd: wt("ff") });
+check("a command run from inside a worktree finds the same main root", r.status === 1 && /already exists/.test(r.err), brief(r));
+check("usage with no mode exits 2", cli([]).status === 2);
+
+// --- land: fast-forward
+const tipFf = commitIn(wt("ff"), "ff.txt", "ff\n");
+const before = head();
+r = cli(["land", "ff", "--change", green]);
+check("land fast-forwards main to the tip and reads HEAD back", r.status === 0 && head() === tipFf && r.out.includes(`landed topic/ff ${tipFf}; main fast-forwarded from ${before}; not pushed`), brief(r));
+check("the gate ran on the tip, from main", (fs.existsSync(path.join(green, "branch-land.log")) ? fs.readFileSync(path.join(green, "branch-land.log"), "utf8") : "").includes(`GREEN: the full gate passes on ${tipFf}`));
+check("land never pushes", originMain() === originAtStart && sh(remote, "branch", "--list", "topic/*") === "");
+check("the landed files are in main's tree", fs.existsSync(path.join(main, "ff.txt")));
+check("the lease is free after a landing", await leaseFree());
+r = cli(["land", "ff", "--change", green]);
+check("land refuses a topic that holds nothing new", r.status === 1 && /already landed or empty/.test(r.err), brief(r));
+
+// --- land: rebase onto a moved main
+cli(["open", "rb"]);
+const oldTip = commitIn(wt("rb"), "rb.txt", "rb\n");
+const peerCommit = commitIn(main, "m1.txt", "m1\n");
+r = cli(["land", "rb", "--change", green]);
+const newTip = sh(main, "rev-parse", "topic/rb");
+check("land rebases onto a moved main and fast-forwards", r.status === 0 && head() === newTip && newTip !== oldTip && sh(main, "merge-base", "--is-ancestor", peerCommit, "HEAD") === "" && fs.existsSync(path.join(main, "rb.txt")) && /rebased topic\/rb/.test(r.out), brief(r));
+check("the rebased history is linear: main's old head is the tip's parent", sh(main, "rev-parse", "HEAD~1") === peerCommit);
+
+// --- land: a conflict stops the rebase
+cli(["open", "cf"]);
+commitIn(wt("cf"), "shared.txt", "topic\n");
+commitIn(main, "shared.txt", "main\n");
+const beforeConflict = head();
+r = cli(["land", "cf", "--change", green]);
+const inProgress = fs.existsSync(path.resolve(wt("cf"), sh(wt("cf"), "rev-parse", "--git-path", "rebase-merge")));
+check("a conflict refuses, leaves main untouched and the rebase in progress", r.status === 1 && head() === beforeConflict && inProgress && /rebase --continue/.test(r.err) && /land cf again/.test(r.err), brief(r));
+check("a conflict leaves the lease free", await leaseFree());
+r = cli(["land", "cf", "--change", green]);
+check("land refuses while a rebase is stopped", r.status === 1 && /rebase is in progress/.test(r.err), brief(r));
+fs.writeFileSync(path.join(wt("cf"), "shared.txt"), "both\n");
+sh(wt("cf"), "add", "shared.txt");
+sh(wt("cf"), "rebase", "--continue");
+r = cli(["land", "cf", "--change", green]);
+check("after the conflict is resolved a second land succeeds", r.status === 0 && head() === sh(main, "rev-parse", "topic/cf"), brief(r));
+
+// --- land: refusals
+cli(["open", "dirty"]);
+commitIn(wt("dirty"), "dirty.txt", "d\n");
+fs.writeFileSync(path.join(wt("dirty"), "junk.txt"), "untracked\n");
+let h = head();
+r = cli(["land", "dirty", "--change", green]);
+check("land refuses a worktree holding an untracked file", r.status === 1 && /not clean/.test(r.err) && head() === h, brief(r));
+fs.rmSync(path.join(wt("dirty"), "junk.txt"));
+fs.writeFileSync(path.join(wt("dirty"), "a.txt"), "edited\n");
+r = cli(["land", "dirty", "--change", green]);
+check("land refuses a worktree holding a tracked edit", r.status === 1 && /not clean/.test(r.err) && head() === h, brief(r));
+sh(wt("dirty"), "checkout", "--", "a.txt");
+
+cli(["open", "stg"]);
+commitIn(wt("stg"), "stg.txt", "s\n");
+fs.writeFileSync(path.join(main, "stage.txt"), "peer\n");
+sh(main, "add", "stage.txt");
+h = head();
+r = cli(["land", "stg", "--change", green]);
+check("land refuses while main's index holds a staged change", r.status === 1 && /staged/.test(r.err) && head() === h, brief(r));
+check("a refusal under the lease releases it", await leaseFree());
+sh(main, "reset", "-q");
+fs.rmSync(path.join(main, "stage.txt"));
+r = cli(["land", "stg", "--change", green]);
+check("the refusal was not sticky: land succeeds once the index is clear", r.status === 0, brief(r));
+
+cli(["open", "pushed"]);
+commitIn(wt("pushed"), "pushed.txt", "p\n");
+sh(main, "push", "-q", "origin", "topic/pushed");
+h = head();
+r = cli(["land", "pushed", "--change", green]);
+check("land refuses a topic that exists on origin", r.status === 1 && /on origin/.test(r.err) && head() === h, brief(r));
+
+cli(["open", "peer"]);
+commitIn(wt("peer"), "peer.txt", "topic\n");
+fs.writeFileSync(path.join(main, "peer.txt"), "peer edit\n");
+h = head();
+r = cli(["land", "peer", "--change", green]);
+check("a peer's unstaged edit to a file the topic changes: refused, nothing moved, the edit kept", r.status === 1 && /ff-only/.test(r.err) && /did not move/.test(r.err) && head() === h && fs.readFileSync(path.join(main, "peer.txt"), "utf8") === "peer edit\n", brief(r));
+check("that refusal releases the lease", await leaseFree());
+sh(main, "checkout", "--", "peer.txt");
+r = cli(["land", "peer", "--change", green]);
+check("with the edit gone the same topic lands", r.status === 0, brief(r));
+
+cli(["open", "red"]);
+commitIn(wt("red"), "red.txt", "r\n");
+h = head();
+r = cli(["land", "red", "--change", red]);
+check("a red gate refuses, main unmoved, the log's tail shown", r.status === 1 && /not green/.test(r.err) && /gate says no/.test(r.err) && head() === h && !fs.existsSync(path.join(main, "red.txt")), brief(r));
+check("a red gate releases the lease", await leaseFree());
+check("the refused topic stays open", hasBranch("topic/red") && fs.existsSync(wt("red")));
+
+cli(["open", "held"]);
+commitIn(wt("held"), "held.txt", "h\n");
+const other = await acquire(gitDir, { session: "someone-else", change: "other" }, { waitMs: 0 });
+h = head();
+r = cli(["land", "held", "--wait", "0", "--change", green]);
+check("a lease held by another run, with --wait 0, exits 5 and moves nothing", r.status === 5 && /still held/.test(r.err) && head() === h, brief(r));
+other.stop();
+r = cli(["land", "held", "--change", green]);
+check("once the lease is given up the same land succeeds", r.status === 0, brief(r));
+
+// the readback, in process: a merge that reports success and leaves HEAD elsewhere
+cli(["open", "rb2"]);
+commitIn(wt("rb2"), "rb2.txt", "r\n");
+let caught = null;
+try {
+  await tool.land("rb2", {
+    cwd: main,
+    say: () => {},
+    change: green,
+    waitMinutes: 0,
+    merge: (root, sha) => {
+      sh(root, "merge", "-q", "--ff-only", sha);
+      sh(root, "commit", "-q", "--allow-empty", "-m", "something else");
+      return { status: 0, out: "", err: "" };
+    },
+  });
+} catch (e) {
+  caught = e;
+}
+check("land refuses unless HEAD reads back as the tip", caught instanceof tool.Refusal && /not the tip/.test(caught.message), String(caught?.message));
+check("that refusal releases the lease", await leaseFree());
+sh(main, "reset", "-q", "--hard", "HEAD~1");
+
+// --- close
+const modulesBefore = countFiles(modules);
+r = cli(["close", "ff"]);
+check("close removes the worktree and branch of a landed topic", r.status === 0 && !fs.existsSync(wt("ff")) && !hasBranch("topic/ff"), brief(r));
+check("close keeps main's node_modules intact", countFiles(modules) === modulesBefore && modulesBefore === modulesCount, `${countFiles(modules)} files, was ${modulesCount}`);
+
+cli(["open", "unmerged"]);
+commitIn(wt("unmerged"), "u.txt", "u\n");
+r = cli(["close", "unmerged"]);
+check("close refuses an unmerged topic and names the owner's word", r.status === 1 && /--discard-unmerged/.test(r.err) && /owner/.test(r.err) && hasBranch("topic/unmerged") && fs.existsSync(wt("unmerged")), brief(r));
+fs.writeFileSync(path.join(wt("unmerged"), "junk.txt"), "x\n");
+r = cli(["close", "unmerged", "--discard-unmerged"]);
+check("close refuses a dirty worktree even with the flag", r.status === 1 && /not clean/.test(r.err) && fs.existsSync(wt("unmerged")), brief(r));
+fs.rmSync(path.join(wt("unmerged"), "junk.txt"));
+r = cli(["close", "unmerged", "--discard-unmerged"]);
+check("--discard-unmerged drops an unmerged topic", r.status === 0 && !fs.existsSync(wt("unmerged")) && !hasBranch("topic/unmerged") && countFiles(modules) === modulesCount, brief(r));
+
+// the link check, in process
+const lk = path.join(scratch, "lk");
+fs.mkdirSync(lk);
+fs.symlinkSync(modules, path.join(lk, "node_modules"), "junction");
+let refused = null;
+try {
+  tool.checkNoLinks(lk);
+} catch (e) {
+  refused = e;
+}
+check("the link check refuses while a link remains", refused instanceof tool.Refusal && /node_modules/.test(refused.message), String(refused));
+const kept = tool.unlinkTopLevel(lk, () => {});
+check("an unlink that does nothing leaves the link reported", kept.remaining.length === 1 && kept.removed.length === 1);
+const gone = tool.unlinkTopLevel(lk);
+check("unlinking removes the link and not its target", gone.remaining.length === 0 && countFiles(modules) === modulesCount);
+tool.checkNoLinks(lk);
+check("the link check is silent once none remain", true);
+
+// the node_modules check, in process
+cli(["open", "nm"]);
+caught = null;
+try {
+  tool.close("nm", {
+    cwd: main,
+    say: () => {},
+    remove: (root, dir) => {
+      sh(root, "worktree", "remove", dir);
+      fs.rmSync(modules, { recursive: true, force: true });
+      fs.mkdirSync(modules);
+    },
+  });
+} catch (e) {
+  caught = e;
+}
+check("close reports an emptied main node_modules and the npm install line", caught instanceof tool.Refusal && caught.code === 1 && /npm install/.test(caught.message) && caught.message.includes(main) && /empty/.test(caught.message), String(caught?.message));
+check("the topic was closed all the same", !hasBranch("topic/nm") && !fs.existsSync(wt("nm")));
+seedModules();
+
+cli(["open", "failrm"]);
+caught = null;
+try {
+  tool.close("failrm", { cwd: main, say: () => {}, remove: () => { throw new tool.Refusal("removal failed"); } });
+} catch (e) {
+  caught = e;
+}
+check("a failed removal puts the link back", caught?.message === "removal failed" && tool.linksIn(wt("failrm")).includes("node_modules") && countFiles(modules) === modulesCount, String(caught?.message));
+r = cli(["close", "failrm"]);
+check("and the next close removes it", r.status === 0 && !fs.existsSync(wt("failrm")) && countFiles(modules) === modulesCount, brief(r));
+
+// --- park
+r = cli(["park", "idea"]);
+check("park creates parked/<slug> at main, with no worktree", r.status === 0 && hasBranch("parked/idea") && sh(main, "rev-parse", "parked/idea") === head() && /--push/.test(r.out), brief(r));
+check("park without --push pushes nothing", spawnSync("git", ["show-ref", "--verify", "--quiet", "refs/heads/parked/idea"], { cwd: remote, env: ENV }).status !== 0);
+r = cli(["park", "idea"]);
+check("park refuses an existing branch", r.status === 1 && /already exists/.test(r.err), brief(r));
+r = cli(["park", "badrev", "--at", "no-such-rev"]);
+check("park refuses a revision that does not exist and makes no branch", r.status === 1 && !hasBranch("parked/badrev"), brief(r));
+r = cli(["park", "idea", "--push"]);
+check("park --push reaches the bare remote", r.status === 0 && sh(remote, "rev-parse", "refs/heads/parked/idea") === head(), brief(r));
+r = cli(["park", "idea", "--push"]);
+check("park --push refuses a branch already on origin", r.status === 1 && /already on origin/.test(r.err), brief(r));
+r = cli(["park", "never", "--push"]);
+check("park --push refuses a branch that was not parked", r.status === 1, brief(r));
+
+// --- teardown: unlink before anything deletes a tree that holds a link
+for (const name of fs.readdirSync(path.dirname(main))) {
+  const dir = path.join(path.dirname(main), name);
+  if (name.startsWith("module.")) tool.unlinkTopLevel(dir);
+}
+tool.unlinkTopLevel(lk);
+fs.rmSync(scratch, { recursive: true, force: true });
+
+const failures = results.filter((ok) => !ok).length;
+console.log(`test-branch: ${results.length} cases, ${failures} failed`);
+process.exit(failures ? 1 : 0);

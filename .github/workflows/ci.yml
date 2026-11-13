@@ -130,6 +130,13 @@ jobs:
       - name: Unpushed commits are named once, by sha, and the hook asks for nothing
         run: node bin/test-unpushed-report.mjs
 
+      # A topic branch lands only as a fast-forward of the gated tip, and
+      # closing its worktree must never reach through the node_modules link
+      # into the main checkout. Throwaway repositories under the temp
+      # directory drive every mode and every refusal.
+      - name: Topic branches open, land by rebase and fast-forward, park and close without touching main's node_modules
+        run: node bin/test-branch.mjs
+
       # The sync writes canon into every module repo and its check gates every
       # push they make, and each of its guards fires only in a tree no run
       # stands in by default: an edit nobody has committed, a commit nobody has

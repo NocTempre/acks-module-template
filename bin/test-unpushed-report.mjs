@@ -2,7 +2,9 @@
  * Drives the `unpushed-report.mjs` Stop hook against a throwaway clone and
  * checks what it exists to guarantee: a commit the upstream lacks is named by
  * sha, a listing is shown once and again only when it changes, a pushed
- * checkout says nothing, and no input makes the hook exit non-zero or ask for
+ * checkout says nothing, local branches are listed (an unmerged topic, a topic
+ * landed and still open, an unpushed parked branch, any other branch) with no
+ * commit unpushed, and no input makes the hook exit non-zero or ask for
  * anything but a message.
  *
  * Usage:  node bin/test-unpushed-report.mjs [--hook <unpushed-report.mjs>]
@@ -102,6 +104,58 @@ check("a folder in no repository says nothing", silent(r), JSON.stringify(r));
 
 r = stop("d", "not json");
 check("an unparseable payload exits 0 in silence", silent(r), JSON.stringify(r));
+
+// Branches: listed with no commit unpushed, once per change, and never pushed.
+const remote2 = path.join(scratch, "remote2.git");
+const proj = path.join(scratch, "fam2", "proj");
+fs.mkdirSync(path.dirname(proj), { recursive: true });
+execFileSync("git", ["init", "-q", "--bare", "-b", "main", remote2]);
+execFileSync("git", ["clone", "-q", remote2, proj], { stdio: "ignore" });
+git(proj, "checkout", "-q", "-B", "main");
+for (const [k, v] of [["user.name", "t"], ["user.email", "t@example.invalid"]]) git(proj, "config", k, v);
+fs.writeFileSync(path.join(proj, "first"), "first");
+git(proj, "add", "first");
+git(proj, "commit", "-q", "-m", "first");
+git(proj, "push", "-q", "-u", "origin", "main");
+const stopAt = (session, cwd) => stop(session, JSON.stringify({ session_id: `${tag}-${session}`, cwd, hook_event_name: "Stop" }));
+const topicDir = path.join(scratch, "fam2", "proj.a");
+
+r = stopAt("e1", proj);
+check("a repository with only main says nothing", silent(r), JSON.stringify(r));
+
+git(proj, "worktree", "add", "-q", "-b", "topic/a", topicDir, "main");
+r = stopAt("e2", proj);
+check("a topic opened and not yet committed to is not called landed", r.out?.systemMessage?.includes("topic/a: 0 commit(s) ahead of main") && !r.out.systemMessage.includes("landed, still open"),JSON.stringify(r));
+
+fs.writeFileSync(path.join(topicDir, "a.txt"), "a");
+git(topicDir, "add", "a.txt");
+git(topicDir, "commit", "-q", "-m", "adds a");
+r = stopAt("e3", proj);
+const msg = r.out?.systemMessage ?? "";
+check("an unmerged topic is listed with its commits ahead, worktree and age, though nothing is unpushed", msg.includes("topic/a: 1 commit(s) ahead of main") && msg.includes(`worktree ${path.resolve(topicDir)}`) && msg.includes("last commit today") && !msg.includes("not on origin"), JSON.stringify(r));
+r = stopAt("e3", proj);
+check("an unchanged branch listing is not shown twice to one session", silent(r), JSON.stringify(r));
+r = stopAt("e4", topicDir);
+check("a session inside the topic worktree reads the repository's listing", r.out?.systemMessage?.includes("topic/a: 1 commit(s) ahead of main") && r.out.systemMessage.startsWith("Not pushed or not landed"), JSON.stringify(r));
+
+git(proj, "merge", "-q", "--ff-only", "topic/a");
+git(proj, "push", "-q", "origin", "main");
+r = stopAt("e3", proj);
+check("a topic contained in main and still open is named for closing", r.out?.systemMessage?.includes("topic/a: landed, still open: close it"), JSON.stringify(r));
+git(proj, "worktree", "remove", topicDir);
+git(proj, "branch", "-q", "-d", "topic/a");
+r = stopAt("e3", proj);
+check("once the topic is closed the listing is empty", silent(r), JSON.stringify(r));
+
+git(proj, "branch", "parked/idea");
+git(proj, "branch", "wip");
+r = stopAt("e5", proj);
+check("an unpushed parked branch and any other local branch are listed", r.out?.systemMessage?.includes("parked/idea: not pushed") && r.out.systemMessage.includes("wip: local branch"), JSON.stringify(r));
+git(proj, "push", "-q", "origin", "parked/idea");
+git(proj, "branch", "-q", "-d", "wip");
+r = stopAt("e6", proj);
+check("a parked branch on origin is no longer listed", silent(r), JSON.stringify(r));
+check("the hook pushed nothing", git(remote2, "for-each-ref", "--format=%(refname:short)", "refs/heads").split("\n").join(" ") === "main parked/idea", git(remote2, "for-each-ref", "--format=%(refname:short)", "refs/heads"));
 
 fs.rmSync(scratch, { recursive: true, force: true });
 for (const f of fs.readdirSync(path.join(os.tmpdir(), "acks-unpushed-report")).filter((f) => f.startsWith(tag))) fs.rmSync(path.join(os.tmpdir(), "acks-unpushed-report", f), { force: true });
