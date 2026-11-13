@@ -33,10 +33,10 @@
  *      with no recipe has no defined pass condition, which is how a release
  *      ships hotfix bait. Changed means changed relative to the last tag in
  *      the source the run reads. By default that is the WORKING TREE,
- *      committed or not, tracked or not: a release is normally prepared
- *      uncommitted, and a gate that reads only commits waives itself for
- *      exactly the run it exists to check. Under `--at` it is the commit,
- *      whose changes are all committed.
+ *      committed or not, tracked or not: the run at the bump reads a release
+ *      that is not committed yet, and a gate that read only commits would
+ *      waive itself for exactly that run. Under `--at` it is the commit the
+ *      tag will name.
  *   4. On a major or a minor, every top-level bullet under `### Added` or
  *      `### Changed` in the version's CHANGELOG.md section accounts for its
  *      release snapshot (TOOLCHAIN §4b). `<!-- shot: <feature-slug> -->` names

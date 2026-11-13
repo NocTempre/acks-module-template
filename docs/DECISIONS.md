@@ -4153,3 +4153,54 @@ instant can lose an entry; one walk holds both seats at a time, which keeps
 that rare. The first sync rewrites each module's `.gitignore` once, since
 the canonical prefix grew. The zip itself still ships `.githooks/`, which
 this change did not fix.
+
+## 2026-11-12 — A release commits before its live session and tags its docs commit — IN FORCE
+
+**Owner ruling.** On the design's questions the owner answered "All
+recommended" (2026-11-12), which settles: R9 "A major requires every walk; a
+minor and a hotfix require the walks their changed surfaces' recipes name.
+15.6's kinds table replaces 'the kind sets the snapshot obligation and
+nothing else'"; R14 "Shape B: release commit before the live session, docs
+commit after, tag on the docs commit"; R15 "One runtime writer on `main`'s
+tree during a release's live window, by procedure"; R16 "The shots commit is
+gated by the docs-site sync where the repo has a site, else by nothing"; R17
+"The local-only rules tests run once on the working tree after step 5's
+precheck, by a `run-tests` flag P2 adds".
+
+**Ruled.** The one full local gate is the commit tool's clone gate on the
+release commit (version bump, compiled changelog, `packs/_source`, any fix
+riding with it), which lands before the live session, so the walks run on a
+runtime that is committed and gated. Shots, GALLERY and guides land after
+the walks as a docs commit, gated by the docs-site sync where the repo has a
+site and by nothing otherwise, and the tag goes on that commit; a hotfix
+with no shots tags the release commit. The preflight runs twice: with
+`--live-pending` at the bump, and with `--at <sha>` just before the tag. The
+working-tree `build:packs` is the junction's deploy, not a gate. A kind is
+the declared name of a gate set: its shots, its required walks, whether the
+logs roll, all in one table in TOOLCHAIN §4; every other gate is the same for
+all three. Each fact of the procedure is stated once: TOOLCHAIN §4 holds the
+kinds and the release's shape, `acks-release` the steps and their commands,
+`shared-tree.md` the one-runtime-writer rule, and `acks-minor` and
+`acks-hotfix` scope a release and point to the others. A release interrupted
+after its release commit resumes the same version; the checkpoint tracks the
+release commit and the docs commit.
+
+**Rejected.** Gate, then live, then commit of the same tree: the commit mode
+refuses a tree or a `HEAD` that moved, the lease is held only while a mode
+runs, so a peer's landing during the live session voids the gate, and the
+shots still need a second commit. Live first and one gate at the commit: a
+runtime-caused red found after the live session makes every walk stale and
+repeats the session. A docs commit with no gate: the site sync fails on a
+missing screenshot, and a red tag spends the version. A lease held across
+the live session: a new mode in the commit tool, where "one runtime writer"
+by procedure costs nothing to try first (§16's unfreeze would allow it if
+the procedure does not hold).
+
+**Cost.** Two commits for a major or a minor, with the tag on a docs commit.
+The version bump and its compiled section sit on `main` from the release
+commit to the tag, so an abandoned release costs the day's next version. A
+peer's runtime landing during the live window makes the walks stale and the
+run before the tag refuses. Each fix a walk finds costs a full gate. The
+gitignored local-only suites never run in the commit tool's clone; until a
+module's test runner has a working-tree pass for them, a release runs none.
+The unfreeze of the commit tooling was not used.

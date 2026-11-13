@@ -116,11 +116,10 @@ module-breaking bug in this family passed them.
 ## Release
 
 Every release is a **major**, **minor** or **hotfix** — declared by the user,
-never derived. Ask if unclear; a major is always explicit. All three pass the
-same gates (build, validate, live-verify, snapshot obligations by kind);
-`/acks-release` walks the procedure and TOOLCHAIN §4 is canon. Never
-`gh run watch` (it hangs) — bounded polls only. Never retag a published
-release — the release is the day's next version.
+never derived. Ask if unclear; a major is always explicit. What each kind
+requires is TOOLCHAIN §4's table, and `/acks-release` walks the steps with
+their commands. Never `gh run watch` (it hangs); never retag a published
+release (the release is the day's next version).
 
 **A release ships the JUDGE TOOLS for what it adds, unless the user says
 otherwise.** A schema a Judge cannot populate and an importer that never writes

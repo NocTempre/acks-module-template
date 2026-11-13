@@ -53,16 +53,23 @@ hold:
 3. the full gate then runs on the commit itself, and the report gives its
    result.
 
-A release is never carried. Its gates are TOOLCHAIN §4's, run on the release
-tree.
+A release is never carried. Its gates are the ones TOOLCHAIN §4 ("Release
+shape") names, run on the release's own commits.
 
 ## Versions, tags and pushes
 
 - **An open CHANGELOG heading reserves nothing.** Only the tag list says what
   shipped. Read it before writing into a section and again before staging; a
   version a peer published is spent, and the answer is the day's next version.
-- **A release tags its own commit's sha, never `HEAD`,** and pushes that sha
-  with its tag in one atomic push, so a commit that landed above it stays
-  local for the session that made it.
+- **A release tags its own commit's sha, never `HEAD`:** the docs commit, or
+  the release commit where a hotfix takes no shots. It pushes that sha with its
+  tag in one atomic push, so a commit that landed above it stays local for the
+  session that made it.
+- **One runtime writer on `main`'s tree during a release's live window.** From
+  the release commit (`acks-release` step 4) to the tag's push, the session
+  cutting the release is the only one that lands a change to what the zip ships
+  (the paths `tools/walk-results.mjs` hashes as the runtime tree). A peer's
+  runtime landing in that window makes the walks stale, and the preflight run on
+  the tag's commit refuses.
 - **Every commit is reported by sha, with whether it is pushed.** Whether to
   push is TOOLCHAIN §2 unless the user said otherwise.

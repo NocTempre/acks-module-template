@@ -195,67 +195,47 @@ to every user's download for no consumer.
 
 Every release is one of three kinds, and the kind is **declared, not derived**.
 It is not read off the version number — the number is a date and says nothing
-about how big a release is; the kind is recorded in the release commit's
-subject (`Release 2026.12.15 (major) — …`). Ask which kind is intended
+about how big a release is. The user declares it; ask which kind is intended
 whenever the user has not said. A **major release is only ever explicit**; it is
-never inferred from the size of a diff.
+never inferred from the size of a diff. The kind is recorded in the release
+commit's subject, `Release <version> (<kind>) — …`
+(`Release 2026.12.15 (major) — …`).
 
-| Kind | Snapshot obligation (§4b) |
-|---|---|
-| **Major** | **Full gallery refresh** — re-shoot every feature area, changed or not |
-| **Minor** | **Changed features only** — one shot per user-visible changelog entry |
-| **Hotfix** | **None**, unless the fix is UI-visible *and* the user asks for a shot |
+| Kind | Shots (§4b) | Walks required (§4a) | Logs | Version |
+|---|---|---|---|---|
+| **Major** | full gallery | every walk | rolled (`logs-rolled`) | the day's next |
+| **Minor** | changed features | those the changed surfaces' recipes name | compiled only | the day's next |
+| **Hotfix** | none unless asked | those the changed surfaces' recipes name | compiled only | the day's next |
 
-The kind sets the snapshot obligation and nothing else. Every other gate —
-build, validate, test, the §4a live-verification gate, the bounded publication
-checks — is identical for all three. A hotfix is not a shortcut through the
-go-live gate.
+Every other gate is the same for all three kinds; a hotfix is no shortcut
+through the go-live gate.
 
-Release procedure (also encoded in the `acks-release` skill):
+### Release shape
 
-1. Establish the release kind (above), set the `module.json` version and
-   compile the changelog (`node tools/logs.mjs compile --label "<stage>"`). A
-   major first rolls the logs (`node tools/logs.mjs roll`); the reviewer then
-   rules the flagged index rows, re-issues each ROADMAP under
-   `Re-issued <date>.`, and deletes the shot folders `roll` lists once the new
-   shots are linked. **Then run `node tools/release-preflight.mjs
-   --kind <kind> --live-pending`** (synced gate — it reads the bumped
-   version, and refuses a run that declares no kind; on every kind it runs
-   `changelog-compiled`, and on a major `logs-rolled`): it refuses a tag that
-   already exists — **a published version is never retagged**; the release
-   is then the day's next version, which the preflight computes and prints
-   — and requires a
-   `docs/<feature>/TESTING.md` live-test recipe for every `scripts/` surface
-   changed since the last tag — **changed in the working tree, committed or
-   not, tracked or not**, because a release is normally prepared uncommitted.
-   The live-verify session (step 4) walks exactly those recipes. On a major
-   or minor it also holds the changelog section to §4b's shot markers.
-   `--live-pending` makes this run list, instead of refusing, what the live
-   session still owes: the shots step 5 takes, the walks (§4a) not yet run or
-   not passing, and a `docs/releases/v*` folder not yet linked. The same
-   command without it refuses each of those. The run before the tag adds
-   `--at <sha of the commit the tag names>` (every check then reads that
-   commit, not the working tree) and takes no `--live-pending`.
-2. `npm run build:packs` — commit `packs/_source` if it changed. The compiled
-   dirs are gitignored build output; there is nothing to review or discard.
-3. `npm run validate` (and `npm test` where present).
-4. **Live-verify on the local test server — §4a. This is a GO-LIVE GATE, not
-   an optional extra.** No waiver: a machine without a test server cannot tag
-   a release (§4a).
-5. **Capture the release snapshots the kind calls for — §4b** — during that
-   same live-verify session, and update `docs/GALLERY.md`.
-6. Commit with the subject `Release <version> (<kind>) — …`, tag the
-   release commit `v<version>`, and push that commit with
-   its tag in one atomic push. A push the remote refuses is the skill's
-   step 6.
-7. Confirm publication with BOUNDED checks (never `gh run watch` — it hangs
-   through GitHub API outages, which 2026-07-16 stranded several agents):
-   poll `gh release view v<version> --json assets` ~30s apart, cap ~5 min,
-   in a background/Monitor wait rather than foreground. On API 5xx, stop
-   and report — the pushed tag completes on its own.
-8. Verify: `curl -sm 15 -L https://github.com/NocTempre/<id>/releases/latest/download/module.json`
-   reports the new version (needs the repo public; while private use
-   `gh release view` — unauthenticated manifest fetches 404).
+A release is two commits and a tag, all on `main`:
+
+- The **release commit** holds the version bump, the compiled changelog section
+  with its fragments removed, `packs/_source` where it changed, and any fix
+  released with it. It lands through `acks-commit` **before** the live session,
+  and the commit tool's clone gate on it (`build:packs`, `validate`, `test`) is
+  the one full local gate. The walks then run on a runtime that is committed
+  and gated.
+- The **docs commit** holds the shots, `docs/GALLERY.md` and the guides. It
+  lands after the walks and is gated only by what reads docs: the docs-site sync
+  where the repo has `docs/site/`, else nothing. A hotfix that takes no shots
+  has none.
+- The tag goes on the last of them, in one atomic push with the branch, and CI
+  gates the tagged commit in full (the pipeline above).
+
+The preflight brackets the release: one run at the version bump, before the
+live session, and one on the commit the tag names. The gitignored local-only
+rules tests, which the clone gate cannot see, run once on the working tree
+during the live window. Between the release commit and the tag the version bump
+and the compiled section sit on `main`: an interrupted release resumes under the
+same version, and an abandoned one costs the day's next version. One session
+writes runtime to `main`'s tree in that window (`.claude/rules/shared-tree.md`).
+
+The steps and their commands are the **`acks-release` skill**.
 
 ### Release discipline
 
@@ -266,6 +246,8 @@ Release procedure (also encoded in the `acks-release` skill):
   for every changed surface, is the whole defense against shipping a surface
   that then needs a hotfix chain — there is no release-cadence rule; ship as
   often as the gates pass. Ruling: DECISIONS.md, 2026-08-19.)
+- **A published version is never retagged.** A release that needs fixing is
+  the day's next version, which the preflight prints.
 - **A runtime or manifest change and its release travel together.** After
   landing one, run the test pass and cut the release in the same motion — a
   commit pushed after a release is silent drift between what users install
@@ -336,7 +318,7 @@ to understand what the feature does (guide). A shot taken outside the
 verification run earns none of the three — it proves nothing about this release,
 and it dates from a build nobody gated.
 
-**What to capture** follows from the release kind (§4):
+**What to capture** follows from the Shots column of the kind table (§4):
 
 - **Major** — every feature area the module ships, re-shot against the current
   build. Unchanged areas are included on purpose: a major release republishes
@@ -459,8 +441,9 @@ session times out with no picture regardless of what the page contains. That is
 the reason this driver exists.
 
 A machine without a test server cannot tag a release (§4a), so no snapshot
-obligation is waived for want of one: the shots the preflight lists are taken
-or the release does not tag.
+obligation is waived for want of one. The shots land in the release's docs
+commit (§4, "Release shape"), and the preflight run on the commit the tag names
+refuses a shot the changelog names that the commit lacks.
 
 **Report** which shots you took and which obligations you could not meet. An
 entry with no user-visible surface is a legitimate "no shot", and its marker is

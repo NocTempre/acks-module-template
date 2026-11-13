@@ -204,10 +204,9 @@ and say why; then do what they chose. Do not reclassify the work as a minor, do
 not stop short of shipping to wait for a decision that has already been made,
 and do not route to `acks-minor` unless the user asks for that.
 
-The shape below is a **recommendation heuristic**, and the reason to voice it is
-that a bigger release kind buys more gates. A **hotfix** classically restores
-intended behaviour and carries no data migration, no new setting, and no new
-user-facing surface. When the work in hand needs one of those, say so in one
+The recommendation heuristic is `acks-minor` §1: a **hotfix** restores intended
+behaviour and crosses none of its three tripwires (data migration, new setting,
+new user-facing surface). When the work in hand crosses one, say so in one
 line — "this adds a setting, which usually wants a minor; shipping as the hotfix
 you asked for" — and carry on. The one thing to raise louder than a line is a
 **data migration**, because that is the case where the kind changes what a world
@@ -241,12 +240,11 @@ Reflexes that are wrong here (full statements in the module's `CLAUDE.md`):
 
 ## 6. Ship it
 
-Hand off to **`acks-release`** with kind = **hotfix**. It owns the version bump,
-the live gate, tagging, CI polling and manifest verification; none of that is
-repeated here. A hotfix captures no release snapshots unless the fix is
-UI-visible *and* the user asks. When the user says to commit and hold the
-release, the fix lands through **`acks-commit`** and the ledger row reads
-`fixed-unreleased`.
+Hand off to **`acks-release`** with kind = **hotfix**; what a hotfix requires is
+TOOLCHAIN §4's table. A fix that is released at once rides `acks-release`
+step 4's release commit, so one gate covers both. When the user says to commit
+and hold the release, the fix lands through **`acks-commit`** and the ledger row
+reads `fixed-unreleased`.
 
 ### Voice
 
