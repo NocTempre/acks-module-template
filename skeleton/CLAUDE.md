@@ -56,6 +56,13 @@ How much one agent and one session carry:
 - **An owner ruling reaches an agent in the owner's words.** The brief quotes
   it, and the agent's report restates it with one example before anything is
   built on it.
+- **A new phase is a clean session, its own orchestrator.** The owner: "when
+  launching a new phase, launch a clean session as orchestrator. End these
+  long chains once the plan is architected". A planning session ends once its
+  plan is written. A phase session reads the plan, runs its own agents,
+  appends its results to the plan, corrects the next phase's start prompt and
+  reports to the owner; it starts no session that reports back to it. The plan
+  file is the only hand-over.
 
 ## Layout
 

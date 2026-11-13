@@ -4326,3 +4326,30 @@ recursive delete of a worktree folder by any route but `close` (`rm -r`,
 `Remove-Item -Recurse`, a file manager) empties the main checkout's
 `node_modules` on Windows, and no hook catches every spelling; `npm install`
 restores it.
+
+## 2026-11-12 — A new phase is a clean session, its own orchestrator — IN FORCE
+
+**Problem.** The acks-extras Public Beta plan was written by one session,
+which then started each phase's session as its child and relayed every report
+and owner ruling between them. Its context grew with each phase it relayed,
+and the phase sessions reported to it rather than to the owner.
+
+**Ruled by the owner, 2026-11-12.** "lessons have not been learned. when
+launching a new phase, launch a clean session as orchestrator. End these long
+chains once the plan is architected", and then "hand off to the new
+orchestrator to clear context, unless there is another method".
+
+The rendered `CLAUDE.md`, "Sizing the task", gains a fifth rule beside the
+four of the 2026-11-12 sizing entry: a planning session ends once its plan is
+written; each phase is one clean session that orchestrates itself from the
+plan file, appends its results there, corrects the next phase's start prompt
+and reports to the owner; it starts no session that reports back to it.
+Clearing a session's conversation and handing it the next start prompt is
+the same thing, since the plan file is the hand-over either way.
+
+**Rejected — a standing orchestrator that starts and relays each phase.** It
+is the shape the ruling ends: its context carries every earlier phase into
+each later one, the cost the sizing entry measured for resumed agents.
+
+**Cost.** Each phase session re-reads the plan file, so the file has to hold
+everything a phase needs; nothing may live only in a session's context.
