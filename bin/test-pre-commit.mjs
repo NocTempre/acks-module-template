@@ -141,6 +141,31 @@ try {
     check("git ignores it from here on, by the list no commit carries", ignoredBy.startsWith(".git/info/exclude:"), `${ignoredBy}\n${f.exclude()}`);
   });
 
+  test("a banned path staged in a linked work tree stays out of a hand commit there, as in main's tree", (check) => {
+    const f = fixture("linked-main");
+    const linked = path.join(tmp, "linked-tree");
+    const added = f.git("worktree", "add", "-q", "--detach", linked, "HEAD");
+    check("the work tree is made", added.status === 0 && fs.statSync(path.join(linked, ".git")).isFile(), added.stderr);
+    if (fs.existsSync(path.join(linked, HOOK))) fs.chmodSync(path.join(linked, HOOK), 0o755);
+    const inTree = (...args) => spawnSync("git", args, { cwd: linked, encoding: "utf8", env: ENV });
+    fs.mkdirSync(path.join(linked, "ruledata"), { recursive: true });
+    fs.mkdirSync(path.join(linked, "docs"), { recursive: true });
+    fs.writeFileSync(path.join(linked, "ruledata", "table.json"), "{}\n");
+    fs.writeFileSync(path.join(linked, "docs", "note.txt"), "clean\n");
+    const base = inTree("rev-parse", "HEAD").stdout.trim();
+    inTree("add", "--", "ruledata/table.json", "docs/note.txt");
+    const r = inTree("commit", "-m", "a commit in the work tree");
+    const out = `${r.stdout}${r.stderr}`;
+    check("git commit exits 0", r.status === 0, out);
+    check("the quarantine names the path it took out", /LEAK {2}ruledata\/table\.json/u.test(out) && /Quarantined 1 file\(s\)/u.test(out), out);
+    const wrote = inTree("show", "--name-only", "--format=", "HEAD").stdout.trim();
+    check("a commit is made in the work tree, and it writes the clean file alone", inTree("rev-parse", "HEAD").stdout.trim() !== base && wrote === "docs/note.txt", wrote);
+    check("the banned file is still on disk", fs.existsSync(path.join(linked, "ruledata", "table.json")));
+    const ignoredBy = inTree("check-ignore", "-v", "--", "ruledata/table.json").stdout;
+    check("git ignores it from here on, by a list no commit carries", /info[\\/]exclude:/u.test(ignoredBy), ignoredBy);
+    check("main's own commit is untouched", f.head() === base);
+  });
+
   test("the scanner that reads a commit is skeleton/tools/ip-scan.mjs as the tree holds it", (check) => {
     const f = fixture("in-place");
     f.write("first/probe.txt", "x\n");

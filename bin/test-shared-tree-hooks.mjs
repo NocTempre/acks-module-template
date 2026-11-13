@@ -7,7 +7,9 @@
  * - `ledger.mjs`, over what the hook wrote, gives a line to the session that
  *   wrote it and to nobody when a writer no hook saw came between;
  * - `shared-tree-guard.mjs` denies the hand-run git commands that go around
- *   the commit tool, in the repositories it guards and nowhere else.
+ *   the commit tool, in the repositories it guards and nowhere else;
+ * - both hooks stand down in a linked work tree, judged by the path they act
+ *   on and never by the session's directory.
  *
  * Usage:  node bin/test-shared-tree-hooks.mjs [--hook <edit-ledger.mjs>] [--reader <ledger.mjs>] [--guard <shared-tree-guard.mjs>]
  *         (each defaults to the copy in this repository; pass a modified copy
@@ -638,14 +640,15 @@ try {
     f.write(ME, "a.txt", f.change("a.txt", { 5: "line 5 MINE" }));
     const heads = readRecords(f.gitDir).get("a.txt").map((rec) => rec.head);
     check("each record names the commit HEAD was at when it was written", first !== second && show(heads) === show([first, second]), show(heads));
-    // A linked work tree has a HEAD of its own, and shares the ledger.
+    // A linked work tree has one writer and no ledger.
     const linked = path.join(tmp, "head-recorded-linked");
     f.git("worktree", "add", "-q", "--detach", linked, first);
     const there = path.join(linked, "there.txt");
     fs.writeFileSync(there, "a new file\n");
-    f.hook({ session_id: ME, hook_event_name: "PostToolUse", cwd: linked, tool_name: "Write", tool_input: { file_path: there }, tool_response: { type: "create", filePath: there, structuredPatch: [], originalFile: null } }, linked);
+    const told = f.hook({ session_id: ME, hook_event_name: "PostToolUse", cwd: linked, tool_name: "Write", tool_input: { file_path: there }, tool_response: { type: "create", filePath: there, structuredPatch: [], originalFile: null } }, linked);
     const other = readRecords(f.gitDir).get("there.txt");
-    check("a write in a linked work tree names that work tree's commit", other?.length === 1 && other[0].head === first, show(other));
+    check("a write in a linked work tree is not recorded", told.status === 0 && !told.out && other === undefined, show(other));
+    check("and main's tree keeps the records it had", show(readRecords(f.gitDir).get("a.txt").map((rec) => rec.head)) === show([first, second]));
     // A repository with no commit yet.
     const repo = path.join(tmp, "head-unborn");
     fs.mkdirSync(path.dirname(path.join(repo, TOOL)), { recursive: true });
@@ -934,6 +937,44 @@ try {
     check("an untracked file that is not ignored is recorded", readRecords(f.gitDir).has("kept.txt") && !readRecords(f.gitDir).has("local/secret.txt"), show([...readRecords(f.gitDir).keys()]));
   });
 
+  test("the ledger stands down in a linked work tree by where the file is, not where the session stands", (check) => {
+    const f = fixture("ledger-linked");
+    const linked = path.join(tmp, "ledger-linked-tree");
+    f.git("worktree", "add", "-q", "--detach", linked, "HEAD");
+    const told = (file, cwd) => f.hook({ session_id: ME, hook_event_name: "PostToolUse", cwd, tool_name: "Write", tool_input: { file_path: file }, tool_response: { type: "create", filePath: file, structuredPatch: [], originalFile: null } }, cwd);
+    const inside = path.join(linked, "inside.txt");
+    fs.writeFileSync(inside, "written in the work tree\n");
+    const a = told(inside, f.repo);
+    check("a file in the work tree, from a session standing in main's tree, is not recorded", a.status === 0 && !a.out && !readRecords(f.gitDir).has("inside.txt"), show([...readRecords(f.gitDir).keys()]));
+    const b = told(inside, linked);
+    check("nor from a session standing in the work tree", b.status === 0 && !b.out && !readRecords(f.gitDir).has("inside.txt"));
+    check("no ledger was made", !fs.existsSync(path.join(f.gitDir, "acks-ledger")));
+    const tracked = path.join(linked, "a.txt");
+    fs.writeFileSync(tracked, "an edit of a tracked file\n");
+    told(tracked, linked);
+    check("a tracked file in the work tree is not recorded either", !readRecords(f.gitDir).has("a.txt"));
+    const main = f.abs("main-side.txt");
+    fs.writeFileSync(main, "written in main's tree\n");
+    const c = told(main, linked);
+    const rec = readRecords(f.gitDir).get("main-side.txt");
+    check("a file in main's tree, from a session standing in the work tree, is recorded", c.status === 0 && !c.out && rec?.length === 1 && rec[0].session === ME, show(rec));
+  });
+
+  test("the ledger keeps recording where a `.git` file names no common directory", (check) => {
+    const f = fixture("ledger-separate");
+    const sep = path.join(tmp, "ledger-separate-store");
+    const repo = path.join(tmp, "ledger-separate-tree");
+    fs.mkdirSync(path.dirname(path.join(repo, TOOL)), { recursive: true });
+    fs.writeFileSync(path.join(repo, TOOL), "// stands for the commit tool\n");
+    execFileSync("git", ["init", "-q", "-b", "main", `--separate-git-dir=${sep}`, repo], { stdio: ["pipe", "pipe", "pipe"] });
+    check("the stand-in is a `.git` file with no `commondir`", fs.statSync(path.join(repo, ".git")).isFile() && !fs.existsSync(path.join(sep, "commondir")));
+    const file = path.join(repo, "new.txt");
+    fs.writeFileSync(file, "a new file\n");
+    const r = f.hook({ session_id: ME, hook_event_name: "PostToolUse", cwd: repo, tool_name: "Write", tool_input: { file_path: file }, tool_response: { type: "create", filePath: file, structuredPatch: [], originalFile: null } }, repo);
+    const got = readRecords(sep).get("new.txt");
+    check("a write there is recorded in the git directory the file names", r.status === 0 && got?.length === 1 && got[0].how === "create", show(got));
+  });
+
   test("a subagent's edit is recorded under its session, with the agent named", (check) => {
     const f = fixture("agent");
     f.write(ME, "a.txt", f.change("a.txt", { 3: "line 3 MINE" }), "original", { payload: { agent_id: "agent-7" } });
@@ -1051,6 +1092,30 @@ try {
     check("a directory outside any repository", !guard("git commit -m x", { cwd: os.tmpdir(), project: os.tmpdir() }).denied);
     const r = guard("", { raw: "not json" });
     check("a payload that does not parse", r.status === 0 && !r.denied, r.out);
+  });
+
+  test("the guard stands down in a linked work tree, by the directory the command targets and not the session's", (check) => {
+    const linked = path.join(tmp, "guarded-linked");
+    guarded.git("worktree", "add", "-q", "--detach", linked, "HEAD");
+    fs.mkdirSync(path.join(linked, "sub"), { recursive: true });
+    check("the work tree carries the commit tool", fs.existsSync(path.join(linked, TOOL)));
+    for (const command of ["git commit -m x", "git add -A", "git stash", "git reset --hard"]) {
+      check(`${command}, from inside the work tree`, !guard(command, { cwd: linked, project: guarded.repo }).denied);
+    }
+    check("from a subdirectory of the work tree", !guard("git commit -m x", { cwd: path.join(linked, "sub"), project: guarded.repo }).denied);
+    check("aimed at the work tree with -C from main's tree", !guard(`git -C "${posix(linked)}" commit -m x`).denied);
+    check("aimed at the work tree with cd from main's tree", !guard(`cd "${posix(linked)}" && git add -A && git commit -m x`).denied);
+    check("aimed at main's tree with -C from the work tree", guard(`git -C "${posix(guarded.repo)}" commit -m x`, { cwd: linked, project: guarded.repo }).denied);
+    check("aimed at main's tree with cd from the work tree", guard(`cd "${posix(guarded.repo)}" && git commit -m x`, { cwd: linked, project: guarded.repo }).denied);
+    check("main's tree itself is still guarded", guard("git commit -m x").denied);
+    // A `.git` file that names no common directory is not a linked work tree.
+    const sep = path.join(tmp, "guarded-separate-store");
+    const repo = path.join(tmp, "guarded-separate-tree");
+    fs.mkdirSync(path.dirname(path.join(repo, TOOL)), { recursive: true });
+    fs.writeFileSync(path.join(repo, TOOL), "// stands for the commit tool\n");
+    execFileSync("git", ["init", "-q", "-b", "main", `--separate-git-dir=${sep}`, repo], { stdio: ["pipe", "pipe", "pipe"] });
+    execFileSync("git", ["remote", "add", "origin", "https://example.invalid/owner/separate.git"], { cwd: repo });
+    check("a `.git` file with no `commondir` is still guarded", fs.statSync(path.join(repo, ".git")).isFile() && guard("git commit -m x", { cwd: repo, project: repo }).denied);
   });
 } finally {
   fs.rmSync(tmp, { recursive: true, force: true });
