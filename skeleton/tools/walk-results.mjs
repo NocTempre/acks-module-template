@@ -56,7 +56,7 @@ export const CLASSIFIED_STATUSES = ["new", "claimed", "deferred"];
  * left out of the runtime tree too.
  */
 export const ZIP_DENYLIST = [
-  ".git/*", ".github/*", ".claude/*", "node_modules/*",
+  ".git/*", ".githooks/*", ".github/*", ".claude/*", "node_modules/*",
   "packs/_source/*", "tools/*", "register/*", "docs/*",
   "changelog.d/*", "CHANGELOG-through-*.md",
   "package.json", "package-lock.json",
@@ -65,12 +65,12 @@ export const ZIP_DENYLIST = [
 
 /**
  * Paths the zip would ship that are not the runtime: the root files a release
- * edits as a matter of course, the commit hooks, and the scratch directory,
- * which the ignore list keeps out of every checkout but which would otherwise
- * enter a working-tree id (the result file itself included) wherever that
- * line is missing.
+ * edits as a matter of course, and the scratch directory, which the ignore
+ * list keeps out of every checkout but which would otherwise enter a
+ * working-tree id (the result file itself included) wherever that line is
+ * missing.
  */
-export const RUNTIME_EXCLUDES = ["CHANGELOG.md", "README.md", "LICENSE", "LICENSE.*", ".githooks/*", "aia-tmp/*"];
+export const RUNTIME_EXCLUDES = ["CHANGELOG.md", "README.md", "LICENSE", "LICENSE.*", "aia-tmp/*"];
 
 const HEX40 = /^[0-9a-f]{40}$/u;
 

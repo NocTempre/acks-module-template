@@ -94,6 +94,7 @@ Keep `title` and
 | `style-feedback` | a preference, not a defect — collected, never adjudicated; the accumulated rows are the feedback corpus |
 | `not-reproducible` | could not be made to happen — a different claim from `false-report`, never a synonym |
 | `duplicate` | same defect as `dup_of`; resolves with it |
+| `wontfix` | understood, and deliberately not built, by the owner's ruling; `notes` quotes it. Closed: it rolls at a major like the resolved statuses |
 | `routed-elsewhere` | belongs to another family repo or upstream core; `notes` says where it went |
 | `deferred` | real, but waiting on a designated minor/major; `notes` records the tripwire that forced the wait |
 

@@ -166,7 +166,7 @@ jobs:
           # its megabytes of PNG out of every user's download. The changelog's
           # fragments and its archives are repo-only for the same reason.
           zip -r module.zip . \
-            -x '.git/*' '.github/*' '.claude/*' 'node_modules/*' \
+            -x '.git/*' '.githooks/*' '.github/*' '.claude/*' 'node_modules/*' \
                'packs/_source/*' 'tools/*' 'register/*' 'docs/*' \
                'changelog.d/*' 'CHANGELOG-through-*.md' \
                'package.json' 'package-lock.json' \

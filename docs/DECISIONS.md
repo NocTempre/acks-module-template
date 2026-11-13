@@ -4193,8 +4193,8 @@ runtime-caused red found after the live session makes every walk stale and
 repeats the session. A docs commit with no gate: the site sync fails on a
 missing screenshot, and a red tag spends the version. A lease held across
 the live session: a new mode in the commit tool, where "one runtime writer"
-by procedure costs nothing to try first (§16's unfreeze would allow it if
-the procedure does not hold).
+by procedure costs nothing to try first (the owner's 2026-11-12 permission to
+reopen the commit tooling would allow it if the procedure does not hold).
 
 **Cost.** Two commits for a major or a minor, with the tag on a docs commit.
 The version bump and its compiled section sit on `main` from the release
@@ -4203,4 +4203,4 @@ peer's runtime landing during the live window makes the walks stale and the
 run before the tag refuses. Each fix a walk finds costs a full gate. The
 gitignored local-only suites never run in the commit tool's clone; until a
 module's test runner has a working-tree pass for them, a release runs none.
-The unfreeze of the commit tooling was not used.
+That permission to reopen the commit tooling was not used.

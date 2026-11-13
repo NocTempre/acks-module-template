@@ -340,6 +340,17 @@ const CASES = [
     },
   },
   {
+    name: "denylist: the zip itself leaves out every dot-git path, the commit hooks included",
+    run: () => {
+      // zip's own -x matching, kept apart from RUNTIME_EXCLUDES: a path only
+      // that list holds is still shipped in module.zip.
+      const zipDenies = (rel) => W.ZIP_DENYLIST.some((glob) =>
+        new RegExp(`^${glob.replace(/[.+^${}()|[\]\\]/gu, "\\$&").replace(/\*/gu, ".*")}$`, "su").test(rel));
+      const want = { ".githooks/pre-commit": true, ".git/config": true, ".github/workflows/release.yml": true, ".gitignore": true, ".gitattributes": true, "scripts/module.mjs": false, "module.json": false };
+      return Object.entries(want).filter(([p, v]) => zipDenies(p) !== v).map(([p, v]) => `${p}: expected the zip to ${v ? "leave it out" : "ship it"}`);
+    },
+  },
+  {
     name: "denylist: the matcher follows zip's globs",
     run: () => {
       const want = {

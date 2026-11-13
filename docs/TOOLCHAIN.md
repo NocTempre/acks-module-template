@@ -176,8 +176,8 @@ A second synced workflow, `toolchain-check.yml`, runs on every module push/PR:
 it checks out this template and fails CI if any canonical file drifted from
 canon — hand-edits can't survive unnoticed.
 
-The zip includes *everything* except an explicit denylist (`.git*`, `.github`,
-`.claude`, `CLAUDE.md`, `.gitignore`, `.gitattributes`, `module.zip`,
+The zip includes *everything* except an explicit denylist (`.git/`, `.githooks/`,
+`.github/`, `.claude/`, `CLAUDE.md`, `.gitignore`, `.gitattributes`, `module.zip`,
 `node_modules`, `tools`, `register`, `packs/_source`, `package*.json`,
 `changelog.d/`, `CHANGELOG-through-*.md`, and **all of `docs/`**). Rationale: the old allowlist zip
 silently dropped new runtime dirs — a whole data directory had to be patched in
@@ -295,9 +295,9 @@ unknown schema; a required walk that was not run, is stale, changed during its
 run or is partial; and a non-pass that is not classified. On a clear run it
 prints the walk table the release report quotes under "exercised live".
 
-- **Required walks.** "A major requires every walk; a minor and a hotfix
-  require the walks their changed surfaces' recipes name." A recipe names a
-  walk by mentioning `tools/live/<name>.mjs` in its `docs/<feature>/TESTING.md`.
+- **Required walks.** Which walks a kind requires is §4's kinds table. A
+  recipe names a walk by mentioning `tools/live/<name>.mjs` in its
+  `docs/<feature>/TESTING.md`.
 - **Classifying a non-pass.** The module runner's
   `node tools/live/run.mjs --classify <walk> <T-id> defect|world-state|stale-walk|environment`
   checks the bug-intake ledger row at that moment (the ledger's path comes
