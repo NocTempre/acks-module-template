@@ -23,8 +23,10 @@ every downstream CI at once. Read `docs/TOOLCHAIN.md` before changing anything;
 
 ## Rules
 
-- **Single branch `main`, no worktrees** — enforced by
-  `.claude/hooks/single-branch-guard.mjs`, same as every module repo.
+- **`main` is released, and its tree never leaves `main`**; topic and parked
+  branches only through `acks-branch` (`.claude/rules/shared-tree.md`, "Topic
+  and parked branches"), enforced by `.claude/hooks/branch-guard.mjs`, same as
+  every module repo.
 - **Push ordering: template first.** Module-repo CI checks out this repo's
   `main`; syncing modules before pushing the template edit they depend on turns
   every downstream toolchain-check red (TOOLCHAIN §9).

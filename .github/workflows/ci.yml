@@ -137,6 +137,13 @@ jobs:
       - name: Topic branches open, land by rebase and fast-forward, park and close without touching main's node_modules
         run: node bin/test-branch.mjs
 
+      # The branch guard fires on every git command in every repo: it must
+      # refuse a hand-made branch or worktree, a hand worktree removal and a
+      # switch of main's tree, and pass everything else, a linked worktree's
+      # switch included.
+      - name: The branch guard refuses hand-made branches, worktree removal and switching main's tree
+        run: node bin/test-branch-guard.mjs
+
       # The sync writes canon into every module repo and its check gates every
       # push they make, and each of its guards fires only in a tree no run
       # stands in by default: an edit nobody has committed, a commit nobody has

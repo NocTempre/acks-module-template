@@ -1,11 +1,12 @@
 # Working beside other sessions (canonical)
 
-Several sessions write in one working tree, on one branch, at the same time.
-A commit holds one session's change and nothing else, and the tree it holds is
+Several sessions write in `main`'s working tree at the same time. A commit
+there holds one session's change and nothing else, and the tree it holds is
 the tree that was gated. The mechanics are the `acks-commit` skill; the
 rulings behind this page are `acks-module-template/docs/DECISIONS.md`
-(2026-10-07). The test world's half of this is `live-testing.md`,
-"Concurrency".
+(2026-10-07, and 2026-11-12 for the branch model). The test world's half of
+this is `live-testing.md`, "Concurrency". A topic branch in a worktree of its
+own has one writer and none of this page's machinery but the last section's.
 
 ## What is yours
 
@@ -73,3 +74,48 @@ shape") names, run on the release's own commits.
   the tag's commit refuses.
 - **Every commit is reported by sha, with whether it is pushed.** Whether to
   push is TOOLCHAIN §2 unless the user said otherwise.
+
+## Topic and parked branches
+
+This section is in force in a repository once its synced `.claude/` holds it
+together with the hooks synced beside it. Until then a branch, a worktree, a
+rebase and a merge each wait for the owner's word.
+
+- **`main` is what is released and walked, and its tree never leaves
+  `main`.** A hook refuses a switch of `main`'s tree to another branch or
+  commit.
+- **A track goes on `topic/<slug>` only when all three hold:** nothing in it
+  is walked live until it is finished, it spans more than one commit, and one
+  writer works it at a time. Its live walk, and the fixes that walk finds,
+  happen on `main` after it lands. Everything else is written in `main`'s
+  tree.
+- **`acks-branch` is the one way a branch or a worktree comes to exist or
+  goes away**: `open`, `land`, `close`, `park`. The worktree is the sibling
+  folder `<repo>.<slug>`. A hook refuses a hand-made branch or worktree, a
+  hand `git worktree remove`, and the app's own worktrees.
+- **A worktree directory is closed by the tool and never deleted by hand.**
+  Its `node_modules` is a link to `main`'s, and a recursive delete of the
+  folder (`git worktree remove`, `rm -r`, `Remove-Item -Recurse`) reaches
+  through the link and empties `main`'s; `close` removes the link first. No
+  hook catches every spelling of a delete.
+- **One writer per worktree, who commits there by hand.** The edit ledger and
+  the shared-tree guard stand down in a linked worktree; the pre-commit IP
+  quarantine still runs. The session's brief carries what the track needs.
+- **The session that wrote a topic branch lands it** with `branch.mjs land`:
+  a rebase onto `main` in the worktree, which stops at the first conflict,
+  then the full gate on the tip under the landing lease, then a fast-forward.
+  No squash and no merge commit. The branch ruling is standing approval for
+  that rebase of an unpushed topic branch and for the tool's fast-forward;
+  every other merge, rebase, push or history rewrite still asks.
+- **Rebase conflicts.** `CHANGELOG.md`: none, since entries are fragments.
+  DECISIONS and ROADMAP appends: keep both, `main`'s first. Generated files
+  (`packs/_source`, `cookbook/*.json`): take `main`'s side, rerun the
+  generator, commit the result.
+- **A topic branch is never pushed.** A parked branch, `parked/<slug>`, is
+  pushed once, at creation, on the owner's go-ahead; it is never synced and
+  never built by CI.
+- **Nothing is left unnamed.** The Stop hook lists unmerged topic branches,
+  topics landed but still open, unpushed parked branches and any other local
+  branch. `close` deletes a landed branch; an unmerged one goes only on the
+  owner's word. An unlanded topic branch does not ship (`acks-release`
+  step 1).

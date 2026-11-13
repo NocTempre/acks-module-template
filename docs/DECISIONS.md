@@ -257,7 +257,7 @@ from. Renaming one would rewrite every shipped `_id` and orphan every world
 document referencing them — a migration whose cost is real and whose benefit is
 a search convenience.
 
-## 2026-08-05 — The worktree that renamed a repo, and the sync that ran ahead of the push — IN FORCE
+## 2026-08-05 — The worktree that renamed a repo, and the sync that ran ahead of the push — IN FORCE except the single-branch guard's scope (superseded in part 2026-11-12)
 
 Two flaws with one root — rules keyed on transient local state — kept module CI
 red and sent live-testing sessions chasing a directory that does not exist.
@@ -1369,7 +1369,7 @@ repo's own tree, with a peer's uncommitted `skeleton/.claude/settings.json` in
 it, `record` split TOOLCHAIN.md's five hunks between three changes. Before the
 commit that carries this entry, `gate` and `commit` had run on fixtures only.
 
-## 2026-10-07 — A worktree or a branch per session is rejected, and what is left lands as tools — IN FORCE
+## 2026-10-07 — A worktree or a branch per session is rejected, and what is left lands as tools — IN FORCE except the rejected trial for sessions that walk nothing live (superseded in part 2026-11-12)
 
 **Problem.** The entry above left open whether each session should work in a
 worktree or on a branch of its own, with one session landing commits. The
@@ -3294,7 +3294,8 @@ ran a seven-mode tool step by step and read each step's output, a full gate
 ran for a docs-only change as for a runtime one, and a sync was two tools
 and a hand-written change. The ruling of 2026-10-07 (one tree, one branch,
 several sessions) is what makes "whose lines" a question git cannot answer,
-and it stands.
+and it stands (for `main`'s tree since 2026-11-12, which adds topic branches
+in worktrees of their own).
 
 **Ruled by the owner, 2026-10-14.**
 
@@ -3902,7 +3903,9 @@ work that finds a printed value fix it. Asked which wins, the owner answered
 unchanged.
 
 **Rejected — one worktree per ledger row.** It isolates agents without
-shortening any of them, and the family is single-branch by an earlier ruling.
+shortening any of them, and the family is single-branch by an earlier ruling
+(that second reason superseded 2026-11-12 by the owner's branch ruling; the
+first stands).
 
 **Cost.** A batch that finds a printed value grows past ten rows by that fix.
 A fresh agent re-reads what the last one knew, and a new session re-reads the
@@ -4204,3 +4207,122 @@ run before the tag refuses. Each fix a walk finds costs a full gate. The
 gitignored local-only suites never run in the commit tool's clone; until a
 module's test runner has a working-tree pass for them, a release runs none.
 That permission to reopen the commit tooling was not used.
+
+## 2026-11-12 — Topic and parked branches return, opened and landed by one tool — IN FORCE
+
+**Problem.** Several tracks of the Public Beta work run for many sessions
+each: deleting the OSE importer, splitting a cookbook, two book-list imports.
+Done in `main`'s tree, each leaves a half-finished state loaded in the one
+test world under every peer's walk for hours. The entry of 2026-10-07
+rejected a worktree or a branch per session, and with it "a trial for
+sessions that walk nothing live".
+
+**Ruled by the owner, 2026-11-12.** "Git branches will return as development
+tool." On the design put to them, "All recommended", which settles six
+answers here:
+
+1. The branch ruling is standing approval for rebasing an unpushed topic
+   branch and for the tool's fast-forward landing. Every other merge,
+   rebase, push or history rewrite still asks.
+2. `acks-branch` is a new tool beside the commit tool; the edit ledger and
+   the shared-tree guard stand down in a linked worktree.
+3. The session that wrote a topic branch lands it.
+4. Rebase, then fast-forward.
+5. Topic branches are never pushed; a parked branch is pushed once, at
+   creation, on the owner's go-ahead.
+6. No allowlist entry for rebases.
+
+The owner also wrote "New tooling is part of this effort, unfreeze is an
+option if needed to implement." It was not needed: `branch.mjs` imports the
+lease and calls `postgate`, and changes neither; the two hook exemptions are
+answer 2's.
+
+**The model.** `main` is released and walked, and its tree never leaves
+`main`. A track goes on `topic/<slug>` only when nothing in it is walked live
+until it is finished, it spans more than one commit, and one writer works it.
+`.claude/skills/acks-branch/branch.mjs` is the one way a branch or a
+worktree comes and goes: `open` makes `topic/<slug>` at `main` in the sibling
+folder `<repo>.<slug>` and links `main`'s `node_modules` into it; `land`
+rebases the topic onto `main` in its worktree, stopping at the first
+conflict, then, under the landing lease, refuses staged changes in `main`'s
+index and a `main` that is not an ancestor of the tip, runs `postgate` on the
+tip from `main`'s root, fast-forwards `main` and reads `HEAD` back; `close`
+removes the link, refuses to remove the worktree while any link remains,
+removes it, deletes a landed branch (an unmerged one only on the owner's
+word) and checks `main`'s `node_modules` afterwards; `park` names a shelved
+line `parked/<slug>`. The single-branch guard is renamed `branch-guard.mjs`
+and refuses a hand-made branch or worktree, a hand `git worktree remove`, a
+switch of `main`'s tree off `main`, and the app's worktrees. The Stop hook
+lists unmerged topic branches, topics landed but still open, unpushed parked
+branches and any other local branch. The rules are `shared-tree.md`, "Topic
+and parked branches". None of it, answers 1 and 5 included, is in force in a
+module until the template is pushed and synced into it; until then the
+workspace rule stands.
+
+**Found before the tool was written.** A probe in a scratch clone of
+acks-extras (at `401ff93d`, git 2.50.1.windows.1), with a linked worktree
+beside it whose `node_modules` was a junction to the clone's:
+
+- `build:packs` (2 s), `validate` (198 s) and `npm test` (164 s, 205
+  committed suites) exit 0 in the worktree, which stays clean. The
+  worktree's `..` was the scratch folder, so the three lookups of a sibling
+  repository were not exercised from `C:\Proj`.
+- A plain `git worktree remove`, link in place, exits 0 and empties the main
+  checkout's `node_modules` (5189 files to 0; the directory stays). It did so
+  twice, on fresh copies.
+- Removing the link first, then the worktree, keeps all 5189 files.
+  `git clean -fdx` in the worktree removes only the link.
+
+On that finding the orchestrating session ruled, within the owner's "All
+recommended" and open to the owner's overrule: `close` refuses to remove a
+worktree that still holds a link and names `npm install` when `main`'s
+`node_modules` is gone afterwards; the guard refuses a hand
+`git worktree remove`; the rules say a worktree folder is closed by the tool
+and never deleted by hand.
+
+Not checked: whether a session started in a sibling worktree loads the
+repository's settings, hooks and memory notes. The check, after a sync: open
+a topic, start a session in its folder, and see whether the guard's startup
+line names the topic branch (settings and hooks load), whether a hand
+`git commit` there passes (the shared-tree guard stands down), and whether
+the main checkout's memory notes are listed.
+
+**What changed since 2026-10-07.** The owner's ruling; tracks that run for
+several sessions and would leave half-finished states in the one test world
+for every peer; the four tools that entry ordered now exist; and the stranded
+branch it feared is named every turn by the Stop hook. Its rejection of a
+worktree or a branch per session stands. Its "Rejected — a trial for
+sessions that walk nothing live" is the part reversed. The reason the
+2026-11-12 sizing entry gave against a worktree per ledger row, "the family
+is single-branch by an earlier ruling", stops holding with this day's
+branch ruling, which is the new evidence; that rejection stands on its other
+ground.
+
+**Rejected.** Squash: it loses the per-piece commits TOOLCHAIN §2 asks for,
+and every landed branch would read as unmerged. A merge commit: git builds
+its tree outside any session's tree, and the commit tool has no step that
+gates one. The app's `.claude/worktrees/` folder: inside the junctioned tree
+and not ignored. A tree id in ledger records: it changes the commit tool's
+reader for a tree with one writer. The docs roll and the dead-code pass on
+branches: each touches what every landing touches. A `merge=union` driver
+for DECISIONS: it merges wrongly in silence. A worktree per session:
+2026-10-07's reasons stand. An allowlist entry for `git rebase *`: in synced
+settings it also pre-approves a rebase of `main`. The strongest counter,
+rated moderate, was park-only: keep one branch for all work and allow only
+`parked/*` refs, since the 2026-10-07 analysis still holds, the family has
+twice had work stranded on branches, and topic tracks are about 4 of roughly
+25 sessions. It rates moderate and not strong because the owner asked for
+branches as a development tool, and an importer deletion done in `main`'s
+tree is half-deleted under every peer's walk for hours.
+
+**Cost.** Two ways to commit, by tree. A landing holds the lease through a
+full gate, so `main`'s commits queue behind it. Rebase conflicts on
+`lang/en.json`, `cookbook/*.json`, `register/_ledger.json` and DECISIONS.
+Commits below a tip are gated only as part of the tip's tree. A landing
+rewrites `main`'s live files in one step, so a peer mid-walk reloads onto it
+(inferred). "One writer per worktree" has no gate behind it. A worktree has
+no compiled packs, `aia-tmp/`, `settings.local.json` or Foundry junction. A
+recursive delete of a worktree folder by any route but `close` (`rm -r`,
+`Remove-Item -Recurse`, a file manager) empties the main checkout's
+`node_modules` on Windows, and no hook catches every spelling; `npm install`
+restores it.

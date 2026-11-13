@@ -70,7 +70,15 @@ acks-<feature>/
 
 ## 2. Git conventions
 
-- **Default branch: `main`**, on every repo.
+- **Default branch: `main`**, on every repo; it is what is released and
+  walked, and its tree never leaves `main`. A track that walks nothing live
+  until it is finished, spans more than one commit and has one writer may run
+  on `topic/<slug>` in the sibling worktree `<repo>.<slug>`, opened, landed
+  (rebase, the full gate on the tip, fast-forward) and closed by `acks-branch`;
+  a shelved line is `parked/<slug>`. A topic branch is never pushed; a parked
+  branch is pushed once, at creation, on the owner's go-ahead. The rules are
+  `.claude/rules/shared-tree.md`, "Topic and parked branches" (DECISIONS
+  2026-11-12).
 - **Commit early and often; push the package on the owner's go-ahead**
   (DECISIONS 2026-10-17). A session commits each finished piece of its own
   change (a fix, a slice, a step) as soon as that piece passes its gate, not
@@ -667,7 +675,8 @@ Full ruling and its corollaries: DECISIONS, 2026-07-19.
     dispositions), `acks-hotfix` (patch scoping), `acks-minor` (minor
     scoping), `acks-release` (mechanics for all three kinds), `acks-commit`
     (one session's change out of a shared tree, and the tool that builds and
-    gates it), `acks-hygiene-sweep` (standing audit + its tooling),
+    gates it), `acks-branch` (opens, lands, closes and parks topic and parked
+    branches), `acks-hygiene-sweep` (standing audit + its tooling),
     `acks-printed-value` (a printed value in source moved onto the importer),
     `acks-new-module` and `acks-sync-toolchain` (run from this repo). There is **no user-level
     install**: a `~/.claude/skills/acks-*` copy sits outside every drift gate
@@ -676,15 +685,19 @@ Full ruling and its corollaries: DECISIONS, 2026-07-19.
     `live-testing.md`, `ip-doctrine.md`, `docs-doctrine.md`,
     `rules-lookup.md`, `ui-layout.md`, `ui-tooltips.md`, `delegation.md`, `shared-tree.md`. Each is the canonical
     statement of its subject; every other file points at it.
-  - `.claude/hooks/` — `single-branch-guard.mjs` (single-branch convention),
+  - `.claude/hooks/` — `branch-guard.mjs` (refuses a hand-made branch or
+    worktree, a hand `git worktree remove`, a switch of `main`'s tree and the
+    app's worktrees; says at startup which tree a session is in),
     `no-windows-path-heredoc.mjs` (Windows paths never enter Bash
     heredocs), `edit-ledger.mjs` (records each Edit and Write under its
-    session, in the git directory, for the commit tool to read),
-    `shared-tree-guard.mjs` (refuses a hand-run `git add`, `git commit` or
-    discard in a repository that carries the commit tool) and
-    `unpushed-report.mjs` (at the end of a turn, names by sha the commits
-    the checkout and the template beside it hold that their upstreams do
-    not; it reports and never pushes), wired in the synced
+    session, in the git directory, for the commit tool to read; `main`'s tree
+    only), `shared-tree-guard.mjs` (refuses a hand-run `git add`,
+    `git commit` or discard in a repository that carries the commit tool;
+    `main`'s tree only) and `unpushed-report.mjs` (at the end of a turn,
+    names by sha the commits the checkout and the template beside it hold
+    that their upstreams do not, and lists unmerged topic branches, topics
+    landed but still open, unpushed parked branches and any other local
+    branch; it reports and never pushes), wired in the synced
     `.claude/settings.json`.
   - `.claude/agents/` — the model/effort routing tier: `scout` (haiku,
     search), `implementer` (sonnet, scoped changes), `architect` (opus,
@@ -692,8 +705,8 @@ Full ruling and its corollaries: DECISIONS, 2026-07-19.
     world), `doc-scribe` (haiku, docs chores). CLAUDE.md's "Sizing the task"
     says when each is used.
 - The template repo protects itself with the same `.claude/settings.json`
-  hook set (single-branch-guard, heredoc guard, edit ledger, shared-tree
-  guard, `bgIsolation: none`) as its children, and carries its own `CLAUDE.md` — it is the highest-blast-radius
+  hook set (branch guard, heredoc guard, edit ledger, shared-tree guard,
+  unpushed report, `bgIsolation: none`) as its children, and carries its own `CLAUDE.md` — it is the highest-blast-radius
   repo in the family and gets no less guidance than the repos it governs.
 - Note that when a session runs from one repo with others as additional dirs,
   only the *session* repo's settings govern permissions; the per-module

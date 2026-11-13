@@ -133,9 +133,16 @@ renders and hides exactly this.
 
 ## Conventions
 
-- **Single branch: `main`**; tags `v<version>` are the only other refs. Never
-  create a branch or a worktree — `.claude/hooks/single-branch-guard.mjs`
-  enforces it and warns a misplaced session at startup. `worktree.bgIsolation`
+- **`main` is released and walked, and its tree never leaves `main`.** A
+  track goes on `topic/<slug>`, in the sibling worktree `<repo>.<slug>`, only
+  when nothing in it is walked live until it is finished, it spans more than
+  one commit, and one writer works it; a shelved line is `parked/<slug>`;
+  tags `v<version>` are the only other refs. `acks-branch` opens, lands,
+  closes and parks them, and a worktree folder is never deleted by hand
+  (`.claude/rules/shared-tree.md`, "Topic and parked branches").
+  `.claude/hooks/branch-guard.mjs` refuses a hand-made branch or worktree, a
+  hand `git worktree remove` and a switch of `main`'s tree, and says at
+  startup which tree a session is in. `worktree.bgIsolation`
   is `none` (read at daemon start — restart the app after changing it).
 - `compatibility` minimum 14 / verified 14.364; system `acks` minimum 14.
 - Every `relationships.requires` entry carries a `reason`; third-party entries

@@ -9,6 +9,10 @@ file, carries it out, and its header is the reference for every mode and every
 fix, a slice, a step) once gated, is the go-ahead to commit. A push waits for the owner's own go-ahead (TOOLCHAIN
 §2), so `land` carries `--no-push` until one is given.
 
+This skill is for `main`'s tree. In a topic branch's worktree there is one
+writer and no ledger: commit there by hand, and land the branch on `main` with
+`acks-branch` (`shared-tree.md`, "Topic and parked branches").
+
 ## 1. Describe the change
 
 A directory outside the repository with `commit-msg.txt`, the message in the
