@@ -150,13 +150,13 @@ const ROLL_TWICE_COMMITS = [
 const exact = (text) => new RegExp(`^${text.replace(/[.*+?^${}()|[\]\\]/gu, "\\$&")}$`, "u");
 
 /**
- * Runs the template's release preflight (`--kind major --shots-pending`) in the
+ * Runs the template's release preflight (`--kind major --live-pending`) in the
  * case's repository and returns a problem for every `logs-rolled` line it
  * prints, or for a run that printed nothing at all.
  */
 function preflightLogsRolled(root) {
-  put(root, "tools/release-preflight.mjs", fs.readFileSync(path.join(TEMPLATE_ROOT, "skeleton", "tools", "release-preflight.mjs"), "utf8"));
-  const r = spawnSync(process.execPath, [path.join("tools", "release-preflight.mjs"), "--kind", "major", "--shots-pending"], { cwd: root, env: GIT_ENV, encoding: "utf8" });
+  for (const file of ["release-preflight.mjs", "walk-results.mjs"]) put(root, `tools/${file}`, fs.readFileSync(path.join(TEMPLATE_ROOT, "skeleton", "tools", file), "utf8"));
+  const r = spawnSync(process.execPath, [path.join("tools", "release-preflight.mjs"), "--kind", "major", "--live-pending"], { cwd: root, env: GIT_ENV, encoding: "utf8" });
   const text = `${r.stdout}${r.stderr}`;
   if (!text.trim()) return ["release-preflight printed nothing"];
   return text.split("\n").filter((l) => /logs-rolled/u.test(l)).map((l) => `preflight: ${l.trim()}`);

@@ -219,7 +219,7 @@ Release procedure (also encoded in the `acks-release` skill):
    rules the flagged index rows, re-issues each ROADMAP under
    `Re-issued <date>.`, and deletes the shot folders `roll` lists once the new
    shots are linked. **Then run `node tools/release-preflight.mjs
-   --kind <kind> --shots-pending`** (synced gate — it reads the bumped
+   --kind <kind> --live-pending`** (synced gate — it reads the bumped
    version, and refuses a run that declares no kind; on every kind it runs
    `changelog-compiled`, and on a major `logs-rolled`): it refuses a tag that
    already exists — **a published version is never retagged**; the release
@@ -229,15 +229,19 @@ Release procedure (also encoded in the `acks-release` skill):
    changed since the last tag — **changed in the working tree, committed or
    not, tracked or not**, because a release is normally prepared uncommitted.
    The live-verify session (step 4) walks exactly those recipes. On a major
-   or minor it also holds the changelog section to §4b's shot markers and
-   lists the shots step 5 takes; the same command without `--shots-pending`,
-   run again before the tag, refuses a shot that was not taken.
+   or minor it also holds the changelog section to §4b's shot markers.
+   `--live-pending` makes this run list, instead of refusing, what the live
+   session still owes: the shots step 5 takes, the walks (§4a) not yet run or
+   not passing, and a `docs/releases/v*` folder not yet linked. The same
+   command without it refuses each of those. The run before the tag adds
+   `--at <sha of the commit the tag names>` (every check then reads that
+   commit, not the working tree) and takes no `--live-pending`.
 2. `npm run build:packs` — commit `packs/_source` if it changed. The compiled
    dirs are gitignored build output; there is nothing to review or discard.
 3. `npm run validate` (and `npm test` where present).
 4. **Live-verify on the local test server — §4a. This is a GO-LIVE GATE, not
-   an optional extra.** Skipping is permitted only when the machine defines no
-   test environment, and must then be stated explicitly in the release report.
+   an optional extra.** No waiver: a machine without a test server cannot tag
+   a release (§4a).
 5. **Capture the release snapshots the kind calls for — §4b** — during that
    same live-verify session, and update `docs/GALLERY.md`.
 6. Commit with the subject `Release <version> (<kind>) — …`, tag the
@@ -288,9 +292,38 @@ pre-upgrade fixtures).
 The canonical procedure — environment, fixtures built once and kept, real
 player seats, pre-upgrade shapes, what to report — is the synced
 **`.claude/rules/live-testing.md`**, loaded in every repo. This section
-states only the policy: the gate is skipped exactly when
-`C:\Proj\acks-rules\TEST_ENVIRONMENT.md` is absent (no test server on that
-machine), and the skip is stated in the release report.
+states the policy and the gate that enforces it.
+
+**No waiver for walks: a tag needs a machine with a test server.** A machine
+whose `C:\Proj\acks-rules\TEST_ENVIRONMENT.md` is absent cannot tag a release
+of any kind. Live checks outside a release keep the skip
+(`live-testing.md`, "Environment").
+
+**The walk-result gate.** A module that has `tools/live/run.mjs` tracked
+records its walks there; the preflight's check 9, `live-walks`, runs on every
+kind and reads only the file the runner writes,
+`aia-tmp/live/walk-results.json` (gitignored, never committed, one entry per
+walk, the latest attempt wins). No ledger and no machine path enters a repo.
+The states, the runtime tree id and the walk-file hash are defined in the
+header of the synced `tools/walk-results.mjs`; in short, a walk ends `passed`
+only on a `WALK END` line, at least one PASS, no FAIL and exit 0, and a result
+goes stale on any runtime byte or an edit to the walk's own file, with no age
+limit. The preflight refuses a result file that is missing, tracked or of an
+unknown schema; a required walk that was not run, is stale, changed during its
+run or is partial; and a non-pass that is not classified. On a clear run it
+prints the walk table the release report quotes under "exercised live".
+
+- **Required walks.** "A major requires every walk; a minor and a hotfix
+  require the walks their changed surfaces' recipes name." A recipe names a
+  walk by mentioning `tools/live/<name>.mjs` in its `docs/<feature>/TESTING.md`.
+- **Classifying a non-pass.** The module runner's
+  `node tools/live/run.mjs --classify <walk> <T-id> defect|world-state|stale-walk|environment`
+  checks the bug-intake ledger row at that moment (the ledger's path comes
+  from an environment variable `TEST_ENVIRONMENT.md` sets). A non-pass counts
+  as classified only when the row is `new`, `claimed` or `deferred` and the
+  classification was made for this release's version.
+- **Defects.** "A walk failure classified as a product defect ships only when
+  its ledger row is `deferred`."
 
 ## 4b. Release snapshots
 
@@ -425,10 +458,9 @@ the pane composites frames only while displayed, so a headless or backgrounded
 session times out with no picture regardless of what the page contains. That is
 the reason this driver exists.
 
-If `TEST_ENVIRONMENT.md` is absent there is no test server — so there is no
-verification session and no snapshots. Say so in the report, exactly as §4a
-already requires; the run before the tag then keeps `--shots-pending`, and the
-shots it lists as still to take are the gaps the report names.
+A machine without a test server cannot tag a release (§4a), so no snapshot
+obligation is waived for want of one: the shots the preflight lists are taken
+or the release does not tag.
 
 **Report** which shots you took and which obligations you could not meet. An
 entry with no user-visible surface is a legitimate "no shot", and its marker is

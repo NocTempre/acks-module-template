@@ -29,8 +29,9 @@ module's dialog auto-opens at launch. That is the fastest routing evidence
 available, and it is how you learn a symptom belongs to a sibling repo before
 spending a fan-out on the wrong one. LOCAL-ONLY: never commit or quote its
 ports, world id, user names or paths into any repo, skill or commit message.
-If the file is absent, this machine has no test server — say so, and expect to
-ship without the live gate.
+If the file is absent, this machine has no test server — say so. Diagnosis
+can proceed from source, but a hotfix cannot be tagged from this machine
+(TOOLCHAIN §4a).
 
 **b. `ls C:/Proj | grep -i acks`.** The repo set changes. What is there today:
 

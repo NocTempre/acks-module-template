@@ -108,7 +108,8 @@ it is the canonical procedure (fixtures built once and kept, real player
 seats, world-shutdown-before-build, what to report). The machine's server is
 defined in `C:\Proj\acks-rules\TEST_ENVIRONMENT.md` (LOCAL-ONLY — no port,
 world id, user name or password ever enters a repo); if that file is absent,
-this machine has no test server — skip and say so. Offline green proves
+this machine has no test server — skip and say so, except for a release,
+which such a machine cannot tag (TOOLCHAIN §4a). Offline green proves
 nothing: `validate`/`npm test` run against mocked globals, and every
 module-breaking bug in this family passed them.
 

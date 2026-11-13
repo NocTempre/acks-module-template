@@ -81,6 +81,14 @@ jobs:
       - name: Logs tool compiles fragments and rolls the archives
         run: node bin/test-logs.mjs
 
+      # The live-walk result file is what the release preflight trusts about a
+      # walk: a walk ends in a named state, and its result is bound to the
+      # runtime tree it ran on. Throwaway repositories hold the tree id still
+      # under a changelog edit or a line-ending flip, and move it under any
+      # runtime byte; the zip list is read back out of the release workflow.
+      - name: Walk results reduce, bind to the runtime tree and refuse stale ones
+        run: node bin/test-walk-results.mjs
+
       # The capture driver's guards run only when a live page stops answering
       # or a toast lands late, which no run can be made to do on demand. A
       # scripted page pins the sequence they depend on: front the page, hide

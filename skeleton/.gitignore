@@ -22,3 +22,6 @@ packs/*
 docs/RULES.md
 docs/PROFICIENCIES.md
 docs/ACKS-Reactions-Reference.md
+
+# Temporary output, including the live-walk result file (aia-tmp/live/).
+aia-tmp/

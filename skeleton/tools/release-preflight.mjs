@@ -2,6 +2,22 @@
  * Release preflight gate. Run before tagging; `/acks-release` invokes it and
  * a red result stops the release.
  *
+ * Every check reads one source, chosen once at startup: the working tree by
+ * default, or with `--at <rev>` the commit that names. The run before the tag
+ * passes `--at` with the docs commit (shots, GALLERY, guides) and so judges
+ * what the tag will hold; peer sessions' uncommitted hunks never move its
+ * verdict. Under `--at` nothing is untracked, and a bad rev is refused. Tag
+ * lookups (local, origin, the previous tag's blobs and date) are not reads of
+ * the source and are the same in both modes.
+ *
+ * Two runs bracket a release: `--live-pending` at the bump, before the live
+ * session, and `--at <sha>` just before the tag. `--live-pending` lists what
+ * the live session still owes (the shots to take, the walks to run, an
+ * unlinked release folder) instead of refusing it. `--at` takes no
+ * `--live-pending`: a tag needs a
+ * machine with a test server, so the run before it waives nothing.
+ * `--shots-pending` is refused and names `--live-pending`.
+ *
  * Checks, in order:
  *   1. The release kind is declared with --kind: major, minor or hotfix. The
  *      kind is never read off the version number, so a run without one is
@@ -15,10 +31,12 @@
  *      and files directly under `scripts/` map to `docs/TESTING.md`. The
  *      release report walks these recipes in the live session; a surface
  *      with no recipe has no defined pass condition, which is how a release
- *      ships hotfix bait. Changed means changed in the WORKING TREE relative
- *      to the last tag — committed or not, tracked or not: a release is
- *      normally prepared uncommitted, and a gate that reads only commits
- *      waives itself for exactly the run it exists to check.
+ *      ships hotfix bait. Changed means changed relative to the last tag in
+ *      the source the run reads. By default that is the WORKING TREE,
+ *      committed or not, tracked or not: a release is normally prepared
+ *      uncommitted, and a gate that reads only commits waives itself for
+ *      exactly the run it exists to check. Under `--at` it is the commit,
+ *      whose changes are all committed.
  *   4. On a major or a minor, every top-level bullet under `### Added` or
  *      `### Changed` in the version's CHANGELOG.md section accounts for its
  *      release snapshot (TOOLCHAIN §4b). `<!-- shot: <feature-slug> -->` names
@@ -33,11 +51,9 @@
  *      to the same file check, which is how a fix-driven minor's visible
  *      Fixed entry carries its shot. A named shot must exist with
  *      that exact letter case, which a Windows file check alone does not
- *      test. --shots-pending lists a missing one as still to take instead:
- *      on the run made before the live session that takes the shots, and on
- *      a machine with no test server, where no session takes them and the
- *      release report names each one. A hotfix owes no shot and skips the
- *      check.
+ *      test. --live-pending lists a missing one as still to take instead,
+ *      on the run made before the live session that takes the shots. A
+ *      hotfix owes no shot and skips the check.
  *   5. `version-date`, on every kind: module.json's version is a release day,
  *      `YYYY.M.D` with no leading zeros and an optional `.N` from 1 for a
  *      later release that day. The date must exist and must not be after
@@ -71,19 +87,48 @@
  *      `docs/**\/ROADMAP.md` present at the tag carries a `Re-issued
  *      <YYYY-MM-DD>.` stamp dated on or after the tag's commit, and every
  *      `docs/releases/v*` folder is linked from a guide or the GALLERY;
- *      --shots-pending lists an unlinked one instead of refusing it. A path
+ *      --live-pending lists an unlinked one instead of refusing it. A path
  *      that did not exist at the tag is not asked for.
+ *   9. `live-walks`, on every kind, where `tools/live/run.mjs` is tracked (a
+ *      repo with none prints "no walks" and passes). A walk is a
+ *      `tools/live/<name>.mjs` that is not `run` and does not start with `_`.
+ *      A major requires every walk; a minor and a hotfix require the walks
+ *      that the recipes of check 3 name as `tools/live/<name>.mjs`. A recipe
+ *      naming a walk that does not exist fails; a recipe naming none is noted,
+ *      its surface being walked by hand. The runner's result file
+ *      (`aia-tmp/live/walk-results.json`) is always read from the working
+ *      tree, never from a commit, and is refused where it is tracked, where
+ *      it cannot be read or where its schema is not the one `walk-results.mjs`
+ *      knows; a missing file is refused too. Each required walk is then held
+ *      to the verdict `walk-results.mjs` gives: it was run, it ended on a
+ *      runtime tree that its start shared, that tree is the current one (a
+ *      path named in the refusal), the walk's own file is unchanged, it ran
+ *      every check, and it passed. A walk that did not pass counts only when
+ *      it is classified through the runner (`node tools/live/run.mjs
+ *      --classify <walk> <T-id> defect|world-state|stale-walk|environment`,
+ *      which reads the ledger; this check reads only the result file), for
+ *      this release's version, on a row that is `new`, `claimed` or
+ *      `deferred`. A failure classified as a product defect ships only when
+ *      its row is `deferred`. The current tree is the working tree's, or with
+ *      `--at` the commit's, with the same line-ending and release-edit
+ *      normalization the runner applies. No kind and no flag waives a
+ *      walk: --live-pending, made before the live session, lists each
+ *      required walk that is not yet current and passing, a missing file
+ *      included, as still to run instead of refusing it, and `--at` takes no
+ *      such listing.
  *
- * Exit 0 prints the recipes to walk and the shots the entries name; exit 1
- * lists every failure. A repo with no v* tag yet (first release) skips
- * check 3.
+ * Exit 0 prints the recipes to walk, the shots the entries name and each
+ * required walk with its verdict (under --live-pending, the walks still to
+ * run); exit 1 lists every failure. A repo with no v* tag yet (first release)
+ * skips check 3.
  *
- * Usage: node tools/release-preflight.mjs --kind major|minor|hotfix [--tag v<version>] [--shots-pending]
+ * Usage: node tools/release-preflight.mjs --kind major|minor|hotfix [--tag v<version>] [--live-pending | --at <rev>]
  */
 import { execFileSync } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
 import url from "node:url";
+import { RESULT_PATH, evaluate, listWalks, readResults, runtimeTree, walkBlob, walksNamedBy } from "./walk-results.mjs";
 
 const ROOT = path.dirname(path.dirname(url.fileURLToPath(import.meta.url)));
 const git = (...a) => execFileSync("git", ["-C", ROOT, ...a], { encoding: "utf8" }).trim();
@@ -91,16 +136,107 @@ const git = (...a) => execFileSync("git", ["-C", ROOT, ...a], { encoding: "utf8"
 const args = process.argv.slice(2);
 const tagArg = args.includes("--tag") ? args[args.indexOf("--tag") + 1] : null;
 const kind = args.includes("--kind") ? args[args.indexOf("--kind") + 1] : null;
-const shotsPending = args.includes("--shots-pending");
+const livePending = args.includes("--live-pending");
+const atArg = args.includes("--at") ? args[args.indexOf("--at") + 1] : null;
 
 const failures = [];
 const fail = (msg) => failures.push(msg);
 
+/** Prints every failure so far and exits 1, for a run that cannot go on to read its source. */
+function bail(label) {
+  console.error(`release-preflight: ${failures.length} blocker(s) for ${label}:`);
+  for (const f of failures) console.error(`  FAIL ${f}`);
+  process.exit(1);
+}
+
 if (!["major", "minor", "hotfix"].includes(kind)) {
   fail(kind ? `--kind ${kind} is not a release kind — major, minor or hotfix` : "no release kind — pass --kind major|minor|hotfix; the kind is declared, never read off the version (TOOLCHAIN §4)");
 }
+if (args.includes("--shots-pending")) {
+  fail("--shots-pending is now --live-pending — it lists what the live session still owes, and is for the run made before that session only");
+}
+if (args.includes("--at") && livePending) {
+  fail("--at takes no --live-pending: the run before the tag judges the commit and waives nothing — a tag needs a machine with a test server");
+}
 
-const moduleJson = JSON.parse(fs.readFileSync(path.join(ROOT, "module.json"), "utf8").replace(/^﻿/u, ""));
+/** NUL-separated git listing, so a path is never quoted or split. */
+const gitZ = (...a) => execFileSync("git", ["-C", ROOT, ...a], { encoding: "utf8", maxBuffer: 1 << 28 }).split("\0").filter(Boolean);
+
+/** Every file under a directory of the working tree, as posix paths relative to ROOT; empty where it is absent. */
+function walk(rel) {
+  const abs = path.join(ROOT, rel);
+  if (!fs.existsSync(abs)) return [];
+  return fs.readdirSync(abs, { withFileTypes: true }).flatMap((d) => (d.isDirectory() ? walk(`${rel}/${d.name}`) : [`${rel}/${d.name}`]));
+}
+
+/**
+ * The working tree as a source. `exists` is true of a file or a directory,
+ * `list` gives every file under a directory (posix, relative to ROOT),
+ * `dirs` its immediate subdirectories, `blobId` the id git would give the file
+ * on disk, `changedSince` every path that differs from a tag, untracked files
+ * included, and `tracked` the tracked files under a directory.
+ */
+function worktreeSource() {
+  return {
+    label: "working tree",
+    exists: (rel) => fs.existsSync(path.join(ROOT, rel)),
+    read: (rel) => fs.readFileSync(path.join(ROOT, rel), "utf8"),
+    list: walk,
+    dirs: (rel) => (fs.existsSync(path.join(ROOT, rel)) ? fs.readdirSync(path.join(ROOT, rel), { withFileTypes: true }).filter((d) => d.isDirectory()).map((d) => d.name) : []),
+    blobId: (rel) => git("hash-object", "--", rel),
+    // Two-argument diff (tag vs working tree), never `tag..HEAD`: HEAD misses
+    // everything staged or unstaged. Untracked files are changes too — a
+    // brand-new directory is invisible to diff until it is added.
+    changedSince: (tagName) => [...gitZ("diff", "-z", "--name-only", tagName), ...gitZ("ls-files", "-z", "--others", "--exclude-standard")],
+    tracked: (rel) => new Set(gitZ("ls-files", "-z", "--", rel)),
+  };
+}
+
+/**
+ * A commit as a source, read from its tree and never from the disk. The tree
+ * is listed once into a path-to-blob map; a path exists only as a file, so a
+ * directory is found with `list` or `dirs`. Everything in a commit is tracked
+ * and nothing is untracked.
+ */
+function commitSource(sha) {
+  const blobs = new Map();
+  for (const rec of gitZ("ls-tree", "-r", "-z", "--full-tree", sha)) {
+    const tab = rec.indexOf("\t");
+    const [, type, id] = rec.slice(0, tab).split(" ");
+    if (type === "blob") blobs.set(rec.slice(tab + 1), id);
+  }
+  const under = (rel) => [...blobs.keys()].filter((f) => f.startsWith(`${rel}/`));
+  return {
+    label: `commit ${sha.slice(0, 12)}`,
+    exists: (rel) => blobs.has(rel),
+    read: (rel) => execFileSync("git", ["-C", ROOT, "cat-file", "blob", blobs.get(rel)], { encoding: "utf8", maxBuffer: 1 << 28 }),
+    list: under,
+    dirs: (rel) => [...new Set(under(rel).map((f) => f.slice(rel.length + 1).split("/")).filter((p) => p.length > 1).map((p) => p[0]))],
+    blobId: (rel) => blobs.get(rel),
+    changedSince: (tagName) => gitZ("diff", "-z", "--name-only", tagName, sha),
+    tracked: (rel) => new Set(under(rel)),
+  };
+}
+
+let atSha = "";
+if (args.includes("--at")) {
+  const rev = atArg && !atArg.startsWith("-") ? atArg : "";
+  try {
+    if (!rev) throw new Error("no rev");
+    atSha = execFileSync("git", ["-C", ROOT, "rev-parse", "--verify", `${rev}^{commit}`], { encoding: "utf8", stdio: ["ignore", "pipe", "ignore"] }).trim();
+  } catch {
+    fail(`--at ${rev || "(no value)"} is not a commit of this repository — pass the sha of the commit the tag will name`);
+    bail(tagArg ?? "(no tag)");
+  }
+}
+const src = atSha ? commitSource(atSha) : worktreeSource();
+if (atSha) console.log(`note: reading ${src.label}, not the working tree`);
+
+if (!src.exists("module.json")) {
+  fail(`module.json is missing from the ${src.label}`);
+  bail(tagArg ?? "(no tag)");
+}
+const moduleJson = JSON.parse(src.read("module.json").replace(/^﻿/u, ""));
 const tag = tagArg ?? `v${moduleJson.version}`;
 if (tagArg && tagArg !== `v${moduleJson.version}`) {
   fail(`tag ${tagArg} does not match module.json version ${moduleJson.version}`);
@@ -181,33 +317,28 @@ if (remoteTags.has(tag)) {
 
 let lastTag = "";
 try {
-  lastTag = git("describe", "--tags", "--abbrev=0", "--match", "v*", "HEAD");
+  lastTag = git("describe", "--tags", "--abbrev=0", "--match", "v*", atSha || "HEAD");
 } catch {
   console.log("note: no previous v* tag — first release, recipe check skipped");
 }
 
 const recipes = new Set();
 if (lastTag) {
-  // Two-argument diff (tag vs working tree), never `tag..HEAD`: HEAD misses
-  // everything staged or unstaged. Untracked files are changes too — a
-  // brand-new feature directory is invisible to diff until it is added.
-  const changed = git("diff", "--name-only", lastTag).split("\n").filter(Boolean);
-  const untracked = git("ls-files", "--others", "--exclude-standard", "--", "scripts").split("\n").filter(Boolean);
   const slugs = new Set();
   let flatChanged = false;
-  for (const file of [...changed, ...untracked]) {
+  for (const file of src.changedSince(lastTag)) {
     const m = file.match(/^scripts\/([^/]+)\/(.+)/u);
     if (m) slugs.add(m[1]);
     else if (/^scripts\/[^/]+$/u.test(file)) flatChanged = true;
   }
   for (const slug of [...slugs].sort()) {
-    const recipe = path.join("docs", slug, "TESTING.md");
-    if (fs.existsSync(path.join(ROOT, recipe))) recipes.add(recipe);
+    const recipe = path.posix.join("docs", slug, "TESTING.md");
+    if (src.exists(recipe)) recipes.add(recipe);
     else fail(`scripts/${slug}/ changed since ${lastTag} but ${recipe} does not exist — write the surface's live-test recipe first`);
   }
   if (flatChanged) {
-    const recipe = path.join("docs", "TESTING.md");
-    if (fs.existsSync(path.join(ROOT, recipe))) recipes.add(recipe);
+    const recipe = "docs/TESTING.md";
+    if (src.exists(recipe)) recipes.add(recipe);
     else fail(`scripts/ changed since ${lastTag} but ${recipe} does not exist — write the repo's live-test recipe first`);
   }
 }
@@ -261,10 +392,9 @@ if (kind === "major" || kind === "minor") {
   const shotDir = `docs/releases/v${version}`;
   // Listed rather than probed, so a slug that differs from its file only in
   // letter case fails here as it fails on a case-sensitive checkout.
-  const taken = fs.existsSync(path.join(ROOT, shotDir)) ? fs.readdirSync(path.join(ROOT, shotDir)) : [];
-  const changelog = path.join(ROOT, "CHANGELOG.md");
-  const hasLog = fs.existsSync(changelog);
-  const entries = hasLog ? shotEntries(fs.readFileSync(changelog, "utf8"), version) : null;
+  const taken = src.list(shotDir).map((f) => f.slice(shotDir.length + 1));
+  const hasLog = src.exists("CHANGELOG.md");
+  const entries = hasLog ? shotEntries(src.read("CHANGELOG.md"), version) : null;
   if (!entries) {
     fail(`${hasLog ? "CHANGELOG.md has" : "there is no CHANGELOG.md, so"} no section for ${version} — a ${kind} owes a shot per user-visible Added/Changed entry and the section is what maps them (TOOLCHAIN §4b)`);
   }
@@ -285,7 +415,7 @@ if (kind === "major" || kind === "minor") {
       }
       const file = `${shotDir}/${slug}.png`;
       const exists = taken.includes(`${slug}.png`);
-      if (!exists && !shotsPending) fail(`${where} names ${file}, which does not exist — take the shot in the live session (TOOLCHAIN §4b); --shots-pending lists it instead, before that session or where this machine has no test server (§4a)`);
+      if (!exists && !livePending) fail(`${where} names ${file}, which does not exist — take the shot in the live session (TOOLCHAIN §4b); --live-pending lists it instead, on the run made before that session`);
       shots.push({ file, where, exists });
     }
   }
@@ -323,16 +453,6 @@ const prevTag =
     .at(-1) ?? "";
 const notes = [];
 const escapeRe = (s) => s.replace(/[.*+?^${}()|[\]\\]/gu, "\\$&");
-
-/** NUL-separated git listing, so a path is never quoted or split. */
-const gitZ = (...a) => execFileSync("git", ["-C", ROOT, ...a], { encoding: "utf8", maxBuffer: 1 << 28 }).split("\0").filter(Boolean);
-
-/** Every file under a directory, as posix paths relative to ROOT; empty where it is absent. */
-function walk(rel) {
-  const abs = path.join(ROOT, rel);
-  if (!fs.existsSync(abs)) return [];
-  return fs.readdirSync(abs, { withFileTypes: true }).flatMap((d) => (d.isDirectory() ? walk(`${rel}/${d.name}`) : [`${rel}/${d.name}`]));
-}
 
 /** GitHub's heading slug: lowercase, all but letters, numbers, spaces, hyphens and underscores dropped, spaces to hyphens. */
 function slugOf(text) {
@@ -374,18 +494,18 @@ function headingsOf(text) {
 // changelog-compiled, every kind.
 {
   const FRAGMENT_NAME = /^\d{4}-\d{2}-\d{2}-[A-Za-z0-9][A-Za-z0-9._-]*\.(upgrading|added|changed|removed|fixed)\.md$/u;
-  const tracked = new Set(gitZ("ls-files", "-z", "--", "changelog.d"));
-  for (const f of walk("changelog.d")) {
+  const tracked = src.tracked("changelog.d");
+  for (const f of src.list("changelog.d")) {
     const name = f.slice("changelog.d/".length);
     if (!FRAGMENT_NAME.test(name)) fail(`changelog-compiled: ${f} is not named <YYYY-MM-DD>-<row id or slug>.<upgrading|added|changed|removed|fixed>.md`);
-    else if (tracked.has(f)) fail(`changelog-compiled: ${f} is still on disk — run node tools/logs.mjs compile`);
+    else if (tracked.has(f)) fail(`changelog-compiled: ${f} is still ${atSha ? `in ${src.label}` : "on disk"} — run node tools/logs.mjs compile`);
     else notes.push(`${f} is untracked — not compiled; it rides with whoever tracks it`);
   }
   if (prevTag) {
-    const touched = [...gitZ("diff", "-z", "--name-only", prevTag), ...gitZ("ls-files", "-z", "--others", "--exclude-standard")].filter((f) => /^(scripts|templates|styles|lang|packs\/_source)\//u.test(f));
+    const touched = src.changedSince(prevTag).filter((f) => /^(scripts|templates|styles|lang|packs\/_source)\//u.test(f));
     if (touched.length) {
-      const hasLog = fs.existsSync(path.join(ROOT, "CHANGELOG.md"));
-      const entries = hasLog ? shotEntries(fs.readFileSync(path.join(ROOT, "CHANGELOG.md"), "utf8"), releaseVersion) : null;
+      const hasLog = src.exists("CHANGELOG.md");
+      const entries = hasLog ? shotEntries(src.read("CHANGELOG.md"), releaseVersion) : null;
       if (!entries?.length) {
         const first = `${touched[0]}${touched.length > 1 ? ` and ${touched.length - 1} more` : ""}`;
         fail(`changelog-compiled: runtime files changed since ${prevTag} (${first}) but CHANGELOG.md ${entries ? `holds no bullet under ${releaseVersion}` : `has no section for ${releaseVersion}`} — write a changelog.d/ fragment and run node tools/logs.mjs compile`);
@@ -397,8 +517,7 @@ function headingsOf(text) {
 // logs-rolled, major only.
 if (kind === "major" && prevTag) {
   const atTag = gitZ("ls-tree", "-r", "-z", "--name-only", prevTag);
-  const exists = (rel) => fs.existsSync(path.join(ROOT, rel));
-  const read = (rel) => fs.readFileSync(path.join(ROOT, rel), "utf8");
+  const { exists, read } = src;
   const tagged = (v) => localTags.has(`v${v}`);
   const SHAPE = /^\d{4}-\d{2}-\d{2} — \S.*$/u;
   for (const source of atTag.filter((f) => f === "CHANGELOG.md" || /^docs\/(?:.+\/)?DECISIONS\.md$/u.test(f))) {
@@ -408,7 +527,7 @@ if (kind === "major" && prevTag) {
     const archive = dir === "." ? archiveName : `${dir}/${archiveName}`;
     const archiveOk = exists(archive);
     if (!archiveOk) fail(`logs-rolled: ${archive} is missing — a major archives ${source} as ${prevTag} shipped it; run node tools/logs.mjs roll`);
-    else if (git("hash-object", "--", archive) !== git("rev-parse", `${prevTag}:${source}`)) fail(`logs-rolled: ${archive} differs from ${source} at ${prevTag} — an archive is the tag's blob byte for byte; restore it with git show ${prevTag}:${source}`);
+    else if (src.blobId(archive) !== git("rev-parse", `${prevTag}:${source}`)) fail(`logs-rolled: ${archive} differs from ${source} at ${prevTag} — an archive is the tag's blob byte for byte; restore it with git show ${prevTag}:${source}`);
     if (!exists(source)) {
       fail(`logs-rolled: ${source} is missing, so nothing links ${archive}`);
       continue;
@@ -453,14 +572,77 @@ if (kind === "major" && prevTag) {
     const stamps = [...read(road).matchAll(/Re-issued (\d{4}-\d{2}-\d{2})\./gu)].map((m) => m[1]);
     if (!stamps.some((d) => d >= since)) fail(`logs-rolled: ${road} has no "Re-issued <YYYY-MM-DD>." stamp dated ${since} or later — built rows go, the rest carry, under the stamp`);
   }
-  const linked = [...walk("docs/guides").filter((f) => f.endsWith(".md")), ...(exists("docs/GALLERY.md") ? ["docs/GALLERY.md"] : [])].map(read).join("\n");
-  const folders = exists("docs/releases") ? fs.readdirSync(path.join(ROOT, "docs/releases"), { withFileTypes: true }).filter((d) => d.isDirectory() && d.name.startsWith("v")) : [];
-  for (const d of folders) {
-    if (linked.includes(`releases/${d.name}/`)) continue;
-    if (shotsPending) notes.push(`docs/releases/${d.name}/ is linked by no guide or gallery row — delete it, or link it, before the release ships`);
-    else fail(`logs-rolled: docs/releases/${d.name}/ is linked by no guide and no GALLERY row — delete it (the tag keeps it); --shots-pending lists it instead while shots are pending`);
+  const linked = [...src.list("docs/guides").filter((f) => f.endsWith(".md")), ...(exists("docs/GALLERY.md") ? ["docs/GALLERY.md"] : [])].map(read).join("\n");
+  for (const d of src.dirs("docs/releases").filter((name) => name.startsWith("v"))) {
+    if (linked.includes(`releases/${d}/`)) continue;
+    if (livePending) notes.push(`docs/releases/${d}/ is linked by no guide or gallery row — delete it, or link it, before the release ships`);
+    else fail(`logs-rolled: docs/releases/${d}/ is linked by no guide and no GALLERY row — delete it (the tag keeps it); --live-pending lists it instead on the run before the live session`);
   }
 }
+
+/**
+ * live-walks, every kind. Returns the verdict row of each required walk
+ * (`{ walk, state, ok, why }`), or `[]` where nothing was judged: no runner, no
+ * walk required, or a result file refused. A row that is not ok is a failure
+ * unless `--live-pending` lists it instead.
+ */
+function liveWalks() {
+  if (!src.tracked("tools/live").has("tools/live/run.mjs")) {
+    notes.push("live-walks: no walks");
+    return [];
+  }
+  if (git("ls-files", "--", RESULT_PATH) !== "" || (atSha && src.exists(RESULT_PATH))) {
+    fail(`live-walks: ${RESULT_PATH} is tracked — it is a local record and never enters a commit; remove it with git rm --cached`);
+    return [];
+  }
+  const walks = listWalks(src.list("tools/live"));
+  const named = new Set();
+  for (const recipe of [...recipes].sort()) {
+    const mine = walksNamedBy(src.read(recipe));
+    if (!mine.size) notes.push(`${recipe} names no walk — its surface is walked by hand`);
+    for (const w of [...mine].sort()) {
+      if (walks.includes(w)) named.add(w);
+      else fail(`live-walks: ${recipe} names tools/live/${w}.mjs, which is not a walk`);
+    }
+  }
+  const required = kind === "major" ? walks : [...named].sort();
+  if (!required.length) {
+    notes.push("live-walks: no walk required");
+    return [];
+  }
+  const { data, error } = readResults(ROOT);
+  if (error && error !== "missing") {
+    fail(`live-walks: ${RESULT_PATH} is unreadable or of an unknown schema (${error}) — run the walks again`);
+    return [];
+  }
+  if (error && !livePending) {
+    fail(`live-walks: no result file at ${RESULT_PATH} — run ${required.join(", ")} with tools/live/run.mjs`);
+    return [];
+  }
+  const same = atSha ? { at: atSha } : {};
+  let tree = "";
+  const walkBlobs = {};
+  if (data) {
+    try {
+      tree = runtimeTree(ROOT, same).tree;
+      for (const w of required) walkBlobs[w] = walkBlob(ROOT, w, same);
+    } catch (e) {
+      fail(`live-walks: could not take the runtime tree — ${String(e.message).split("\n")[0]}`);
+      return [];
+    }
+  }
+  const diffPaths = (a, b) => {
+    try {
+      return gitZ("diff-tree", "-r", "-z", "--name-only", a, b);
+    } catch {
+      return [];
+    }
+  };
+  const rows = evaluate({ data, required, tree, walkBlobs, version: releaseVersion, diffPaths });
+  for (const row of rows) if (!row.ok && !livePending) fail(`live-walks: ${row.walk} — ${row.why}`);
+  return rows;
+}
+const walkRows = liveWalks();
 
 for (const n of notes) console.log(`note: ${n}`);
 
@@ -483,4 +665,10 @@ if (shots.length) {
 if (unshot.length) {
   console.log("entries with no shot:");
   for (const u of unshot) console.log(`  ${u.where}: ${u.reason}`);
+}
+if (walkRows.length) {
+  const owed = walkRows.filter((r) => !r.ok);
+  const listed = livePending && owed.length ? owed : walkRows;
+  console.log(listed === owed ? "walks to run in the live session:" : "walks (live-walks):");
+  for (const r of listed) console.log(`  ${r.walk}  ${r.why}`);
 }

@@ -4078,3 +4078,78 @@ repeated roll to that, with the major preflight run on the result.
 
 **Cost.** The live index never shrinks on its own: rows from every earlier
 archive stay until an entry removes them.
+
+## 2026-11-12 — A tag needs a recorded walk result for every required walk — IN FORCE
+
+**Evidence.** acks-extras v11.14.5 shipped through a red walk. Its
+`animations` walk printed `WALK ERROR` and exited 0; the runner counted it
+red, and nothing kept the verdict past the console. A walk with zero checks
+also exits 0 and reads `0/0 passed`, and the gate ran 19 walks named by hand
+out of 65.
+
+**Owner ruling.** On the design's questions the owner answered "All
+recommended" (2026-11-12), which settles: R8 "A walk failure classified as a
+product defect ships only when its ledger row is `deferred`"; R9 "A major
+requires every walk; a minor and a hotfix require the walks their changed
+surfaces' recipes name."; R10 "No waiver for walks: a tag needs a machine
+with a test server".
+
+**Ruled.** A module's runner writes `aia-tmp/live/walk-results.json`,
+gitignored and never committed, one entry per walk, the latest attempt
+replacing the last. The synced `tools/walk-results.mjs` owns the schema (v1),
+the reduction of a walk's output to `passed`, `stopped`, `blocked`, `errored`
+or `failed`, the runtime tree id each entry is bound to at its start and its
+end, the hash of the walk's own file, the merge and the verdict; the runner
+and the preflight both import it. Only a walk that prints `WALK END`, passes
+at least one check, fails none and exits 0 is `passed`. A non-passing walk
+counts only when the runner has classified it against a ledger row that is
+`new`, `claimed` or `deferred`, for this release's version, and a `defect`
+only when `deferred`. The preflight gains check 9, `live-walks`, on every
+kind where `tools/live/run.mjs` is tracked: it refuses a missing, tracked or
+unknown-schema result file and a required walk that is not run, stale,
+changed during its run, partial or an unclassified non-pass. `--live-pending`
+replaces `--shots-pending`, which is now refused by name, and lists the
+shots, walks and unlinked shot folders the live session still owes. `--at
+<sha>` makes every check read that commit; it is the run before the tag and
+takes no `--live-pending`. No machine without a test server tags a release;
+live checks outside a release keep their skip.
+
+The entry of 2026-08-20, "The preflight gate reads the working tree, not the
+commit log", is superseded for the run before the tag only. The new
+evidence: under the release shape the owner chose (R14) the release commit
+lands before the live session, so the run before the tag judges a committed
+tree, and the working tree then holds peer sessions' hunks that the tag will
+not.
+
+**Settled in the build, where the design was silent.** A classification
+carries the ledger status found and the version it was made for, since the
+preflight never reads the ledger: R8 needs the status in the file, and "a
+carried classification is confirmed again once a release" needs the version.
+A minor's or a hotfix's required walks are the `tools/live/<name>.mjs` paths
+its changed surfaces' recipes mention; a recipe naming a file that is not a
+walk refuses, and a recipe naming none is noted, since three of the 18
+acks-extras recipes name no walk. The tree id normalizes line endings and
+re-serializes `module.json` without its version, download and manifest, so a
+working tree and the commit it becomes share an id under any
+`core.autocrlf`; it also leaves out `.githooks/` and `aia-tmp/`, which the
+zip denylist does not name. Only the walk's own file is hashed, not the
+`_*.mjs` helpers beside it. `aia-tmp/` joins the skeleton's `.gitignore`.
+
+**Rejected.** The exit code as the verdict. Binding a result to `HEAD`'s sha:
+the docs commit moves `HEAD` and leaves the runtime alone. The preflight
+reading the ledger: a synced gate tied to a local CSV in which rows do not
+all parse. A committed result file or a known-failures list, which states
+the ledger's classification a second time and outlives the failure it
+excused. Scoping by walk-name prefix. Recording "seats busy" as blocked,
+which would let a walk nobody attempted be classified.
+
+**Cost.** Every acks-* module that tracks `tools/live/run.mjs` cannot cut a
+release of any kind from the sync that carries this until its runner writes
+the file. Any runtime change after the live session re-walks every required
+walk, all 65 for a major (inferred at 2.5–3 hours). A peer's runtime hunk in
+the shared tree makes a working-tree run stale. The result file is
+read-modify-write without a lock, so two sessions recording at the same
+instant can lose an entry; one walk holds both seats at a time, which keeps
+that rare. The first sync rewrites each module's `.gitignore` once, since
+the canonical prefix grew. The zip itself still ships `.githooks/`, which
+this change did not fix.

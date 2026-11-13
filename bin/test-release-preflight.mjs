@@ -15,9 +15,20 @@
  * `logs.mjs roll` in it, and break one thing at a time. A case may name `base`
  * files committed at the tag, `work` files written after it, `stage` paths to
  * `git add`, and a `setup` hook that edits the tree before the preflight runs.
+ * The `--at` cases set `commit`, which lands the prepared tree as one commit
+ * (`@sha` in `args` names it), then an `after` hook that edits the working
+ * tree alone, so a run without `--at` and a run with it, listed under `also`,
+ * judge the same repository from the two sources and may differ. The
+ * live-walks cases give a fixture a runner and two walks, record each
+ * walk's attempt through `walk-results.mjs` against the tree the case stands
+ * in (in `after`, so a case can edit the tree once the result exists), and
+ * break one thing: a missing, tracked or unreadable result file, a stale or
+ * edited walk, a partial or unclassified one, a defect on a claimed row. The
+ * tree id itself is `test-walk-results`' to check, not this file's.
  *
  * The preflight finds its repository from where it stands, so each case
- * copies it, and `logs.mjs`, into the case's own `tools/` and starts it there.
+ * copies it, `walk-results.mjs` (from beside the preflight under test) and
+ * `logs.mjs` into the case's own `tools/` and starts it there.
  *
  * Usage:  node bin/test-release-preflight.mjs [<release-preflight.mjs>]
  *         (defaults to skeleton/tools/release-preflight.mjs; pass a modified
@@ -28,17 +39,26 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import url from "node:url";
+import { RESULT_PATH, recordAttempt, recordClassification, runtimeTree, walkBlob } from "../skeleton/tools/walk-results.mjs";
 
 const TEMPLATE_ROOT = path.dirname(path.dirname(url.fileURLToPath(import.meta.url)));
 const PREFLIGHT = path.resolve(process.argv[2] ?? path.join(TEMPLATE_ROOT, "skeleton", "tools", "release-preflight.mjs"));
 // `roll` and `compile` prepare the fixtures the logs checks read.
 const LOGS = path.join(TEMPLATE_ROOT, "skeleton", "tools", "logs.mjs");
+// The preflight imports it from beside itself, so a copy under test brings its own.
+const WALK_RESULTS = path.join(path.dirname(PREFLIGHT), "walk-results.mjs");
 
 // A caller's own repository variables would turn every git call toward the
 // caller's repository, and a runner has no identity to commit as.
 for (const key of Object.keys(process.env)) if (/^GIT_(DIR|WORK_TREE|INDEX_FILE|PREFIX)$/iu.test(key)) delete process.env[key];
 const GIT_ENV = { ...process.env, GIT_AUTHOR_NAME: "test", GIT_AUTHOR_EMAIL: "test@example.invalid", GIT_COMMITTER_NAME: "test", GIT_COMMITTER_EMAIL: "test@example.invalid" };
 const git = (root, args) => execFileSync("git", args, { cwd: root, env: GIT_ENV, encoding: "utf8", stdio: ["pipe", "pipe", "pipe"] });
+/** Commits the whole working tree and returns the new commit's sha. */
+const commitAll = (root, message) => {
+  git(root, ["add", "-A"]);
+  git(root, ["commit", "-q", "--no-verify", "-m", message]);
+  return git(root, ["rev-parse", "HEAD"]).trim();
+};
 
 // The run day and its neighbours, from the local getters the preflight reads,
 // so a case's expected version is the one the preflight computes.
@@ -143,6 +163,65 @@ const fragmentCase = (name, { compile = false, ...rest }) => ({
   ...rest,
 });
 
+// The live-walks cases. A fixture with a runner and two walks (and a `_` helper,
+// which is not one) keeps `aia-tmp/` ignored as a real module does; a case
+// records a walk's attempt against the tree it stands in, through the same
+// `walk-results.mjs` the runner uses, and then breaks one thing.
+const WALK_BASE = {
+  ".gitignore": "aia-tmp/\n",
+  "lang/en.json": "{\n  \"a\": 1\n}\n",
+  "docs/foo/TESTING.md": "# Foo\n\nWalked by hand.\n",
+  "tools/live/run.mjs": "export {};\n",
+  "tools/live/_helper.mjs": "export {};\n",
+  "tools/live/alpha.mjs": "export {};\n// alpha\n",
+  "tools/live/beta.mjs": "export {};\n// beta\n",
+};
+const NONE = "0".repeat(40);
+const T_ROW = "T-1234";
+/** Records an attempt of walk `name` in the case's repository, passed on the tree it stands in unless `over` says otherwise. */
+function record(ctx, name, over = {}) {
+  const tree = runtimeTree(ctx.root).tree;
+  recordAttempt(ctx.root, name, {
+    state: "passed",
+    tally: { pass: 3, fail: 0, gap: 0 },
+    exit: 0,
+    signal: null,
+    treeStart: tree,
+    treeEnd: tree,
+    walkBlob: walkBlob(ctx.root, name),
+    partial: false,
+    startedAt: "2026-11-12T10:00:00.000Z",
+    endedAt: "2026-11-12T10:05:00.000Z",
+    ...over,
+  });
+}
+/** Records both walks passed, then runs `more`. */
+const recorded = (more) => (ctx) => {
+  record(ctx, "alpha");
+  record(ctx, "beta");
+  more?.(ctx);
+};
+/** A failed attempt of alpha classified as `as` on a row in `status`, beside a passed beta. */
+const failedAlpha = (as, status, version = TODAY) => recorded((ctx) => {
+  record(ctx, "alpha", { state: "failed", tally: { pass: 2, fail: 1, gap: 0 }, exit: 1 });
+  if (as) recordClassification(ctx.root, "alpha", { row: T_ROW, as, status, version });
+});
+/** A major case on the rolled fixture with both walks in the tree. */
+const walkMajor = (name, rest) => rolledCase(name, { base: { ...LOG_BASE, ...WALK_BASE }, ...rest });
+const FIXED_LOG = `# Changelog\n\n## ${TODAY}\n\n### Fixed\n\n- **A fix.** Nothing owed.\n`;
+/** A minor case whose changed surface, `gadget`, has the recipe `recipe`. */
+const walkMinor = (name, recipe, rest) => ({
+  name,
+  args: ["--kind", "minor"],
+  base: { ...WALK_BASE, "docs/gadget/TESTING.md": recipe },
+  changelog: FIXED_LOG,
+  shots: [],
+  work: { "scripts/gadget/run.mjs": "export {};\n" },
+  ...rest,
+});
+const ONE_BLOCKER = /release-preflight: 1 blocker\(s\)/u;
+const RESULT_RE = RESULT_PATH.replaceAll(".", "\\.");
+
 const CASES = [
   {
     name: "a minor whose every Added and Changed bullet names a taken shot or a reason is clear",
@@ -213,8 +292,8 @@ const CASES = [
     notErr: [/widget-sheet-tab/u, /widget-confirm-cancel/u],
   },
   {
-    name: "--shots-pending lists a shot not yet taken instead of stopping",
-    args: ["--kind", "minor", "--shots-pending"],
+    name: "--live-pending lists a shot not yet taken instead of stopping",
+    args: ["--kind", "minor", "--live-pending"],
     changelog: GREEN,
     shots: ["widget-sheet-tab.png"],
     status: 0,
@@ -475,8 +554,8 @@ const CASES = [
     err: [/FAIL logs-rolled: docs\/releases\/v11\.14\.0\/ is linked by no guide and no GALLERY row/u],
     notErr: [/releases\/v11\.14\.5\//u],
   }),
-  rolledCase("--shots-pending lists the unlinked shot folder instead of refusing it", {
-    args: ["--kind", "major", "--shots-pending"],
+  rolledCase("--live-pending lists the unlinked shot folder instead of refusing it", {
+    args: ["--kind", "major", "--live-pending"],
     mutate: (ctx) => ctx.write("docs/releases/v11.14.0/old.png", "not a real png\n"),
     status: 0,
     out: [/note: docs\/releases\/v11\.14\.0\/ is linked by no guide or gallery row/u, /clear \(major\)/u],
@@ -502,6 +581,303 @@ const CASES = [
     out: [/clear \(hotfix\)/u],
     notErr: [/logs-rolled/u],
   },
+
+  // -- the flags: --live-pending replaces --shots-pending, --at reads a commit ---
+  {
+    name: "--shots-pending is refused and names --live-pending",
+    args: ["--kind", "minor", "--shots-pending"],
+    changelog: GREEN,
+    shots: ALL_SHOTS,
+    status: 1,
+    err: [/FAIL --shots-pending is now --live-pending/u],
+  },
+  {
+    name: "--at with --live-pending is refused: the run before the tag takes no waiver",
+    args: ["--kind", "minor", "--at", "@sha", "--live-pending"],
+    changelog: GREEN,
+    shots: ALL_SHOTS,
+    commit: true,
+    status: 1,
+    err: [/FAIL --at takes no --live-pending/u, /a tag needs a machine with a test server/u],
+  },
+  {
+    name: "--at with a ref that is no commit is refused with one clean message",
+    args: ["--kind", "hotfix", "--at", "no-such-ref"],
+    shots: [],
+    status: 1,
+    err: [/FAIL --at no-such-ref is not a commit of this repository/u],
+    notErr: [/^\s+at /mu, /Error:/u, /fatal:/u],
+  },
+  {
+    name: "--at with no value is refused with one clean message",
+    args: ["--kind", "hotfix", "--at"],
+    shots: [],
+    status: 1,
+    err: [/FAIL --at \(no value\) is not a commit/u],
+    notErr: [/^\s+at /mu, /fatal:/u],
+  },
+  {
+    name: "--at judges the commit's shots: files gone or recased in the working tree alone fail the plain run and not --at",
+    args: ["--kind", "minor"],
+    changelog: GREEN,
+    shots: ALL_SHOTS,
+    commit: true,
+    after: (ctx) => {
+      const dir = path.join(ctx.root, "docs", "releases", `v${TODAY}`);
+      fs.rmSync(path.join(dir, "widget-confirm.png"));
+      fs.renameSync(path.join(dir, "widget-sheet-tab.png"), path.join(dir, "tmp.png"));
+      fs.renameSync(path.join(dir, "tmp.png"), path.join(dir, "Widget-Sheet-Tab.png"));
+    },
+    status: 1,
+    err: [/widget-confirm\.png, which does not exist/u, /widget-sheet-tab\.png, which does not exist/u],
+    also: [{ args: ["--kind", "minor", "--at", "@sha"], status: 0, out: [/note: reading commit /u, /clear \(minor\)/u, /taken {3}docs\/releases\/v[\d.]+\/widget-confirm\.png/u] }],
+  },
+  {
+    name: "--at ignores a fragment tracked in the working tree after the commit, which the plain run refuses",
+    args: ["--kind", "minor"],
+    changelog: GREEN,
+    shots: ALL_SHOTS,
+    commit: true,
+    after: (ctx) => {
+      ctx.write(FRAGMENT, "- **A fix.** Nothing owed.\n");
+      ctx.git("add", "--", FRAGMENT);
+    },
+    status: 1,
+    err: [/FAIL changelog-compiled: changelog\.d\/[^\n]*widget-fix\.fixed\.md is still on disk/u],
+    also: [{ args: ["--kind", "minor", "--at", "@sha"], status: 0, out: [/clear \(minor\)/u], notErr: [/changelog-compiled/u] }],
+  },
+  {
+    name: "--at ignores an untracked fragment, which the plain run notes",
+    args: ["--kind", "minor"],
+    changelog: GREEN,
+    shots: ALL_SHOTS,
+    commit: true,
+    after: (ctx) => ctx.write(FRAGMENT, "- **A peer's fix.**\n"),
+    status: 0,
+    out: [/note: changelog\.d\/[^\n]*widget-fix\.fixed\.md is untracked/u],
+    also: [{ args: ["--kind", "minor", "--at", "@sha"], status: 0, out: [/clear \(minor\)/u], notOut: [/untracked/u] }],
+  },
+  {
+    ...fragmentCase("a fragment inside the commit --at reads is refused", { status: 1 }),
+    commit: true,
+    args: ["--kind", "hotfix", "--at", "@sha"],
+    err: [/FAIL changelog-compiled: changelog\.d\/[^\n]*widget-fix\.fixed\.md is still in commit [0-9a-f]{12} — run node tools\/logs\.mjs compile/u],
+  },
+  {
+    name: "--at reads the commit's CHANGELOG: a marker added in the working tree alone does not pass it",
+    args: ["--kind", "minor"],
+    changelog: UNMARKED,
+    shots: ALL_SHOTS,
+    commit: true,
+    after: (ctx) => ctx.write("CHANGELOG.md", GREEN),
+    status: 0,
+    out: [/clear \(minor\)/u],
+    also: [{ args: ["--kind", "minor", "--at", "@sha"], status: 1, err: [/"The api returns a promise\." names no shot/u] }],
+  },
+  {
+    name: "--at takes the tag and version from the commit's module.json, not the working tree's",
+    args: ["--kind", "hotfix"],
+    shots: [],
+    commit: true,
+    after: (ctx) => ctx.write("module.json", `${JSON.stringify({ id: "widget", version: `${LAST_YEAR}.1.20` }, null, 2)}\n`),
+    status: 0,
+    out: [new RegExp(`release-preflight: v${LAST_YEAR}\\.1\\.20 clear \\(hotfix\\)`, "u")],
+    also: [{ args: ["--kind", "hotfix", "--at", "@sha"], status: 0, out: [new RegExp(`release-preflight: v${TODAY_RE} clear \\(hotfix\\)`, "u")], notOut: [new RegExp(`${LAST_YEAR}\\.1\\.20`, "u")] }],
+  },
+  {
+    name: "--at sees a runtime change committed after the tag and ignores one only the working tree holds",
+    args: ["--kind", "hotfix"],
+    changelog: `# Changelog\n\n## ${TODAY}\n\n### Fixed\n\n- **A fix.** Nothing owed.\n`,
+    shots: [],
+    work: { "scripts/gadget/run.mjs": "export {};\n" },
+    commit: true,
+    after: (ctx) => ctx.write("scripts/other/run.mjs", "export {};\n"),
+    status: 1,
+    err: [/scripts\/gadget\/ changed since v11\.14\.5 but docs\/gadget\/TESTING\.md does not exist/u, /scripts\/other\/ changed since v11\.14\.5/u],
+    also: [{ args: ["--kind", "hotfix", "--at", "@sha"], status: 1, err: [/scripts\/gadget\/ changed since v11\.14\.5/u], notErr: [/scripts\/other\//u] }],
+  },
+  {
+    name: "--at asks for a recipe the commit holds and not one only the working tree holds",
+    args: ["--kind", "hotfix"],
+    changelog: `# Changelog\n\n## ${TODAY}\n\n### Fixed\n\n- **A fix.** Nothing owed.\n`,
+    shots: [],
+    work: { "scripts/gadget/run.mjs": "export {};\n" },
+    commit: true,
+    after: (ctx) => ctx.write("docs/gadget/TESTING.md", "# Gadget\n"),
+    status: 0,
+    out: [/docs\/gadget\/TESTING\.md/u],
+    also: [{ args: ["--kind", "hotfix", "--at", "@sha"], status: 1, err: [/docs\/gadget\/TESTING\.md does not exist/u] }],
+  },
+  {
+    ...rolledCase("--at reads the archive the commit holds: an edit made in the working tree alone fails only the plain run", {}),
+    commit: true,
+    after: (ctx) => ctx.write(ARCHIVE, `${ctx.read(ARCHIVE)}An edit.\n`),
+    status: 1,
+    err: [/FAIL logs-rolled: docs\/DECISIONS-through-v11\.14\.5\.md differs from docs\/DECISIONS\.md at v11\.14\.5/u],
+    also: [{ args: ["--kind", "major", "--at", "@sha"], status: 0, out: [/clear \(major\)/u], notErr: [/logs-rolled/u] }],
+  },
+  {
+    ...rolledCase("--at reads the commit's release folders and guides: a link added in the working tree alone does not pass it", {}),
+    commit: true,
+    setup: (ctx) => {
+      prepareRolled(ctx);
+      ctx.write("docs/releases/v11.14.0/old.png", "not a real png\n");
+    },
+    after: (ctx) => ctx.write("docs/guides/foo.md", `${ctx.read("docs/guides/foo.md")}![old](../releases/v11.14.0/old.png)\n`),
+    status: 0,
+    out: [/clear \(major\)/u],
+    also: [{ args: ["--kind", "major", "--at", "@sha"], status: 1, err: [/FAIL logs-rolled: docs\/releases\/v11\.14\.0\/ is linked by no guide/u] }],
+  },
+
+  // -- live-walks, every kind ---------------------------------------------------
+  {
+    name: "live-walks: a repo with no runner prints no walks and passes",
+    args: ["--kind", "hotfix"],
+    base: { "tools/live/alpha.mjs": "export {};\n" },
+    shots: [],
+    status: 0,
+    out: [/note: live-walks: no walks/u, /clear \(hotfix\)/u],
+    notOut: [/walks \(live-walks\)/u],
+  },
+  walkMajor("live-walks: a major with a runner and no result file is refused, and --live-pending lists every walk as not run", {
+    status: 1,
+    err: [new RegExp(`FAIL live-walks: no result file at ${RESULT_RE} — run alpha, beta with tools/live/run\\.mjs`, "u"), ONE_BLOCKER],
+    also: [{
+      args: ["--kind", "major", "--live-pending"],
+      status: 0,
+      out: [/walks to run in the live session:\n {2}alpha {2}not run\n {2}beta {2}not run\n/u, /clear \(major\)/u],
+    }],
+  }),
+  walkMajor("live-walks: a tracked result file is refused, --live-pending included", {
+    after: recorded((ctx) => ctx.git("add", "-f", "--", RESULT_PATH)),
+    status: 1,
+    err: [new RegExp(`FAIL live-walks: ${RESULT_RE} is tracked`, "u"), ONE_BLOCKER],
+    also: [{ args: ["--kind", "major", "--live-pending"], status: 1, err: [/live-walks: [^\n]* is tracked/u] }],
+  }),
+  walkMajor("live-walks: --at refuses a result file the commit holds, which the working tree no longer tracks", {
+    commit: true,
+    setup: (ctx) => {
+      prepareRolled(ctx);
+      recorded((c) => c.git("add", "-f", "--", RESULT_PATH))(ctx);
+    },
+    after: (ctx) => ctx.git("rm", "--cached", "-q", "--", RESULT_PATH),
+    status: 0,
+    out: [/walks \(live-walks\):/u],
+    also: [{ args: ["--kind", "major", "--at", "@sha"], status: 1, err: [new RegExp(`FAIL live-walks: ${RESULT_RE} is tracked`, "u")] }],
+  }),
+  walkMajor("live-walks: a result file of an unknown schema is refused, --live-pending included", {
+    after: (ctx) => ctx.write(RESULT_PATH, `${JSON.stringify({ schema: 2, walks: {} })}\n`),
+    status: 1,
+    err: [/FAIL live-walks: [^\n]* is unreadable or of an unknown schema \(schema 2\)/u, ONE_BLOCKER],
+    also: [{ args: ["--kind", "major", "--live-pending"], status: 1, err: [/unknown schema \(schema 2\)/u] }],
+  }),
+  walkMajor("live-walks: a result file that is not JSON is refused", {
+    after: (ctx) => ctx.write(RESULT_PATH, "{ not json"),
+    status: 1,
+    err: [/FAIL live-walks: [^\n]* is unreadable or of an unknown schema \(unreadable\)/u, ONE_BLOCKER],
+  }),
+  walkMajor("live-walks: a major with both walks passed on the current tree is clear and lists them", {
+    after: recorded(),
+    status: 0,
+    out: [/clear \(major\)/u, /walks \(live-walks\):\n {2}alpha {2}passed\n {2}beta {2}passed\n/u],
+    notOut: [/walks to run/u],
+  }),
+  walkMajor("live-walks: a major requires a walk no recipe names", {
+    after: (ctx) => record(ctx, "alpha"),
+    status: 1,
+    err: [/FAIL live-walks: beta — not run/u, ONE_BLOCKER],
+    notErr: [/alpha/u],
+  }),
+  walkMajor("live-walks: a runtime edit after the walks names the path and refuses both", {
+    after: recorded((ctx) => ctx.write("scripts/foo/run.mjs", "export {};\n")),
+    status: 1,
+    err: [/FAIL live-walks: alpha — stale: runtime differs — scripts\/foo\/run\.mjs/u, /FAIL live-walks: beta — stale: runtime differs — scripts\/foo\/run\.mjs/u, /2 blocker\(s\)/u],
+  }),
+  walkMajor("live-walks: --live-pending lists a stale walk instead of refusing it, and leaves a current one out", {
+    args: ["--kind", "major", "--live-pending"],
+    after: (ctx) => {
+      record(ctx, "alpha");
+      ctx.write("scripts/foo/run.mjs", "export {};\n");
+      record(ctx, "beta");
+    },
+    status: 0,
+    out: [/walks to run in the live session:\n {2}alpha {2}stale: runtime differs — scripts\/foo\/run\.mjs\n/u, /clear \(major\)/u],
+    notOut: [/beta {2}/u],
+  }),
+  walkMajor("live-walks: a walk's own file edited after its run is stale", {
+    after: recorded((ctx) => ctx.write("tools/live/alpha.mjs", `${ctx.read("tools/live/alpha.mjs")}// edited\n`)),
+    status: 1,
+    err: [/FAIL live-walks: alpha — stale: the walk changed since it ran/u, ONE_BLOCKER],
+    notErr: [/beta/u],
+  }),
+  walkMajor("live-walks: a walk whose tree changed during its run, and a partial one, are refused", {
+    after: (ctx) => {
+      record(ctx, "alpha", { treeStart: NONE });
+      record(ctx, "beta", { partial: "ran 3 of 9 checks" });
+    },
+    status: 1,
+    err: [/FAIL live-walks: alpha — the runtime changed during its run/u, /FAIL live-walks: beta — partial: ran 3 of 9 checks/u, /2 blocker\(s\)/u],
+  }),
+  walkMajor("live-walks: a failed walk with no classification is refused", {
+    after: failedAlpha(null),
+    status: 1,
+    err: [/FAIL live-walks: alpha — failed, not classified/u, ONE_BLOCKER],
+  }),
+  walkMajor("live-walks: a failure classified world-state on a new row for this version is clear", {
+    after: failedAlpha("world-state", "new"),
+    status: 0,
+    out: [/clear \(major\)/u, new RegExp(`alpha {2}classified world-state ${T_ROW} \\(new\\)`, "u"), /beta {2}passed/u],
+  }),
+  walkMajor("live-walks: a classification made for another version is refused", {
+    after: failedAlpha("world-state", "new", "2026.1.1"),
+    status: 1,
+    err: [/FAIL live-walks: alpha — classified for 2026\.1\.1; classify again for this release/u, ONE_BLOCKER],
+  }),
+  walkMajor("live-walks: a defect on a claimed row does not ship", {
+    after: failedAlpha("defect", "claimed"),
+    status: 1,
+    err: [/FAIL live-walks: alpha — a defect ships only when its row is deferred/u, ONE_BLOCKER],
+  }),
+  walkMajor("live-walks: a defect on a deferred row ships", {
+    after: failedAlpha("defect", "deferred"),
+    status: 0,
+    out: [/clear \(major\)/u, new RegExp(`alpha {2}classified defect ${T_ROW} \\(deferred\\)`, "u")],
+  }),
+  walkMajor("live-walks: a CRLF flip of a runtime file after the walks leaves them current", {
+    after: recorded((ctx) => ctx.write("lang/en.json", ctx.read("lang/en.json").replaceAll("\n", "\r\n"))),
+    status: 0,
+    out: [/clear \(major\)/u, /alpha {2}passed/u],
+  }),
+  walkMajor("live-walks: the tree is the commit's under --at, though the working tree has moved on", {
+    commit: true,
+    after: recorded((ctx) => ctx.write("scripts/foo/run.mjs", "export {};\n")),
+    status: 1,
+    err: [/FAIL live-walks: alpha — stale: runtime differs — scripts\/foo\/run\.mjs/u],
+    also: [{ args: ["--kind", "major", "--at", "@sha"], status: 0, out: [/note: reading commit /u, /clear \(major\)/u, /alpha {2}passed/u] }],
+  }),
+  walkMinor("live-walks: a minor requires only the walks its changed surface's recipe names", "# Gadget\n\nWalk tools/live/alpha.mjs.\n", {
+    after: (ctx) => record(ctx, "alpha"),
+    status: 0,
+    out: [/clear \(minor\)/u, /walks \(live-walks\):\n {2}alpha {2}passed\n/u],
+    notOut: [/beta/u],
+  }),
+  walkMinor("live-walks: the walk a minor's recipe names is refused when it was not run", "# Gadget\n\nWalk tools/live/alpha.mjs.\n", {
+    after: (ctx) => record(ctx, "beta"),
+    status: 1,
+    err: [/FAIL live-walks: alpha — not run/u, ONE_BLOCKER],
+    notErr: [/beta/u],
+  }),
+  walkMinor("live-walks: a recipe naming a file that is not a walk is refused", "# Gadget\n\nWalk tools/live/alpha.mjs and tools/live/ghost.mjs.\n", {
+    after: (ctx) => record(ctx, "alpha"),
+    status: 1,
+    err: [/FAIL live-walks: docs\/gadget\/TESTING\.md names tools\/live\/ghost\.mjs, which is not a walk/u, ONE_BLOCKER],
+  }),
+  walkMinor("live-walks: a recipe naming no walk is noted, and with none required nothing is asked of the result file", "# Gadget\n\nWalked by hand.\n", {
+    args: ["--kind", "hotfix"],
+    status: 0,
+    out: [/note: docs\/gadget\/TESTING\.md names no walk — its surface is walked by hand/u, /note: live-walks: no walk required/u, /clear \(hotfix\)/u],
+    notOut: [/walks \(live-walks\)/u],
+  }),
 ];
 
 /** Writes `content` at `rel` under `root`, creating its directories. */
@@ -520,6 +896,7 @@ try {
       fs.mkdirSync(path.join(root, "tools"), { recursive: true });
       fs.copyFileSync(PREFLIGHT, path.join(root, "tools", "release-preflight.mjs"));
       fs.copyFileSync(LOGS, path.join(root, "tools", "logs.mjs"));
+      fs.copyFileSync(WALK_RESULTS, path.join(root, "tools", "walk-results.mjs"));
       const manifest = (version) => fs.writeFileSync(path.join(root, "module.json"), `${JSON.stringify({ id: "widget", version }, null, 2)}\n`);
       manifest("11.14.5");
       for (const [rel, content] of Object.entries(testCase.base ?? {})) put(root, rel, content);
@@ -539,8 +916,10 @@ try {
       }
       for (const [rel, content] of Object.entries(testCase.work ?? {})) put(root, rel, content);
       for (const rel of testCase.stage ?? []) git(root, ["add", "--", rel]);
-      testCase.setup?.({
+      const ctx = {};
+      Object.assign(ctx, {
         root,
+        sha: "",
         read: (rel) => fs.readFileSync(path.join(root, rel), "utf8"),
         write: (rel, content) => put(root, rel, content),
         git: (...a) => git(root, a),
@@ -549,16 +928,26 @@ try {
           if (l.status !== 0) throw new Error(`logs ${a.join(" ")} exited ${l.status}: ${l.stderr}`);
         },
       });
-      const r = spawnSync(process.execPath, [path.join("tools", "release-preflight.mjs"), ...testCase.args], { cwd: root, env: GIT_ENV, encoding: "utf8" });
-      if (r.status !== testCase.status) problems.push(`exited ${r.status}, expected ${testCase.status}`);
-      for (const [stream, text, expected, forbidden] of [
-        ["stdout", r.stdout, testCase.out ?? [], testCase.notOut ?? []],
-        ["stderr", r.stderr, testCase.err ?? [], testCase.notErr ?? []],
-      ]) {
-        for (const re of expected) if (!re.test(text)) problems.push(`${stream} does not match ${re}`);
-        for (const re of forbidden) if (re.test(text)) problems.push(`${stream} matches ${re}`);
+      testCase.setup?.(ctx);
+      // `commit` lands the prepared tree as the release commit, `@sha` in an
+      // argument names it, and `after` then edits the working tree alone.
+      if (testCase.commit) ctx.sha = commitAll(root, "release");
+      testCase.after?.(ctx);
+      // The case's own run first, then each `also` run against the same tree.
+      for (const [n, run] of [testCase, ...(testCase.also ?? [])].entries()) {
+        const r = spawnSync(process.execPath, [path.join("tools", "release-preflight.mjs"), ...run.args.map((a) => (a === "@sha" ? ctx.sha : a))], { cwd: root, env: GIT_ENV, encoding: "utf8" });
+        const own = [];
+        if (r.status !== run.status) own.push(`exited ${r.status}, expected ${run.status}`);
+        for (const [stream, text, expected, forbidden] of [
+          ["stdout", r.stdout, run.out ?? [], run.notOut ?? []],
+          ["stderr", r.stderr, run.err ?? [], run.notErr ?? []],
+        ]) {
+          for (const re of expected) if (!re.test(text)) own.push(`${stream} does not match ${re}`);
+          for (const re of forbidden) if (re.test(text)) own.push(`${stream} matches ${re}`);
+        }
+        if (own.length) own.push(`stdout: ${r.stdout.trim() || "(empty)"}`, `stderr: ${r.stderr.trim() || "(empty)"}`);
+        problems.push(...own.map((p) => (n ? `[${run.args.join(" ")}] ${p}` : p)));
       }
-      if (problems.length) problems.push(`stdout: ${r.stdout.trim() || "(empty)"}`, `stderr: ${r.stderr.trim() || "(empty)"}`);
     } catch (e) {
       // A case that throws is that case's failure, and the cases after it still run.
       problems.push(`threw: ${String(e.stack ?? e).split("\n").slice(0, 4).join("\n  ")}`);

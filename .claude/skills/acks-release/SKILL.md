@@ -96,14 +96,15 @@ the full pipeline (build + validate, no publish) is available anytime:
    names its shot as it is written, in its fragment: `<!-- shot: <feature-slug> -->` for
    `docs/releases/v<version>/<feature-slug>.png`, or `<!-- no-shot: <reason> -->`
    where the entry has no user-visible surface (TOOLCHAIN §4b). **Then run
-   `node tools/release-preflight.mjs --kind <kind> --shots-pending` — a red
+   `node tools/release-preflight.mjs --kind <kind> --live-pending` — a red
    result stops the release.** It refuses a run with no kind, reads the bumped
    version, refuses a tag that already exists (never retag; the release is
    the day's next version, which it prints), lists the `docs/<feature>/TESTING.md` recipes for every surface
    changed since the last tag — step 5 walks exactly those recipes, and a
    changed surface with no recipe means writing the recipe IS part of this
-   release — and refuses a bullet with no marker, then lists the shots step
-   5a takes.
+   release — and refuses a bullet with no marker, then lists what the live
+   session still owes: the shots step 5a takes, the walks (TOOLCHAIN §4a) not
+   yet run or not passing, and a `docs/releases/v*` folder not yet linked.
 3. `npm run build:packs`. Compiled packs are gitignored build output — commit
    `packs/_source` if it changed; there is no timestamp churn to discard
    (pack `_stats` stamps are fixed, so a diff means content really changed).
@@ -114,12 +115,18 @@ the full pipeline (build + validate, no publish) is available anytime:
    shipped dead modules green. The canonical procedure (environment,
    fixtures built once and kept, real player seats, pre-upgrade shapes, what
    to report) is `.claude/rules/live-testing.md` — follow it.
-   Skip only when `C:\Proj\acks-rules\TEST_ENVIRONMENT.md` is absent (no
-   test server on this machine), and say so in the report.
+   Run the walks step 2's preflight listed with
+   `node tools/live/run.mjs <walk…>`. Fix and re-run each non-pass, or
+   register a ledger row for it and classify it with
+   `node tools/live/run.mjs --classify <walk> <T-id> defect|world-state|stale-walk|environment`
+   (a `defect` ships only when its row is `deferred`; TOOLCHAIN §4a). Quote
+   the preflight's walk table under "exercised live". There is no waiver: a
+   machine without `C:\Proj\acks-rules\TEST_ENVIRONMENT.md` cannot tag a
+   release, so stop and say so in the report.
 5a. **Capture the release snapshots the kind calls for (TOOLCHAIN §4b) — in
    this same live session, before you shut the world down.** A shot staged
    later proves nothing about the release. Skip only for a hotfix with no
-   requested shot, or where §4a itself was skipped for want of a test server.
+   requested shot.
    - Save to `docs/releases/v<version>/<feature-slug>.png` (PNG, cropped to the
      window, ~300 KB ceiling). A previous release's directory may be rewritten
      where its surface changed; a minor never re-captures surfaces its
@@ -145,10 +152,11 @@ the full pipeline (build + validate, no publish) is available anytime:
      in `TEST_ENVIRONMENT.md`. If a shot is unreachable, name it in the report
      rather than skipping it silently, and never as a `no-shot`: that marker
      says the entry has no surface.
-   - Then run the preflight again without `--shots-pending`: a shot the
-     changelog names and this session did not take stops the release here,
-     before the commit. Where §4a was skipped for want of a test server, keep
-     the flag; what it lists as still to take is the report's list of gaps.
+   - Then run the preflight again without `--live-pending`: a shot the
+     changelog names and this session did not take, a required walk not run or
+     not passing, and an unlinked shot folder each stop the release here,
+     before the commit. The run before the tag (step 6) is the same command
+     with `--at <sha>`.
 6. Commit through **`acks-commit`**, `land --no-push` (snapshots and
    `docs/GALLERY.md` included), with the subject
    `Release <version> (<kind>) — …`; the push is this step's own, below. Its gate
@@ -156,8 +164,8 @@ the full pipeline (build + validate, no publish) is available anytime:
    clone, which is the tree CI will build; step 4's run in the working tree
    read every session's in-flight hunks. A release takes no carried base: a
    commit that lands under the gate means the gate runs again.
-   Then run step 5a's preflight command once more, immediately before
-   the tag: a peer may have published the number since step 2, and the answer
+   Then run step 5a's preflight command once more with `--at <sha>`, the
+   release commit's own sha, immediately before the tag: a peer may have published the number since step 2, and the answer
    is the day's next version. Tag the release commit's own sha, exactly
    `v<module.json version>`, and push that sha with its tag in one motion:
    `git tag v<version> <sha> && git push --atomic origin <sha>:refs/heads/<branch> refs/tags/v<version>`

@@ -61,6 +61,11 @@ Register every symptom as a row **before diagnosing any of them**. Intake is
 cheap and global; diagnosis is expensive and blind to what it never heard
 about.
 
+A row that a release walk's failure is classified against
+(`node tools/live/run.mjs --classify`, TOOLCHAIN §4a) stays `new`, `claimed`
+or `deferred` until that release ships, and a `defect` ships only when its row
+is `deferred`.
+
 ## 2. The ledger
 
 `C:\Proj\acks-rules\bug-intake\ledger.csv` — LOCAL-ONLY, the same posture as
