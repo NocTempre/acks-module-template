@@ -25,6 +25,8 @@ already in acks-extras:
   (the character sheet's `is-overridden` mark, `stats.effectiveTip`).
 - **With nothing behind it**: the page reference alone, on a field left
   blank. No number in its place, and no words saying it was not imported.
+  `citeOf` answers null here by design, since nothing was read; the
+  reference is the citation the module ships in the field's lang string.
 
 The names of the parts and how they combine are the procedure, and ship; the
 numbers interpolate from the world at render. A tooltip is held to
@@ -39,8 +41,8 @@ the book hovers the figure, opens the page it names, and finds there the
 parts it lists. When it cannot be written that way the figure is suspect, and
 that is the result to report, not a gap to word around:
 
-- no page to point at — `citeOf` null where a table should have been
-  imported;
+- no page to point at — `citeOf` null on a table the world did import, or
+  a field the module ships no citation for;
 - a part the cited page does not print, or a page that prints none of them;
 - parts that do not produce the figure beside them;
 - a figure that reaches the screen from a constant in source instead of a

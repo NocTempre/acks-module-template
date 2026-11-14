@@ -4366,7 +4366,8 @@ long as it fails in a non-breaking way".
 "the surface says so and shows no figure". The second half stands; the first
 goes. The new evidence is the owner's own priority: the bookless experience
 is not where the project spends effort, and acks-extras had grown about 130
-lang strings in 121 files, each written only to say a value was missing.
+lang strings, read from 121 files, that told a user a value was missing; some
+also carried the page reference, and that half is what stays.
 
 **Ruled.** A field whose figure was not imported shows nothing: no figure, no
 "not imported" text, and no toast, warning or refusal that exists only to say
