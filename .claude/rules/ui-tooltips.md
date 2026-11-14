@@ -23,8 +23,8 @@ already in acks-extras:
   form.
 - **Set by a hand or an effect**: which, and the figure it stands in for
   (the character sheet's `is-overridden` mark, `stats.effectiveTip`).
-- **With nothing behind it**: that it is not imported, and no number in its
-  place.
+- **With nothing behind it**: the page reference alone, on a field left
+  blank. No number in its place, and no words saying it was not imported.
 
 The names of the parts and how they combine are the procedure, and ship; the
 numbers interpolate from the world at render. A tooltip is held to
@@ -47,8 +47,8 @@ that is the result to report, not a gap to word around:
   table or the actor — the value rule's case in `ip-doctrine.md`.
 
 Register each on the bug-intake ledger (`acks-bug-triage`, source
-`tooltip:<YYYY-MM-DD>`) and write the tooltip with what is true: "not
-imported", or the parts that do exist. **Never make a tooltip match by
+`tooltip:<YYYY-MM-DD>`) and write the tooltip with what is true: the page
+reference alone, or the parts that do exist. **Never make a tooltip match by
 bringing the page's words to it.** The match is the reader's, made with the
 book open. A tooltip that paraphrases the page until the two agree is the
 leak the doctrine exists to stop, and it hides the discrepancy the tooltip

@@ -3745,7 +3745,7 @@ stays `pageSweep`/`sweepTracked` over ids it wrote down.
 wrong call takes a peer's card. The listing's columns (speaker, marker,
 minute) are what makes the call checkable afterwards, in the run's log.
 
-## 2026-11-04 — A printed value found in source is fixed by the work that finds it — IN FORCE
+## 2026-11-04 — A printed value found in source is fixed by the work that finds it — SUPERSEDED IN PART 2026-11-14
 
 **Owner ruling, from the acks-extras 11.14 batch.** Asked whether the light
 radii and burn times hard-coded in acks-extras `lib/light.mjs` should move in
@@ -4353,3 +4353,37 @@ each later one, the cost the sizing entry measured for resumed agents.
 
 **Cost.** Each phase session re-reads the plan file, so the file has to hold
 everything a phase needs; nothing may live only in a session's context.
+
+## 2026-11-14 — A field with nothing imported stays blank — IN FORCE
+
+**Owner ruling, unprompted, in an acks-extras Public Beta session.** "Missing
+imports stay blank with page reference as a subtle clue on where they could
+get that info. Fields that require imports stay blank period. How a feature
+behaves without imports is not really a concern for this project as long as
+long as it fails in a non-breaking way".
+
+**What it qualifies.** The 2026-11-04 entry ruled that with nothing imported
+"the surface says so and shows no figure". The second half stands; the first
+goes. The new evidence is the owner's own priority: the bookless experience
+is not where the project spends effort, and acks-extras had grown about 130
+lang strings in 121 files, each written only to say a value was missing.
+
+**Ruled.** A field whose figure was not imported shows nothing: no figure, no
+"not imported" text, and no toast, warning or refusal that exists only to say
+so. Its tooltip carries the page reference, which ships under the citation
+rule. Without the value a feature only has to fail without breaking: nothing
+throws and no wrong figure is written. `ip-doctrine.md` ("A printed value
+found in source…"), `ui-tooltips.md` (the "With nothing behind it" shape and
+"A tooltip that cannot be written"), the `acks-printed-value` skill §3.3–3.4,
+§7 and "When it cannot be done as written", and the hygiene sweep's
+`missing-provenance-tooltip` category say so.
+
+**Rejected — keeping "not imported" as a visible state.** It told a Judge
+something the blank field and the page reference already tell them, and
+every surface paid a lang key, a branch and a test for it.
+
+**Cost.** A blank field does not distinguish "not imported" from "imported
+and empty" on its face; the tooltip's page reference is the only clue, and a
+reader who does not hover gets none. A guard that stops a write which would
+otherwise throw or store a wrong figure is how a feature fails without
+breaking, and stays; it needs no message.
