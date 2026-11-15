@@ -697,7 +697,7 @@ Full ruling and its corollaries: DECISIONS, 2026-07-19.
     `main`'s tree only) and `unpushed-report.mjs` (at the end of a turn,
     names by sha the commits the checkout and the template beside it hold
     that their upstreams do not, and lists unmerged topic branches, topics
-    landed but still open, unpushed parked branches and any other local
+    landed and open, unpushed parked branches and any other local
     branch; it reports and never pushes), wired in the synced
     `.claude/settings.json`.
   - `.claude/agents/` — the model/effort routing tier: `scout` (haiku,

@@ -471,6 +471,121 @@ check("park --push refuses a branch already on origin", r.status === 1 && /alrea
 r = cli(["park", "never", "--push"]);
 check("park --push refuses a branch that was not parked", r.status === 1, brief(r));
 
+// --- a release's live window: a module whose main's module.json names a version with or without its tag.
+// Each fixture is a repository of its own, so the cases above are not disturbed.
+const makeModule = (name, { tagged }) => {
+  const base = path.join(scratch, name);
+  const bare = path.join(base, "remote.git");
+  const root = path.join(base, "family", "module");
+  fs.mkdirSync(path.dirname(root), { recursive: true });
+  execFileSync("git", ["init", "-q", "--bare", "-b", "main", bare], { env: ENV });
+  execFileSync("git", ["clone", "-q", bare, root], { stdio: "ignore", env: ENV });
+  const g = (...args) => sh(root, ...args);
+  g("checkout", "-q", "-B", "main");
+  for (const [k, v] of [["user.name", "t"], ["user.email", "t@example.invalid"], ["core.autocrlf", "false"]]) g("config", k, v);
+  for (const skill of ["acks-commit", "acks-branch"]) fs.cpSync(path.join(TEMPLATE_ROOT, ".claude/skills", skill), path.join(root, ".claude/skills", skill), { recursive: true });
+  fs.mkdirSync(path.join(root, "tools"));
+  fs.mkdirSync(path.join(root, "scripts"));
+  fs.mkdirSync(path.join(root, "docs"));
+  fs.copyFileSync(path.join(TEMPLATE_ROOT, "skeleton/tools/walk-results.mjs"), path.join(root, "tools/walk-results.mjs"));
+  fs.writeFileSync(path.join(root, ".gitignore"), "node_modules\n");
+  fs.writeFileSync(path.join(root, "module.json"), '{"id":"x","version":"2026.1.1"}\n');
+  for (const f of ["scripts/a.mjs", "docs/x.md", "CHANGELOG.md"]) fs.writeFileSync(path.join(root, f), "base\n");
+  g("add", "-A");
+  g("commit", "-q", "-m", "base");
+  if (tagged) g("tag", "v2026.1.1");
+  g("push", "-q", "-u", "origin", "main");
+  const gdir = path.join(root, ".git");
+  const mod = {
+    root,
+    g,
+    head: () => g("rev-parse", "HEAD"),
+    wt: (slug) => `${root}.${slug}`,
+    cli: (args) => cli(args, { cwd: root }),
+    gdir,
+    leaseFree: async () => {
+      if (fs.existsSync(path.join(gdir, "acks-lease", "landing.json"))) return false;
+      const lease = await acquire(gdir, { session: "probe" }, { waitMs: 0 });
+      lease?.stop();
+      return Boolean(lease);
+    },
+    /** A topic with one commit writing `file`. */
+    topic: (slug, file, text = "topic\n") => {
+      mod.cli(["open", slug]);
+      return commitIn(mod.wt(slug), file, text);
+    },
+    bump: (version) => commitIn(root, "module.json", `{"id":"x","version":"${version}"}\n`, `release ${version}`),
+    /** The window as the tool reads it; "missing" for a tool that has no `releaseWindow`. */
+    window: () => (tool.releaseWindow ? tool.releaseWindow(root) : "missing"),
+  };
+  return mod;
+};
+const showWindow = (w) => JSON.stringify(w);
+
+const rel = makeModule("rel", { tagged: true });
+check("releaseWindow is null where main has no module.json (the template's own shape)", showWindow(tool.releaseWindow?.(main)) === "null", showWindow(tool.releaseWindow?.(main)));
+check("releaseWindow is null for a tagged version", showWindow(rel.window()) === "null", showWindow(rel.window()));
+rel.topic("rt1", "scripts/a.mjs", "runtime 1\n");
+r = rel.cli(["land", "rt1", "--change", green]);
+check("window closed (version tagged): a runtime topic lands", r.status === 0 && rel.head() === rel.g("rev-parse", "topic/rt1"), brief(r));
+
+const bump = rel.bump("2026.1.2");
+check("releaseWindow is open for a version with no tag in a repository that has tagged", showWindow(rel.window()) === '{"version":"2026.1.2"}', showWindow(rel.window()));
+rel.topic("rt2", "scripts/a.mjs", "runtime 2\n");
+r = rel.cli(["land", "rt2", "--change", green]);
+check("window open: a runtime topic is refused with exit 6, naming the version, the path and the owner's flag", r.status === 6 && /2026\.1\.2/.test(r.err) && /scripts\/a\.mjs/.test(r.err) && /--despite-release 2026\.1\.2/.test(r.err) && /live window/.test(r.err), brief(r));
+check("that refusal leaves main where the release commit put it", rel.head() === bump);
+check("that refusal leaves the lease free", await rel.leaseFree());
+
+rel.topic("dc", "docs/x.md", "docs only\n");
+r = rel.cli(["land", "dc", "--change", green]);
+check("window open: a topic touching only docs/ lands, and says why", r.status === 0 && rel.head() === rel.g("rev-parse", "topic/dc") && /changes nothing the zip ships, so it lands/.test(r.out) && /release 2026\.1\.2's live window/.test(r.out), brief(r));
+rel.topic("cl", "CHANGELOG.md", "changelog only\n");
+r = rel.cli(["land", "cl", "--change", green]);
+check("window open: a topic touching only CHANGELOG.md lands", r.status === 0 && rel.head() === rel.g("rev-parse", "topic/cl"), brief(r));
+
+let before2 = rel.head();
+r = rel.cli(["land", "rt2", "--despite-release", "2026.1.1", "--change", green]);
+check("--despite-release naming another version: exit 1 naming the window's version, main unmoved", r.status === 1 && /2026\.1\.2/.test(r.err) && rel.head() === before2, brief(r));
+check("that refusal leaves the lease free", await rel.leaseFree());
+r = rel.cli(["land", "rt2", "--despite-release", "2026.1.2", "--change", green]);
+check("--despite-release naming the window's version lands the runtime topic, saying it passed on the owner's word", r.status === 0 && rel.head() === rel.g("rev-parse", "topic/rt2") && /owner's word/.test(r.out), brief(r));
+
+rel.g("tag", "v2026.1.2");
+check("releaseWindow closes once the tag exists", showWindow(rel.window()) === "null", showWindow(rel.window()));
+rel.topic("rt3", "scripts/b.mjs", "runtime 3\n");
+before2 = rel.head();
+r = rel.cli(["land", "rt3", "--despite-release", "2026.1.2", "--change", green]);
+check("--despite-release while no window is open: exit 1 saying main is in no release's window, main unmoved", r.status === 1 && /no release's live window/.test(r.err) && rel.head() === before2, brief(r));
+r = rel.cli(["land", "rt3", "--change", green]);
+check("window closed by the tag: a runtime topic lands", r.status === 0 && rel.head() === rel.g("rev-parse", "topic/rt3"), brief(r));
+
+// a release commit that lands while land waits for the lease
+rel.topic("rt4", "scripts/c.mjs", "runtime 4\n");
+{
+  const holder = await acquire(rel.gdir, { session: "someone-else", change: "other" }, { waitMs: 0 });
+  const said = [];
+  let waiting;
+  const told = new Promise((resolve) => (waiting = resolve));
+  const landing = settle(tool.land("rt4", { cwd: rel.root, change: green, waitMinutes: 1, say: (m) => { said.push(m); if (/landing lease is held by/.test(m)) waiting(); } }));
+  await Promise.race([told, landing, new Promise((resolve) => setTimeout(resolve, 20_000))]);
+  let bumped;
+  try {
+    bumped = rel.bump("2026.1.3");
+  } finally {
+    holder.stop();
+  }
+  const out = await landing;
+  check("a release commit lands while land waits: refused under the lease with code 6, main at the release commit", out.error?.code === 6 && /2026\.1\.3/.test(out.error.message) && rel.head() === bumped, JSON.stringify({ value: out.value, error: out.error?.message, said }));
+  check("that refusal releases the lease", await rel.leaseFree());
+}
+
+const untagged = makeModule("untagged", { tagged: false });
+check("releaseWindow is null for a module never tagged", showWindow(untagged.window()) === "null", showWindow(untagged.window()));
+untagged.topic("rt5", "scripts/a.mjs", "runtime 5\n");
+r = untagged.cli(["land", "rt5", "--change", green]);
+check("a module never tagged: a runtime topic lands", r.status === 0 && untagged.head() === untagged.g("rev-parse", "topic/rt5"), brief(r));
+
 // --- teardown: unlink before anything deletes a tree that holds a link
 for (const name of fs.readdirSync(path.dirname(main))) {
   const dir = path.join(path.dirname(main), name);

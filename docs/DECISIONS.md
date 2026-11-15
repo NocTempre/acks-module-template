@@ -4534,3 +4534,103 @@ feature session works without compiled packs, `aia-tmp/`,
 `settings.local.json` and the Foundry junction. "One session writes a
 worktree at a time" has no gate behind it, and a session that sends several
 agents into one worktree has no ledger to tell their lines apart.
+
+## 2026-11-15 — A topic is synced between landings, and `land` keeps its lease and the release window — IN FORCE
+
+**Problem.** The entry above ruled that a topic lands once per slice and
+stays open between landings, on a read of the tool alone, and listed six
+things under "Not built". A session started for them by the session that
+wrote that entry, on Opus, with an architect ruling each design and an
+implementer building each slice, closes all six here. The work was written in
+`main`'s tree: it brings the tool up to what `shared-tree.md` already
+claimed, which is a fix by that page's own list.
+
+**Closed, item by item.**
+
+1. *No test landed a topic twice.* `test-branch` now opens a topic, lands a
+   slice, commits and lands a second as a fast-forward, then lands a third
+   over a commit `main` gained between, rebased. It passed on its first run
+   (61 cases, 0 failed, `38397c84`): the rule held without a tool change.
+2. *No way to bring `main` into a topic between landings.* A fifth mode,
+   `sync <slug>`, rebases the topic onto `main` in its worktree, stopping at
+   the first conflict; a topic `main` already holds is left alone, a landed
+   one fast-forwards. It refuses a missing branch, a topic with no worktree
+   or on origin, a stopped rebase, a worktree off its branch and a dirty one,
+   and takes no lease (`8170b73c`).
+3. *"Close it" said of a topic between landings.* The repository cannot tell
+   a topic between landings from one whose feature is walked: both are a
+   contained topic with a worktree, and completion is written only in a plan.
+   So the Stop hook, `land`'s refusal and its success, `open` and the branch
+   guard's startup text now say what is true of both: sync it before its next
+   slice, close it once its feature is walked (`8170b73c` and this entry's
+   commit). The hook's test for a landed topic was a reflog of more than one
+   entry, which a sync of a topic never committed to would pass (a probe:
+   the rebase writes `rebase (finish)`); it is now a contained topic whose
+   reflog records a commit.
+4. *No guard for a release's live window.* An architect found the window
+   decidable from the repository: open while `main`'s `module.json` names a
+   version with no local tag `v<version>`, in a repository that has tagged
+   before. 2026-11-12 ruled "A release interrupted after its release commit
+   resumes the same version", so an untagged bump is a release still in its
+   window, and only one the owner abandons reads open wrongly. `land` refuses,
+   exit 6, a topic whose runtime tree (`walk-results.mjs` `runtimeTree`)
+   differs from `main`'s, after its rebase and again under the lease, since a
+   release commit takes the same lease and can land while `land` waits.
+   `--despite-release <version>` passes an abandoned release's window and
+   stands for the owner's word. Every tagged checkout of the family read
+   closed when it was written; the template has no `module.json` and never
+   reads open.
+5. *A landing that waited behind a commit was refused.* `land` now rebases
+   once more under the lease where `main` moved while it waited. Ruling on it
+   found a defect beside it: the gate ran through `spawnSync`, which blocks
+   the event loop, so the lease's heartbeat never beat during the gate (with
+   a 200 ms beat, a 1.5 s child moved the lease file's mtime by 0 ms through
+   `spawnSync` and by 1649 ms through `spawn`). Any gate longer than
+   `SILENT_MS` (120 s), which every acks-extras gate is, could lose its lease
+   to a waiter, and `land` never asked `holds()` before the fast-forward.
+   That a peer then commits under the landing's gate is inferred, not run.
+   The gate now runs through an async spawn, and after it `land` refuses with
+   exit 3 where the lease is no longer its own or `main` moved
+   (`6e7b9bad`). `lease.mjs` and `commit-own-hunks.mjs` are unchanged; the
+   commit tool already ran its stages through an async spawn.
+6. *No rebase rule for `register/_ledger.json`.* None is needed, and none is
+   written. acks-extras' `register/.gitignore` ignores the file, `git ls-files`
+   lists none, and `git log --all` finds no commit that ever held it: a rebase
+   never sees it. The 2026-11-12 branch entry's "Cost" was wrong to list it.
+   What is true instead is that a worktree lacks it, with every other
+   gitignored file; `open` and the skill now say so.
+
+**What this qualifies.** R15 of 2026-11-12, "One runtime writer on `main`'s
+tree during a release's live window, by procedure", is three days old. The
+new evidence is the entry above: every feature now lands through `land`, and
+`acks-release` step 5's `git status --porcelain` cannot see a landing,
+because a landing is a commit. The procedure stands for a commit made through
+`acks-commit`, which has no guard; the guard covers a topic's landing only.
+
+**Rejected.** `land` doing the sync when a topic holds nothing new: its exit 0
+has to mean landed, or a plan records a slice as landed that never was. A
+hand `git rebase main`, as the rule said before: it skips the checks `land`
+makes. A retry loop before the lease for a moved `main`: each retry joins the
+queue again behind every new commit. A window closed on the tag's push rather
+than the local tag: step 8 pushes the tag's own sha, so a landing above the
+tag cannot reach that release.
+
+**The strongest counter, rated moderate,** is to item 4: "where a lesson
+lands" makes a gate of a rule once it recurs despite the prose, R15 has not
+yet been broken, and the preflight refuses afterwards anyway. It rates
+moderate and not strong because a miss costs every walk of a release, the
+guard refuses only what the rule already forbids, and the one wrong reading,
+an abandoned release, fails closed with the owner's word as the way through.
+
+**Not verified.** Nothing ran in a module: no topic was synced or landed
+twice outside the suites' scratch repositories, no real gate of several
+minutes ran against a waiter, and no release window was met live. None of it
+reaches a module until the owner pushes the template and it is synced.
+`test-branch` 110 cases, `test-unpushed-report` 23, `test-branch-guard` 112:
+0 failed; each new case fails on the file it replaces.
+
+**Cost.** `land` takes one more `--despite-release` flag that only the owner
+may supply, and a stale tag list (an unfetched or deleted tag) reads as an
+open window, which refuses a runtime landing rather than letting one through.
+The hook and `land` give two-way advice every turn a topic stands between
+landings.

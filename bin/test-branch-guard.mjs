@@ -228,6 +228,7 @@ try {
     check("says it is not live until landed", /not live until/i.test(r.json?.hookSpecificOutput?.additionalContext ?? "") && /live until it lands/i.test(r.json?.systemMessage ?? ""), r.out);
     check("says commit by hand", /commit by hand/i.test(r.json?.systemMessage ?? ""), r.out);
     check("names land and close for the slug", /branch\.mjs land x/.test(both) && /branch\.mjs close x/.test(both), both);
+    check("names sync between slices, and close once the feature is walked", /branch\.mjs sync x/.test(r.json?.hookSpecificOutput?.additionalContext ?? "") && /once its feature is walked/.test(both), both);
     check("is a SessionStart context", r.json?.hookSpecificOutput?.hookEventName === "SessionStart", r.out);
   });
   test("session-start in a subdirectory of a linked worktree speaks the same", (check) => {
