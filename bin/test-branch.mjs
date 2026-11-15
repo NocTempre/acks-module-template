@@ -126,6 +126,21 @@ check("the lease is free after a landing", await leaseFree());
 r = cli(["land", "ff", "--change", green]);
 check("land refuses a topic that holds nothing new", r.status === 1 && /already landed or empty/.test(r.err), brief(r));
 
+// --- land twice: a topic stays open between landings and lands its next slice
+cli(["open", "twice"]);
+commitIn(wt("twice"), "twice1.txt", "slice 1\n");
+r = cli(["land", "twice", "--change", green]);
+check("a topic's first slice lands", r.status === 0 && head() === sh(main, "rev-parse", "topic/twice"), brief(r));
+const slice2 = commitIn(wt("twice"), "twice2.txt", "slice 2\n");
+r = cli(["land", "twice", "--change", green]);
+check("its second slice, committed after the first landed, lands as a fast-forward", r.status === 0 && head() === slice2 && !/rebased/.test(r.out) && fs.existsSync(path.join(main, "twice2.txt")), brief(r));
+const walkFix = commitIn(main, "walkfix.txt", "fixed on main\n");
+const slice3 = commitIn(wt("twice"), "twice3.txt", "slice 3\n");
+r = cli(["land", "twice", "--change", green]);
+const tip3 = sh(main, "rev-parse", "topic/twice");
+check("a third slice lands over a commit main gained since the second", r.status === 0 && head() === tip3 && tip3 !== slice3 && sh(main, "rev-parse", "HEAD~1") === walkFix && fs.existsSync(path.join(wt("twice"), "walkfix.txt")) && /rebased topic\/twice/.test(r.out), brief(r));
+check("the lease is free after the third landing", await leaseFree());
+
 // --- land: rebase onto a moved main
 cli(["open", "rb"]);
 const oldTip = commitIn(wt("rb"), "rb.txt", "rb\n");
