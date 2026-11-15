@@ -4208,7 +4208,7 @@ gitignored local-only suites never run in the commit tool's clone; until a
 module's test runner has a working-tree pass for them, a release runs none.
 That permission to reopen the commit tooling was not used.
 
-## 2026-11-12 — Topic and parked branches return, opened and landed by one tool — IN FORCE
+## 2026-11-12 — Topic and parked branches return, opened and landed by one tool — IN FORCE except which work takes a branch (superseded in part 2026-11-15)
 
 **Problem.** Several tracks of the Public Beta work run for many sessions
 each: deleting the OSE importer, splitting a cookbook, two book-list imports.
@@ -4388,3 +4388,149 @@ and empty" on its face; the tooltip's page reference is the only clue, and a
 reader who does not hover gets none. A guard that stops a write which would
 otherwise throw or store a wrong figure is how a feature fails without
 breaking, and stays; it needs no message.
+
+## 2026-11-15 — Every agent and session starts on a model chosen for its work — IN FORCE
+
+**Problem.** The 2026-11-12 sizing entry made a synced agent's definition the
+choice of its model. Nothing chose for a start no definition covers. A
+session started from another runs on the starter's model when none is named;
+so does a general-purpose, search or planning agent, and so do a workflow's
+agents. On 2026-11-14 the Public Beta orchestrator opened its standby
+sessions that way, each on the orchestrator's own model.
+
+**Ruled by the owner.** 2026-11-14, to that orchestrator: "Choose agent level
+intentionally". 2026-11-15, to a session asked to orchestrate the map tools'
+revision: "Orchestrate includes managing tasking with intentional subagent
+selection". 2026-11-15, asking for this entry: "I'd like to update the
+template rules about orchestration (always select agent model
+intentionally)".
+
+The rendered `CLAUDE.md`, "Sizing the task": the rule "The agent definition
+picks the model" becomes "Every agent and session starts on a model chosen
+for its work", in four parts.
+
+1. Picking a synced agent by the work is the choice. It is started with no
+   model override, and work that needs a stronger model than `implementer`'s
+   goes to `architect`.
+2. A start no definition covers names its model: a session started from
+   another, a general-purpose, search or planning agent, a workflow's agents.
+3. A fork runs on the session's own model and takes no other. It is for work
+   that needs that model.
+4. A plan and each brief say which agent or model takes each slice, and why.
+
+**What stands.** The 2026-11-12 sizing entry, whole; part 1 is its third
+rule. The hygiene sweep already chooses: `plan-sweep.mjs` gives its agents
+`sonnet` unless `--model` names another tier, and `root` is asked for by
+name.
+
+**Rejected — a `model` on every start, synced agents included.** It reopens
+the override the 2026-11-12 entry closed on evidence: nine implementers
+started on Opus cost more than the Sonnet ones on fewer calls.
+
+**Rejected — a hook that refuses a start with no model.** A synced agent's
+start rightly carries none, and the rule had not been written down before
+this entry. `CLAUDE.md`, "Where a lesson lands", makes a gate of a rule once
+it recurs despite the prose.
+
+**Cost.** Each brief and each plan row grows by an agent and a reason. The
+rule has no gate: a start that names no model still runs.
+
+## 2026-11-15 — A new feature is built on a topic branch — IN FORCE
+
+**Problem.** The 2026-11-12 branch entry let a track take a branch only when
+nothing in it was walked live until it was finished, it spanned more than one
+commit and one writer worked it. A feature built slice by slice, each slice
+walked, failed the first part and was written in `main`'s tree, where its
+half-built state is loaded in the one test world under every peer's walk.
+
+**Ruled by the owner, 2026-11-15.** "I'd like to update the template rules
+about orchestration (always select agent model intentionally) as well as
+moving to all new features to use development branches (aka proper git
+project best practices)." The same day, of the map setup revision in
+acks-extras, "develop as a brach", and of its spell effects, "When ready,
+start this work as a new branch".
+
+**The new evidence**, since the entry this qualifies is three days old. The
+owner's three asks. The two plans written on them (acks-extras `98cf65cf`
+and `e0c973bc`) put a walked feature on a topic and land it for each walk,
+which the three-part test did not allow. Four topic worktrees stand beside
+acks-extras, and its `main` reflog holds 23 fast-forwards made on 2026-11-13
+and 2026-11-14. A fast-forward is how the tool lands a topic; what else
+fast-forwards `main` was not checked.
+
+**Ruled.** `shared-tree.md`, "Topic and parked branches":
+
+- A new feature is built on `topic/<slug>`. A feature is work whose plan,
+  brief or ledger row adds or reworks a surface a user or another module
+  reaches. The plan or brief names its tree before the first edit, as it
+  names its agent.
+- A fix that restores what a shipped surface already claims, docs and plans,
+  a release's own commits and a change that adds no surface are written in
+  `main`'s tree. Such a change may still take a topic under the two older
+  conditions: more than one commit, and nothing walked live until it is
+  finished.
+- A feature is walked on `main`, where the Foundry junction is. A slice is
+  built to an offline green in the worktree, landed and walked, and what the
+  walk finds is fixed on `main`. A topic lands once for each slice that needs
+  its walk and stays open between landings.
+- The plan a topic is built from stays in `main`'s tree.
+
+**What stands.** The six numbered answers of 2026-11-12 and every mechanic of
+that entry: one tool, rebase then fast-forward, a topic never pushed, a
+parked branch pushed once. What is superseded is the sentence of "The model"
+that opens "A track goes on `topic/<slug>` only when". Its "rejection of a
+worktree or a branch per session stands" still does: a topic holds one
+feature and outlives the sessions that build it, and a session's fix, docs or
+release are written in `main`'s tree as before. One of the 2026-10-07 reasons
+behind that rejection, that a branch "puts a landing between an edit and the
+live world", is now true of every feature and is carried under Cost.
+
+**Not ruled.** Whether "proper git project best practices" also means a topic
+pushed to origin, a pull request, or CI on a branch. It was asked of the
+owner with this entry. Each needs tooling: `land` refuses a topic that is on
+origin, a pull request merges by a squash or a merge commit, both rejected
+2026-11-12, and a module's CI has no build or test job for a branch (its two
+workflows are the release, on a tag, and the toolchain check).
+
+**Not built.** A review of the tool for this entry read the code and ran
+nothing. It found:
+
+- No test lands a topic, commits to it and lands it again. `test-branch`
+  covers a second landing with nothing new, which is refused.
+- `land` refuses a topic that holds nothing `main` does not, so between two
+  landings the tool has no way to bring `main` into the worktree. A
+  `git rebase main` there does it, under answer 1.
+- The Stop hook says "landed, still open: close it" of a topic between two
+  landings, and `land`'s own refusal says the same. The rules now say such a
+  topic stays open; the two messages do not.
+- `land` has no guard for a release's live window. The preflight refuses
+  afterwards.
+- `land` rebases before it takes the lease and refuses under the lease when
+  `main` moved, so a landing that waited behind a commit is refused after its
+  wait and lands again.
+- No rebase rule covers `register/_ledger.json`.
+
+**Rejected — "any change of one commit" is written in `main`'s tree.** The
+count is not known when the work starts, and the rule would reward fewer
+commits, against TOOLCHAIN §2.
+
+**Rejected — a feature is work that adds a surface.** The map setup revision
+reworks windows that exist and adds none, and the owner put it on a branch.
+
+**The strongest counter, rated moderate.** The live walk is the go-live gate
+and only `main`'s tree is live. A feature walked slice by slice pays a rebase
+and a full gate before every walk, its walk fixes land in a tree the topic
+does not hold until it rebases, and each walked slice is on `main` anyway, so
+it buys little of a branch's isolation. It rates moderate and not strong
+because the owner has ruled, one landing costs one gate where its commits in
+`main`'s tree would each cost one, and a track that walks little (an
+importer, a deletion) keeps the isolation whole.
+
+**Cost.** The counter's, for every walked feature. Commits below a landed tip
+are gated only as part of the tip's tree, and that now describes most of a
+feature's commits; `shared-tree.md`'s opening line, that a commit's tree is
+the tree that was gated, holds for a commit made in `main`'s tree. Every
+feature session works without compiled packs, `aia-tmp/`,
+`settings.local.json` and the Foundry junction. "One session writes a
+worktree at a time" has no gate behind it, and a session that sends several
+agents into one worktree has no ledger to tell their lines apart.

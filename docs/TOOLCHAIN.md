@@ -71,14 +71,15 @@ acks-<feature>/
 ## 2. Git conventions
 
 - **Default branch: `main`**, on every repo; it is what is released and
-  walked, and its tree never leaves `main`. A track that walks nothing live
-  until it is finished, spans more than one commit and has one writer may run
-  on `topic/<slug>` in the sibling worktree `<repo>.<slug>`, opened, landed
-  (rebase, the full gate on the tip, fast-forward) and closed by `acks-branch`;
-  a shelved line is `parked/<slug>`. A topic branch is never pushed; a parked
-  branch is pushed once, at creation, on the owner's go-ahead. The rules are
+  walked, and its tree never leaves `main`. A new feature is built on
+  `topic/<slug>` in the sibling worktree `<repo>.<slug>`, opened, landed
+  (rebase, the full gate on the tip, fast-forward) and closed by
+  `acks-branch`, and walked live on `main` after each landing; a fix, docs
+  and a release's own commits are written in `main`'s tree. A shelved line is
+  `parked/<slug>`. A topic branch is never pushed; a parked branch is pushed
+  once, at creation, on the owner's go-ahead. The rules are
   `.claude/rules/shared-tree.md`, "Topic and parked branches" (DECISIONS
-  2026-11-12).
+  2026-11-12 and 2026-11-15).
 - **Commit early and often; push the package on the owner's go-ahead**
   (DECISIONS 2026-10-17). A session commits each finished piece of its own
   change (a fix, a slice, a step) as soon as that piece passes its gate, not
@@ -703,7 +704,8 @@ Full ruling and its corollaries: DECISIONS, 2026-07-19.
     search), `implementer` (sonnet, scoped changes), `architect` (opus,
     read-only design/diagnosis), `live-tester` (sonnet, drives the test
     world), `doc-scribe` (haiku, docs chores). CLAUDE.md's "Sizing the task"
-    says when each is used.
+    says when each is used, and that a start none of them covers names its
+    model (DECISIONS 2026-11-15).
 - The template repo protects itself with the same `.claude/settings.json`
   hook set (branch guard, heredoc guard, edit ledger, shared-tree guard,
   unpushed report, `bgIsolation: none`) as its children, and carries its own `CLAUDE.md` — it is the highest-blast-radius
