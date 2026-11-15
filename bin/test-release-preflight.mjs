@@ -508,6 +508,11 @@ const CASES = [
     mutate: (ctx) => fs.rmSync(path.join(ctx.root, "docs/foo/DECISIONS-through-v11.14.5.md")),
     err: [/FAIL logs-rolled: docs\/foo\/DECISIONS-through-v11\.14\.5\.md is missing/u],
   }),
+  rolledCase("a major asks no archive of a feature whose docs folder is gone whole", {
+    mutate: (ctx) => fs.rmSync(path.join(ctx.root, "docs/foo"), { recursive: true }),
+    status: 0,
+    notErr: [/logs-rolled/u],
+  }),
   rolledCase("a major refuses a live DECISIONS with no In force section", {
     mutate: (ctx) => ctx.write("docs/DECISIONS.md", ctx.read("docs/DECISIONS.md").replace("## In force", "## Index")),
     err: [/FAIL logs-rolled: docs\/DECISIONS\.md has no "## In force" section/u],
