@@ -697,6 +697,18 @@ const CASES = [
     also: [{ args: ["--kind", "hotfix", "--at", "@sha"], status: 1, err: [/scripts\/gadget\/ changed since v11\.14\.5/u], notErr: [/scripts\/other\//u] }],
   },
   {
+    name: "a feature removed whole since the tag owes no recipe, in the working tree or under --at",
+    args: ["--kind", "hotfix"],
+    changelog: `# Changelog\n\n## ${TODAY}\n\n### Fixed\n\n- **A fix.** Nothing owed.\n`,
+    shots: [],
+    base: { "scripts/gadget/run.mjs": "export {};\n", "docs/gadget/TESTING.md": "# Gadget\n" },
+    setup: (ctx) => ctx.git("rm", "-r", "-q", "scripts/gadget", "docs/gadget"),
+    commit: true,
+    status: 0,
+    notErr: [/scripts\/gadget\//u],
+    also: [{ args: ["--kind", "hotfix", "--at", "@sha"], status: 0, notErr: [/scripts\/gadget\//u] }],
+  },
+  {
     name: "--at asks for a recipe the commit holds and not one only the working tree holds",
     args: ["--kind", "hotfix"],
     changelog: `# Changelog\n\n## ${TODAY}\n\n### Fixed\n\n- **A fix.** Nothing owed.\n`,
