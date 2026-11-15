@@ -97,6 +97,7 @@ const red = gate("red", 'node -e "console.log(\'gate says no\'); process.exit(1)
 let r = cli(["open", "ff"]);
 check("open creates the branch, the sibling folder and the node_modules link", r.status === 0 && hasBranch("topic/ff") && fs.existsSync(wt("ff")) && fs.lstatSync(path.join(wt("ff"), "node_modules")).isSymbolicLink() && countFiles(path.join(wt("ff"), "node_modules")) === modulesCount, brief(r));
 check("open says what a session does next", /walked live/.test(r.out) && /by hand/.test(r.out) && /land ff/.test(r.out) && /build:packs/.test(r.out), brief(r));
+check("open names sync between slices and every gitignored file the worktree lacks", /sync ff/.test(r.out) && /every gitignored file/.test(r.out), brief(r));
 check("the branch starts at main", sh(main, "rev-parse", "topic/ff") === head());
 r = cli(["open", "Bad_Slug"]);
 check("a bad slug is a usage error", r.status === 2 && !fs.existsSync(`${main}.Bad_Slug`), brief(r));
@@ -120,11 +121,12 @@ const before = head();
 r = cli(["land", "ff", "--change", green]);
 check("land fast-forwards main to the tip and reads HEAD back", r.status === 0 && head() === tipFf && r.out.includes(`landed topic/ff ${tipFf}; main fast-forwarded from ${before}; not pushed`), brief(r));
 check("the gate ran on the tip, from main", (fs.existsSync(path.join(green, "branch-land.log")) ? fs.readFileSync(path.join(green, "branch-land.log"), "utf8") : "").includes(`GREEN: the full gate passes on ${tipFf}`));
+check("land says the topic stays open, to sync before the next slice and close once walked", /topic\/ff stays open: sync ff before its next slice; close ff once its feature is walked/.test(r.out), brief(r));
 check("land never pushes", originMain() === originAtStart && sh(remote, "branch", "--list", "topic/*") === "");
 check("the landed files are in main's tree", fs.existsSync(path.join(main, "ff.txt")));
 check("the lease is free after a landing", await leaseFree());
 r = cli(["land", "ff", "--change", green]);
-check("land refuses a topic that holds nothing new", r.status === 1 && /already landed or empty/.test(r.err), brief(r));
+check("land refuses a topic that holds nothing new, and says to sync or close it", r.status === 1 && /holds nothing main does not/.test(r.err) && /sync ff/.test(r.err) && /close ff/.test(r.err), brief(r));
 
 // --- land twice: a topic stays open between landings and lands its next slice
 cli(["open", "twice"]);
@@ -330,6 +332,63 @@ const beats = fs.existsSync(beatLog) ? JSON.parse(fs.readFileSync(beatLog, "utf8
 check("the lease's heartbeat beats while the gate runs", beats && beats.last - beats.first >= 300, JSON.stringify({ beats, beaten: String(beaten?.message ?? beaten) }));
 check("and the slice lands", beaten === 0 && head() === sh(main, "rev-parse", "topic/beat"), String(beaten?.message ?? beaten));
 check("the lease is free after that landing", await leaseFree());
+
+// --- sync: main is brought into a topic's worktree between landings
+r = cli(["sync"]);
+check("sync with no slug is a usage error", r.status === 2, brief(r));
+r = cli(["sync", "nope"]);
+check("sync refuses a branch that does not exist", r.status === 1 && /does not exist/.test(r.err), brief(r));
+
+cli(["open", "sy"]);
+const tipSy0 = sh(main, "rev-parse", "topic/sy");
+h = head();
+r = cli(["sync", "sy"]);
+check("sync of a topic that already holds main: exit 0, nothing to bring in, tip unchanged", r.status === 0 && r.out.includes(`topic/sy already holds main ${h.slice(0, 10)}; nothing to bring in`) && sh(main, "rev-parse", "topic/sy") === tipSy0 && head() === h, brief(r));
+commitIn(wt("sy"), "sy1.txt", "slice 1\n");
+r = cli(["land", "sy", "--change", green]);
+check("the topic's first slice lands", r.status === 0 && head() === sh(main, "rev-parse", "topic/sy"), brief(r));
+const syPeer = commitIn(main, "sypeer.txt", "main moved\n");
+r = cli(["sync", "sy"]);
+check("sync fast-forwards a landed topic to main", r.status === 0 && sh(main, "rev-parse", "topic/sy") === syPeer && head() === syPeer && /synced topic\/sy onto main/.test(r.out) && fs.existsSync(path.join(wt("sy"), "sypeer.txt")), brief(r));
+const sy2 = commitIn(wt("sy"), "sy2.txt", "slice 2\n");
+r = cli(["land", "sy", "--change", green]);
+check("the next slice, written after the sync, lands as a fast-forward with no rebase", r.status === 0 && head() === sy2 && !/rebased/.test(r.out), brief(r));
+check("sync never takes the landing lease", await leaseFree());
+
+cli(["open", "sd"]);
+const sdOld = commitIn(wt("sd"), "sd.txt", "sd\n");
+const sdPeer = commitIn(main, "sdpeer.txt", "peer\n");
+r = cli(["sync", "sd"]);
+const sdTip = sh(main, "rev-parse", "topic/sd");
+check("sync rebases a diverged topic onto main and leaves main where it was", r.status === 0 && sdTip !== sdOld && head() === sdPeer && sh(main, "rev-parse", "HEAD") === sdPeer && sh(main, "rev-parse", `${sdTip}~1`) === sdPeer && /synced topic\/sd onto main/.test(r.out) && fs.existsSync(path.join(wt("sd"), "sdpeer.txt")), brief(r));
+check("the synced topic then lands as a fast-forward", cli(["land", "sd", "--change", green]).status === 0 && head() === sdTip);
+
+cli(["open", "sc"]);
+commitIn(wt("sc"), "shared.txt", "topic sc\n");
+const scPeer = commitIn(main, "shared.txt", "main sc\n");
+r = cli(["sync", "sc"]);
+const scStopped = fs.existsSync(path.resolve(wt("sc"), sh(wt("sc"), "rev-parse", "--git-path", "rebase-merge")));
+check("a conflicting sync refuses, leaves the rebase in progress, main untouched, and says how it ends", r.status === 1 && scStopped && head() === scPeer && /finishes the sync/.test(r.err) && /rebase --abort/.test(r.err) && !/land sc again/.test(r.err), brief(r));
+r = cli(["sync", "sc"]);
+check("sync refuses while a rebase is stopped", r.status === 1 && /rebase is in progress/.test(r.err), brief(r));
+check("a conflicting sync leaves the lease free", await leaseFree());
+sh(wt("sc"), "rebase", "--abort");
+
+cli(["open", "sdirty"]);
+fs.writeFileSync(path.join(wt("sdirty"), "junk.txt"), "untracked\n");
+r = cli(["sync", "sdirty"]);
+check("sync refuses a dirty worktree", r.status === 1 && /not clean/.test(r.err), brief(r));
+fs.rmSync(path.join(wt("sdirty"), "junk.txt"));
+
+cli(["open", "sdt"]);
+sh(wt("sdt"), "checkout", "-q", "--detach");
+r = cli(["sync", "sdt"]);
+check("sync refuses a worktree that is not on its topic branch", r.status === 1 && /not refs\/heads\/topic\/sdt/.test(r.err), brief(r));
+sh(wt("sdt"), "checkout", "-q", "topic/sdt");
+
+h = head();
+r = cli(["sync", "pushed"]);
+check("sync refuses a topic that exists on origin, and never rebases it", r.status === 1 && /on origin/.test(r.err) && /never rebased/.test(r.err) && head() === h, brief(r));
 
 // --- close
 const modulesBefore = countFiles(modules);

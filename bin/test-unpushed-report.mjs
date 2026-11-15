@@ -3,7 +3,7 @@
  * checks what it exists to guarantee: a commit the upstream lacks is named by
  * sha, a listing is shown once and again only when it changes, a pushed
  * checkout says nothing, local branches are listed (an unmerged topic, a topic
- * landed and still open, an unpushed parked branch, any other branch) with no
+ * landed and open, an unpushed parked branch, any other branch) with no
  * commit unpushed, and no input makes the hook exit non-zero or ask for
  * anything but a message.
  *
@@ -125,7 +125,7 @@ check("a repository with only main says nothing", silent(r), JSON.stringify(r));
 
 git(proj, "worktree", "add", "-q", "-b", "topic/a", topicDir, "main");
 r = stopAt("e2", proj);
-check("a topic opened and not yet committed to is not called landed", r.out?.systemMessage?.includes("topic/a: 0 commit(s) ahead of main") && !r.out.systemMessage.includes("landed, still open"),JSON.stringify(r));
+check("a topic opened and not yet committed to is not called landed", r.out?.systemMessage?.includes("topic/a: 0 commit(s) ahead of main") && !r.out.systemMessage.includes("landed, open"), JSON.stringify(r));
 
 fs.writeFileSync(path.join(topicDir, "a.txt"), "a");
 git(topicDir, "add", "a.txt");
@@ -141,11 +141,25 @@ check("a session inside the topic worktree reads the repository's listing", r.ou
 git(proj, "merge", "-q", "--ff-only", "topic/a");
 git(proj, "push", "-q", "origin", "main");
 r = stopAt("e3", proj);
-check("a topic contained in main and still open is named for closing", r.out?.systemMessage?.includes("topic/a: landed, still open: close it"), JSON.stringify(r));
+check("a topic contained in main and still open is named for syncing or closing", r.out?.systemMessage?.includes("landed, open:") && r.out.systemMessage.includes(`  topic/a: landed, open: sync it before its next slice, or close it once its feature is walked (worktree ${path.resolve(topicDir)})`), JSON.stringify(r));
 git(proj, "worktree", "remove", topicDir);
 git(proj, "branch", "-q", "-d", "topic/a");
 r = stopAt("e3", proj);
 check("once the topic is closed the listing is empty", silent(r), JSON.stringify(r));
+
+// A topic opened and never committed to, then synced onto a main that moved: a
+// rebase writes reflog entries of its own, and the topic is still not landed.
+const syncDir = path.join(scratch, "fam2", "proj.s");
+git(proj, "worktree", "add", "-q", "-b", "topic/s", syncDir, "main");
+fs.writeFileSync(path.join(proj, "moved"), "moved");
+git(proj, "add", "moved");
+git(proj, "commit", "-q", "-m", "main moves");
+git(proj, "push", "-q", "origin", "main");
+git(syncDir, "rebase", "main");
+r = stopAt("e7", proj);
+check("a never-committed topic synced onto a moved main is still not called landed", r.out?.systemMessage?.includes("topic/s: 0 commit(s) ahead of main") && !r.out.systemMessage.includes("landed, open"), JSON.stringify(r));
+git(proj, "worktree", "remove", syncDir);
+git(proj, "branch", "-q", "-d", "topic/s");
 
 git(proj, "branch", "parked/idea");
 git(proj, "branch", "wip");

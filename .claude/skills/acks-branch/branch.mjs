@@ -1,9 +1,10 @@
 /**
- * Open, land, park and close a topic branch kept in a worktree beside the
+ * Open, land, sync, park and close a topic branch kept in a worktree beside the
  * main checkout.
  *
  *   node branch.mjs open <slug>
  *   node branch.mjs land <slug> [--wait <minutes>] [--change <dir>]
+ *   node branch.mjs sync <slug>
  *   node branch.mjs close <slug> [--discard-unmerged]
  *   node branch.mjs park <slug> [--at <rev>] [--push]
  *
@@ -16,7 +17,11 @@
  * (stopping at the first conflict), takes the landing lease, runs the full
  * gate on the tip with `commit-own-hunks.mjs postgate` from `main`'s root,
  * fast-forwards `main` to the tip and reads `HEAD` back. It never carries a
- * moved base and never pushes. `close` unlinks every top-level link in the
+ * moved base and never pushes. A topic stays open between landings; `sync`
+ * brings what `main` gained into its worktree, as a rebase of the unpushed
+ * topic onto `main` that stops at the first conflict, and a topic `main`
+ * already holds is left as it is. It never takes the lease and never touches
+ * `main`. `close` unlinks every top-level link in the
  * worktree before `git worktree remove`, because on Windows that command
  * deletes through a junction and empties the folder it points at, then checks
  * `main`'s `node_modules` survived. `park` makes `parked/<slug>`, a branch with
@@ -217,13 +222,47 @@ export function open(slug, { cwd, say = console.log }) {
   say(`  nothing on this branch is walked live until it lands: the Foundry junction points at ${root}`);
   say(`  start the session in ${dir} and commit there by hand (git add, git commit)`);
   say(`  land it with: node .claude/skills/acks-branch/branch.mjs land ${slug}   (rebases, gates the tip, fast-forwards main, never pushes)`);
-  say(`  the worktree lacks: compiled packs (run build:packs there), aia-tmp/, settings.local.json, the Foundry junction${linked ? "" : ", and node_modules (main has none to link)"}`);
+  say(`  it stays open after a landing: sync ${slug} brings main in before the next slice, close ${slug} once the feature is walked`);
+  say(`  the worktree lacks every gitignored file (git copies none into a new worktree) — compiled packs (run build:packs there), aia-tmp/, settings.local.json, pipeline state — and the Foundry junction${linked ? "" : ", and node_modules (main has none to link)"}`);
   return EXIT.ok;
 }
 
-/** The refusal a stopped rebase gives: what to do, and that main is untouched. */
-function stoppedRebase(dir, slug, output) {
-  refuse(`the rebase onto main stopped; main is untouched and the rebase is left in progress in ${dir}\n${output.split("\n").slice(-12).join("\n")}\nresolve the conflict there, git add the files, git rebase --continue, then land ${slug} again (git rebase --abort drops the attempt)`);
+/** What a stopped rebase asks of the session once `land` ran it, and once `sync` did. */
+const REBASE_NEXT = {
+  land: (slug) => `resolve the conflict there, git add the files, git rebase --continue, then land ${slug} again (git rebase --abort drops the attempt)`,
+  sync: () => "resolve the conflict there, git add the files, git rebase --continue finishes the sync (git rebase --abort drops it)",
+};
+
+/** The refusal a stopped rebase gives: what to do (`REBASE_NEXT[how]`), and that main is untouched. */
+function stoppedRebase(dir, slug, output, how = "land") {
+  refuse(`the rebase onto main stopped; main is untouched and the rebase is left in progress in ${dir}\n${output.split("\n").slice(-12).join("\n")}\n${REBASE_NEXT[how](slug)}`);
+}
+
+/**
+ * Brings what `main` gained into `topic/<slug>`'s worktree: a rebase onto
+ * `main` that stops at the first conflict, so the topic's next slice is
+ * written on the current tree. A topic that already holds `main` is left as it
+ * is, and a contained one fast-forwards. It takes no lease and never touches `main`.
+ */
+export function sync(slug, { cwd, say = console.log }) {
+  const { root, branch, dir, exists } = topicOf(cwd, slug);
+  requireMain(root);
+  if (!exists) refuse(`${branch} does not exist`);
+  if (!dir) refuse(`${branch} has no worktree, and a topic is synced in its own; ask the owner what to do with it`);
+  if (hasRef(root, `refs/remotes/origin/${branch}`)) refuse(`${branch} is on origin; a pushed branch is never rebased. Ask the owner`);
+  if (rebasing(dir)) refuse(`a rebase is in progress in ${dir}; finish it (git rebase --continue) or abort it, then sync again`);
+  const checkedOut = run(dir, ["symbolic-ref", "-q", "HEAD"]).out;
+  if (checkedOut !== `refs/heads/${branch}`) refuse(`${dir} has ${checkedOut || "a detached HEAD"} checked out, not refs/heads/${branch}`);
+  requireClean(dir, `the worktree ${dir}`);
+  const mainSha = rev(root, "main").slice(0, 10);
+  if (isAncestor(root, "main", `refs/heads/${branch}`)) {
+    say(`${branch} already holds main ${mainSha}; nothing to bring in`);
+    return EXIT.ok;
+  }
+  const rebased = run(dir, ["rebase", "main"], { GIT_EDITOR: "true" });
+  if (rebased.status !== 0) stoppedRebase(dir, slug, `${rebased.out}\n${rebased.err}`.trim(), "sync");
+  say(`synced ${branch} onto main ${mainSha}: tip ${rev(dir, "HEAD").slice(0, 10)}`);
+  return EXIT.ok;
 }
 
 /** The words that name a lease's holder to a waiter. */
@@ -245,7 +284,7 @@ export async function land(slug, { cwd, waitMinutes = WAIT_MINUTES, change = nul
   if (rebasing(dir)) refuse(`a rebase is in progress in ${dir}; finish it (git rebase --continue) or abort it, then land again`);
   requireClean(dir, `the worktree ${dir}`);
   let tip = rev(root, branch);
-  if (isAncestor(root, tip, "main")) refuse(`${branch} holds nothing main does not: already landed or empty; close it with close ${slug}`);
+  if (isAncestor(root, tip, "main")) refuse(`${branch} holds nothing main does not (landed, or not committed to): sync ${slug} before its next slice, or close ${slug} once its feature is walked`);
   if (!isAncestor(root, "main", tip)) {
     const rebased = run(dir, ["rebase", "main"], { GIT_EDITOR: "true" });
     if (rebased.status !== 0) stoppedRebase(dir, slug, `${rebased.out}\n${rebased.err}`.trim());
@@ -272,7 +311,7 @@ export async function land(slug, { cwd, waitMinutes = WAIT_MINUTES, change = nul
       if (rebased.status !== 0) stoppedRebase(dir, slug, `${rebased.out}\n${rebased.err}`.trim());
       tip = rev(dir, "HEAD");
       say(`main moved while this run waited; rebased ${branch} onto main: tip ${tip}`);
-      if (!isAncestor(root, "main", tip)) refuse("main moved again during the rebase; land again");
+      if (!isAncestor(root, "main", tip)) refuse("main moved again during the rebase, by a commit made around the tool; nothing landed; land again", EXIT.movedBase);
     }
     const old = rev(root, "HEAD");
     await gate(root, tip, change, say);
@@ -286,6 +325,7 @@ export async function land(slug, { cwd, waitMinutes = WAIT_MINUTES, change = nul
     const head = rev(root, "HEAD");
     if (head !== tip) refuse(`main's HEAD is ${head} after the fast-forward, not the tip ${tip}; look at it before anything else`);
     say(`landed ${branch} ${tip}; main fast-forwarded from ${old}; not pushed`);
+    say(`  ${branch} stays open: sync ${slug} before its next slice; close ${slug} once its feature is walked`);
     return EXIT.ok;
   } finally {
     lease.stop();
@@ -395,10 +435,11 @@ export function park(slug, { cwd, at = "main", push = false, say = console.log }
 const FLAGS = {
   open: { value: [], bool: [] },
   land: { value: ["--wait", "--change"], bool: [] },
+  sync: { value: [], bool: [] },
   close: { value: [], bool: ["--discard-unmerged"] },
   park: { value: ["--at"], bool: ["--push"] },
 };
-const USAGE = "usage: node branch.mjs open <slug> | land <slug> [--wait <minutes>] [--change <dir>] | close <slug> [--discard-unmerged] | park <slug> [--at <rev>] [--push]";
+const USAGE = "usage: node branch.mjs open <slug> | land <slug> [--wait <minutes>] [--change <dir>] | sync <slug> | close <slug> [--discard-unmerged] | park <slug> [--at <rev>] [--push]";
 
 /**
  * Runs one command line and answers its exit status.
@@ -417,6 +458,7 @@ export async function main(argv, { cwd = process.cwd(), say = console.log } = {}
       else refuse(`${USAGE}\nunknown or incomplete option ${rest[i]}`, EXIT.usage);
     }
     if (mode === "open") return open(slug, { cwd, say });
+    if (mode === "sync") return sync(slug, { cwd, say });
     if (mode === "close") return close(slug, { cwd, say, discard: given["--discard-unmerged"] === true });
     if (mode === "park") return park(slug, { cwd, say, at: given["--at"] ?? "main", push: given["--push"] === true });
     const minutes = Number(given["--wait"] ?? WAIT_MINUTES);
