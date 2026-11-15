@@ -92,7 +92,8 @@ rebase and a merge each wait for the owner's word.
 - **Written in `main`'s tree:** a fix that restores what a shipped surface
   already claims (a triage row, a hotfix, what a walk finds, a printed value
   moved by the work that found it), docs and plans, a release's own commits,
-  and a change that adds no surface. Such a change may take a topic branch
+  and a change that neither adds nor reworks a surface. Such a change may
+  take a topic branch
   when it spans more than one commit and nothing in it is walked live until
   it is finished.
 - **A feature is walked on `main`.** The Foundry junction points at `main`'s

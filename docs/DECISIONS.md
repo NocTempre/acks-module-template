@@ -4393,9 +4393,9 @@ breaking, and stays; it needs no message.
 
 **Problem.** The 2026-11-12 sizing entry made a synced agent's definition the
 choice of its model. Nothing chose for a start no definition covers. A
-session started from another runs on the starter's model when none is named;
-so does a general-purpose, search or planning agent, and so do a workflow's
-agents. On 2026-11-14 the Public Beta orchestrator opened its standby
+session started from another runs on the starter's model when none is named.
+So do a workflow's agents, and so does an agent whose definition sets no
+model where no default is configured. On 2026-11-14 the Public Beta orchestrator opened its standby
 sessions that way, each on the orchestrator's own model.
 
 **Ruled by the owner.** 2026-11-14, to that orchestrator: "Choose agent level
@@ -4465,8 +4465,8 @@ fast-forwards `main` was not checked.
   reaches. The plan or brief names its tree before the first edit, as it
   names its agent.
 - A fix that restores what a shipped surface already claims, docs and plans,
-  a release's own commits and a change that adds no surface are written in
-  `main`'s tree. Such a change may still take a topic under the two older
+  a release's own commits and a change that neither adds nor reworks a
+  surface are written in `main`'s tree. Such a change may still take a topic under the two older
   conditions: more than one commit, and nothing walked live until it is
   finished.
 - A feature is walked on `main`, where the Foundry junction is. A slice is

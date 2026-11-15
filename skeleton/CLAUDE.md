@@ -59,7 +59,8 @@ How much one agent and one session carry:
   that needs a stronger model than `implementer`'s is design, and goes to
   `architect`. A start no definition covers names its model: a session
   started from another, a general-purpose, search or planning agent, a
-  workflow's agents. Left unnamed, each runs on the starter's own. A fork
+  workflow's agents. Left unnamed, it runs on the starter's own wherever
+  nothing else sets one. A fork
   takes no other model, so it is for work that needs this one. A plan and
   each brief say which agent or model takes each slice, and why.
 - **An owner ruling reaches an agent in the owner's words.** The brief quotes
