@@ -26,18 +26,25 @@
  * `change.json` gives the gate (`gate`, `link`, `timeoutMinutes`); `land`
  * writes a `{}` one in a temporary directory where none is given.
  *
- * Exit status: 0 done, 1 refused, 2 usage, 5 the landing lease was still held
- * when the wait ran out (run it again).
+ * The gate runs as a child process the event loop keeps awaiting, so the
+ * lease's heartbeat keeps beating through a long gate. A `main` that moved
+ * while `land` waited for the lease is rebased onto once, under the lease; the
+ * lease and `main`'s `HEAD` are checked again after the gate and before the
+ * fast-forward.
+ *
+ * Exit status: 0 done, 1 refused, 2 usage, 3 main moved or the lease was lost
+ * during the gate (land again), 5 the landing lease was still held when the
+ * wait ran out (run it again).
  */
-import { spawnSync } from "node:child_process";
+import { spawn, spawnSync } from "node:child_process";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
-import { acquire } from "../acks-commit/lease.mjs";
+import { acquire, holds } from "../acks-commit/lease.mjs";
 
 /** Exit statuses, shared with `commit-own-hunks.mjs` where they overlap. */
-export const EXIT = { ok: 0, refused: 1, usage: 2, leaseHeld: 5 };
+export const EXIT = { ok: 0, refused: 1, usage: 2, movedBase: 3, leaseHeld: 5 };
 /** A branch slug: lowercase words joined by hyphens. */
 export const SLUG = /^[a-z0-9][a-z0-9-]{0,40}$/;
 /** Minutes `land` waits for the landing lease where `--wait` gives none. */
@@ -226,10 +233,10 @@ const holderName = (held) => `${held?.session ? `session ${String(held.session).
  * Lands `topic/<slug>` on `main`: rebase when `main` moved, then under the
  * landing lease gate the tip and fast-forward.
  * @param {string} slug
- * @param {{cwd: string, waitMinutes?: number, change?: string|null, say?: Function, session?: string|null, merge?: (root: string, tip: string) => {status: number|null, out: string, err: string}}} options
- *   `merge` is the fast-forward, for a test to replace.
+ * @param {{cwd: string, waitMinutes?: number, change?: string|null, say?: Function, session?: string|null, beatMs?: number, merge?: (root: string, tip: string) => {status: number|null, out: string, err: string}}} options
+ *   `merge` is the fast-forward and `beatMs` the lease's heartbeat interval, both for a test to replace.
  */
-export async function land(slug, { cwd, waitMinutes = WAIT_MINUTES, change = null, say = console.log, session = process.env.CLAUDE_CODE_SESSION_ID ?? null, merge = (root, sha) => run(root, ["merge", "--ff-only", sha]) }) {
+export async function land(slug, { cwd, waitMinutes = WAIT_MINUTES, change = null, say = console.log, session = process.env.CLAUDE_CODE_SESSION_ID ?? null, beatMs, merge = (root, sha) => run(root, ["merge", "--ff-only", sha]) }) {
   const { root, branch, dir, exists } = topicOf(cwd, slug);
   requireMain(root);
   if (!exists) refuse(`${branch} does not exist`);
@@ -249,6 +256,7 @@ export async function land(slug, { cwd, waitMinutes = WAIT_MINUTES, change = nul
   let last = null;
   const lease = await acquire(gitDir, { session, change: `branch land ${branch}` }, {
     waitMs: waitMinutes * 60_000,
+    beatMs,
     onWait: (held) => {
       last = held;
       say(`the landing lease is held by ${holderName(held)}; waiting ${waitMinutes} minute(s) at most`);
@@ -258,9 +266,18 @@ export async function land(slug, { cwd, waitMinutes = WAIT_MINUTES, change = nul
   try {
     const staged = gitOut(root, ["diff", "--cached", "--name-only"]);
     if (staged) refuse(`main's index holds staged changes (${staged.split("\n").join(", ")}); wait for that commit, then land again`);
-    if (!isAncestor(root, "main", tip)) refuse("main moved; land again");
+    if (!isAncestor(root, "main", tip)) {
+      requireClean(dir, `the worktree ${dir}`);
+      const rebased = run(dir, ["rebase", "main"], { GIT_EDITOR: "true" });
+      if (rebased.status !== 0) stoppedRebase(dir, slug, `${rebased.out}\n${rebased.err}`.trim());
+      tip = rev(dir, "HEAD");
+      say(`main moved while this run waited; rebased ${branch} onto main: tip ${tip}`);
+      if (!isAncestor(root, "main", tip)) refuse("main moved again during the rebase; land again");
+    }
     const old = rev(root, "HEAD");
-    gate(root, tip, change, say);
+    await gate(root, tip, change, say);
+    if (!holds(gitDir, lease.token)) refuse("the landing lease was taken during the gate; main unmoved; land again", EXIT.movedBase);
+    if (rev(root, "HEAD") !== old) refuse("main moved during the gate, by a commit made around the tool; nothing landed; land again", EXIT.movedBase);
     const merged = merge(root, tip);
     if (merged.status !== 0) {
       const after = rev(root, "HEAD");
@@ -275,15 +292,29 @@ export async function land(slug, { cwd, waitMinutes = WAIT_MINUTES, change = nul
   }
 }
 
-/** Runs the full gate on `tip` through `postgate` from `root`; throws a refusal with the log's tail where it is not green. */
-function gate(root, tip, change, say) {
+/** Runs a child to its close without blocking the event loop; answers its exit status and its stdout and stderr together. */
+function runAsync(command, args, options) {
+  return new Promise((resolve, reject) => {
+    const child = spawn(command, args, options);
+    let text = "";
+    child.stdout.setEncoding("utf8");
+    child.stderr.setEncoding("utf8");
+    child.stdout.on("data", (d) => (text += d));
+    child.stderr.on("data", (d) => (text += d));
+    child.on("error", reject);
+    child.on("close", (status) => resolve({ status, text }));
+  });
+}
+
+/** Runs the full gate on `tip` through `postgate` from `root`, with the event loop free for the lease's heartbeat; throws a refusal with the log's tail where it is not green. */
+async function gate(root, tip, change, say) {
   const given = change ? path.resolve(change) : null;
   const dir = given ?? fs.mkdtempSync(path.join(os.tmpdir(), "acks-branch-land-"));
   if (!given) fs.writeFileSync(path.join(dir, "change.json"), "{}\n");
   const log = path.join(dir, "branch-land.log");
   try {
-    const r = spawnSync(process.execPath, [path.join(HERE, "..", "acks-commit", "commit-own-hunks.mjs"), "postgate", tip, "--change", dir], { cwd: root, encoding: "utf8", env: cleanEnv(), maxBuffer: 1 << 28 });
-    const text = `${r.stdout ?? ""}${r.stderr ?? ""}`;
+    const r = await runAsync(process.execPath, [path.join(HERE, "..", "acks-commit", "commit-own-hunks.mjs"), "postgate", tip, "--change", dir], { cwd: root, env: cleanEnv() });
+    const text = r.text;
     fs.writeFileSync(log, text);
     if (r.status !== 0) refuse(`the full gate is not green on ${tip} (exit ${r.status}); main unmoved; ${log} holds the run, ending:\n${text.trim().split("\n").slice(-15).join("\n")}`);
     say(`gate green on ${tip}`);

@@ -252,6 +252,85 @@ check("land refuses unless HEAD reads back as the tip", caught instanceof tool.R
 check("that refusal releases the lease", await leaseFree());
 sh(main, "reset", "-q", "--hard", "HEAD~1");
 
+// --- land: what happens under the lease, in process
+const leaseFile = path.join(gitDir, "acks-lease", "landing.json");
+const scriptGate = (name, source) => {
+  const file = path.join(scratch, `gate-${name}.mjs`);
+  fs.writeFileSync(file, source);
+  return gate(name, `node "${file}"`);
+};
+const settle = (promise) => promise.then((value) => ({ value }), (error) => ({ error }));
+/**
+ * Lands `slug` in process while another run holds the lease; `whileWaiting`
+ * runs once land has said it is waiting, and the held lease is given up after it.
+ */
+const landWhileHeld = async (slug, whileWaiting) => {
+  const holder = await acquire(gitDir, { session: "someone-else", change: "other" }, { waitMs: 0 });
+  const said = [];
+  let waiting;
+  const told = new Promise((resolve) => (waiting = resolve));
+  const landing = settle(tool.land(slug, { cwd: main, change: green, waitMinutes: 1, say: (m) => { said.push(m); if (/landing lease is held by/.test(m)) waiting(); } }));
+  await Promise.race([told, landing, new Promise((resolve) => setTimeout(resolve, 20_000))]);
+  try {
+    await whileWaiting();
+  } finally {
+    holder.stop();
+  }
+  return { ...(await landing), said: said.join("\n") };
+};
+
+cli(["open", "wait"]);
+commitIn(wt("wait"), "wait.txt", "w\n");
+let peerMoved;
+let waited = await landWhileHeld("wait", () => { peerMoved = commitIn(main, "waitpeer.txt", "p\n"); });
+check("main moves while land waits for the lease: it rebases once under the lease and lands", waited.value === 0 && head() === sh(main, "rev-parse", "topic/wait") && sh(main, "rev-parse", "HEAD~1") === peerMoved && fs.existsSync(path.join(main, "wait.txt")), JSON.stringify({ value: waited.value, error: waited.error?.message, said: waited.said }));
+check("it says main moved while it waited", /main moved while this run waited; rebased topic\/wait onto main/.test(waited.said), waited.said);
+check("the lease is free after that landing", await leaseFree());
+
+cli(["open", "waitcf"]);
+commitIn(wt("waitcf"), "shared.txt", "topic under the lease\n");
+waited = await landWhileHeld("waitcf", () => { peerMoved = commitIn(main, "shared.txt", "main under the lease\n"); });
+check("main moves while land waits, onto a conflict: refused with exit 1 and main unmoved", waited.error?.code === 1 && /rebase --continue/.test(waited.error.message) && head() === peerMoved, JSON.stringify({ value: waited.value, error: waited.error?.message, said: waited.said }));
+check("the stopped rebase is left in progress in the worktree", fs.existsSync(path.resolve(wt("waitcf"), sh(wt("waitcf"), "rev-parse", "--git-path", "rebase-merge"))));
+check("that refusal releases the lease", await leaseFree());
+try {
+  sh(wt("waitcf"), "rebase", "--abort");
+} catch {
+  // No rebase stands: the case above has already failed.
+}
+
+cli(["open", "mdg"]);
+const tipMdg = commitIn(wt("mdg"), "mdg.txt", "m\n");
+const moving = scriptGate("moving", `import { execFileSync } from "node:child_process";\nexecFileSync("git", ["-C", ${JSON.stringify(main)}, "commit", "-q", "--allow-empty", "-m", "x"], { stdio: "ignore" });\n`);
+h = head();
+r = cli(["land", "mdg", "--change", moving]);
+check("a commit made to main during the gate: exit 3, nothing landed", r.status === 3 && /main moved during the gate/.test(r.err) && head() !== h && head() !== tipMdg && !fs.existsSync(path.join(main, "mdg.txt")), brief(r));
+check("that refusal releases the lease", await leaseFree());
+
+cli(["open", "stolen"]);
+commitIn(wt("stolen"), "stolen.txt", "s\n");
+const stealing = scriptGate("stealing", `import fs from "node:fs";\nconst file = ${JSON.stringify(leaseFile)};\nconst held = JSON.parse(fs.readFileSync(file, "utf8"));\nheld.token = "taken-by-another-run";\nfs.writeFileSync(file, JSON.stringify(held) + "\\n");\n`);
+h = head();
+r = cli(["land", "stolen", "--change", stealing]);
+check("a lease taken during the gate: exit 3, main unmoved", r.status === 3 && /lease was taken/.test(r.err) && head() === h && !fs.existsSync(path.join(main, "stolen.txt")), brief(r));
+fs.rmSync(leaseFile, { force: true });
+check("the lease is free once the taker's file is removed", await leaseFree());
+
+cli(["open", "beat"]);
+commitIn(wt("beat"), "beat.txt", "b\n");
+const beatLog = path.join(scratch, "heartbeat.json");
+const sleeping = scriptGate("sleeping", `import fs from "node:fs";\nconst file = ${JSON.stringify(leaseFile)};\nconst first = fs.statSync(file).mtimeMs;\nawait new Promise((resolve) => setTimeout(resolve, 1200));\nfs.writeFileSync(${JSON.stringify(beatLog)}, JSON.stringify({ first, last: fs.statSync(file).mtimeMs }));\n`);
+let beaten = null;
+try {
+  beaten = await tool.land("beat", { cwd: main, say: () => {}, change: sleeping, waitMinutes: 0, beatMs: 100 });
+} catch (e) {
+  beaten = e;
+}
+const beats = fs.existsSync(beatLog) ? JSON.parse(fs.readFileSync(beatLog, "utf8")) : null;
+check("the lease's heartbeat beats while the gate runs", beats && beats.last - beats.first >= 300, JSON.stringify({ beats, beaten: String(beaten?.message ?? beaten) }));
+check("and the slice lands", beaten === 0 && head() === sh(main, "rev-parse", "topic/beat"), String(beaten?.message ?? beaten));
+check("the lease is free after that landing", await leaseFree());
+
 // --- close
 const modulesBefore = countFiles(modules);
 r = cli(["close", "ff"]);
