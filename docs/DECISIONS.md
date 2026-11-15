@@ -4157,7 +4157,7 @@ that rare. The first sync rewrites each module's `.gitignore` once, since
 the canonical prefix grew. The zip itself still ships `.githooks/`, which
 this change did not fix.
 
-## 2026-11-12 — A release commits before its live session and tags its docs commit — IN FORCE
+## 2026-11-12 — A release commits before its live session and tags its docs commit — IN FORCE, R15's "by procedure" qualified 2026-11-15 (a topic's landing is guarded)
 
 **Owner ruling.** On the design's questions the owner answered "All
 recommended" (2026-11-12), which settles: R9 "A major requires every walk; a
@@ -4624,10 +4624,21 @@ an abandoned release, fails closed with the owner's word as the way through.
 
 **Not verified.** Nothing ran in a module: no topic was synced or landed
 twice outside the suites' scratch repositories, no real gate of several
-minutes ran against a waiter, and no release window was met live. None of it
-reaches a module until the owner pushes the template and it is synced.
-`test-branch` 110 cases, `test-unpushed-report` 23, `test-branch-guard` 112:
-0 failed; each new case fails on the file it replaces.
+minutes ran against a waiter, and no release window was met live. The exit 3
+for a `main` that moved again during the rebase under the lease has no test
+case. None of it reaches a module until the owner pushes the template and it
+is synced. `test-branch` 110 cases, `test-unpushed-report` 23,
+`test-branch-guard` 112: 0 failed; each new case fails on the file it
+replaces.
+
+The window's predicate rests on two things read, not run. acks-extras holds
+two tags against 212 commits that change its version: the releases before
+11.14.5 no longer have tags or GitHub releases, on origin as locally (the
+2026-07-19 entry records one purge of old tags; what removed 11.14.1 to
+11.14.4 was not found), and older procedures bumped the version outside a
+release commit. The predicate reads only the current version's tag, and since
+2026-11-12 a bump rides only the release commit, so neither breaks it unless
+a purge deletes the latest tag.
 
 **Cost.** `land` takes one more `--despite-release` flag that only the owner
 may supply, and a stale tag list (an unfetched or deleted tag) reads as an

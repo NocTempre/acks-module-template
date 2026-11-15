@@ -676,7 +676,7 @@ Full ruling and its corollaries: DECISIONS, 2026-07-19.
     dispositions), `acks-hotfix` (patch scoping), `acks-minor` (minor
     scoping), `acks-release` (mechanics for all three kinds), `acks-commit`
     (one session's change out of a shared tree, and the tool that builds and
-    gates it), `acks-branch` (opens, lands, closes and parks topic and parked
+    gates it), `acks-branch` (opens, lands, syncs, closes and parks topic and parked
     branches), `acks-hygiene-sweep` (standing audit + its tooling),
     `acks-printed-value` (a printed value in source moved onto the importer),
     `acks-new-module` and `acks-sync-toolchain` (run from this repo). There is **no user-level
