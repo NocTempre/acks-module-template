@@ -4645,3 +4645,21 @@ may supply, and a stale tag list (an unfetched or deleted tag) reads as an
 open window, which refuses a runtime landing rather than letting one through.
 The hook and `land` give two-way advice every turn a topic stands between
 landings.
+
+## 2026-11-16 — A UI element is designed and approved before it is built — IN FORCE
+
+**Owner ruling, in an acks-extras session.** "new module template rule, when
+creating or modifying a new UI element, run /design first and get user
+feedback before implementing".
+
+**Ruled.** Creating or changing a user-visible element starts with `/design`,
+and the owner's feedback on the design is the go-ahead to implement. A brief
+or plan touching a UI element names the design step before the first edit;
+an agent given such a slice without an approved design stops and asks.
+`ui-layout.md`, "Design before build", states it.
+
+**Not covered.** A change no user sees on the surface, including a fix that
+restores what an approved design already shows.
+
+**Cost.** Every UI slice waits on an owner turn before its first edit, so an
+unattended session cannot finish one alone; it designs, reports and stops.
