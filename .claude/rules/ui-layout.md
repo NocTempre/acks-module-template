@@ -20,7 +20,9 @@ A UI element is designed and shown to the owner before a line of it is
 written. Creating or changing anything a user sees — a window, a sheet or a
 tab of one, a dialog, a control, a chat card, a HUD, a canvas overlay — starts
 with `/design`; the owner's feedback on that design is the go-ahead, and
-implementation waits for it. The owner: "when creating or modifying a new UI
+implementation waits for it. `/design` is a built-in command, so no session's
+skill list shows it: it makes a new Artifact from the Design type, which the
+Artifact tool reaches with `action: "quickstart"`, `intent: "design"`. The owner: "when creating or modifying a new UI
 element, run /design first and get user feedback before implementing".
 
 A brief or plan whose slice touches a UI element names the design step before
