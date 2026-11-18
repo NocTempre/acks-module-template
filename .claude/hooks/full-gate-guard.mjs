@@ -12,15 +12,14 @@
  * `&&`, `||`, `;`, `|`, a newline, a subshell, a wrapper such as `timeout`,
  * or inside `bash -c` / `pwsh -Command` / `cmd /c`):
  *
- * - `npm test`, `npm t`, `npm run test`, `npm run validate` (`npm.cmd`, flags
- *   and `run-script` included);
+ * - `npm test`, `npm t`, `npm run test`, `npm run test:tree`,
+ *   `npm run validate` (`npm.cmd`, flags and `run-script` included);
  * - `node tools/validate.mjs` and `node tools/run-tests.mjs`, however the
  *   path is spelled.
  *
  * Everything else passes: a single suite (`node tools/test-<name>.mjs`),
- * `npm run build:packs`, `tools/validate-producers.mjs`, `npm run test:tree`,
- * and any text that only mentions a gate (a commit message, a grep pattern, a
- * heredoc body). A command that must run the full gate carries a comment
+ * `npm run build:packs`, `tools/validate-producers.mjs`, and any text that
+ * only mentions a gate (a commit message, a grep pattern, a heredoc body). A command that must run the full gate carries a comment
  * `# full-gate-ok: <reason>` with the reason on the same line.
  *
  * A command substituted inside double quotes is text to this hook, and so is
@@ -115,7 +114,7 @@ function npmRunsGate(args) {
   }
   const [verb, script] = positional;
   if (["test", "t", "tst"].includes(verb)) return true;
-  return ["run", "run-script", "rum", "urn"].includes(verb) && (script === "test" || script === "validate");
+  return ["run", "run-script", "rum", "urn"].includes(verb) && (script === "test" || script === "validate" || script === "test:tree");
 }
 
 /** Whether `node <args>` runs the repository's validator or test runner. */

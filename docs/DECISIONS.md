@@ -4684,11 +4684,12 @@ the full gate by hand.
 
 **Gated and prose.** Gated: `.claude/hooks/full-gate-guard.mjs`, a PreToolUse
 hook for Bash and PowerShell, refuses a command whose command word is `npm
-test`, `npm t`, `npm run test`, `npm run validate`, `node tools/validate.mjs`
-or `node tools/run-tests.mjs`, in any position of a compound command and any
-path spelling. A single suite, `npm run build:packs`, `validate-producers.mjs`,
-`npm run test:tree` and text that only mentions a gate (a commit message, a
-grep pattern, a heredoc body) pass. The escape is a comment `# full-gate-ok:
+test`, `npm t`, `npm run test`, `npm run test:tree`, `npm run validate`,
+`node tools/validate.mjs` or `node tools/run-tests.mjs`, in any position of a
+compound command and any path spelling (`test:tree` is the same runner with
+`--rules`, so it is denied with the rest). A
+single suite, `npm run build:packs`, `validate-producers.mjs` and text that
+only mentions a gate (a commit message, a grep pattern, a heredoc body) pass. The escape is a comment `# full-gate-ok:
 <reason>` with the reason on the same line; the release walk's one
 working-tree run (the gitignored rules suites exist only there) and a new
 module's first check carry it. Prose: `implementer.md`, `shared-tree.md`,
