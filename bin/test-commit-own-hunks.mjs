@@ -1011,7 +1011,7 @@ try {
   });
 
   ledgerCase("a mode named alone takes none of this session's hunks, and beside `mine` it rides with them", (check) => {
-    const f = fixture("ledger-mode", { mode: { "other.txt": "100755" } }, { session: ME });
+    const f = fixture("ledger-mode", { mode: { "other.txt": "100755" }, leave: ["a.txt"] }, { session: ME });
     f.as(ME).edit("a.txt", { 3: "line 3 by me" });
     const alone = f.ship();
     check("ship exits 0", alone.status === 0, alone.out);
@@ -1026,6 +1026,81 @@ try {
     const written = g.git("diff", "--name-only", "HEAD~1", "HEAD").trim().split("\n").sort().join(",");
     check("that commit writes this session's file and the mode's path", written === "a.txt,other.txt" && modeAt(g, "other.txt") === "100755" && g.show("a.txt").includes("line 3 by me"), written);
     check("the peer's file is as it was", g.git("status", "--porcelain").trim() === "M b.txt", g.git("status", "--porcelain"));
+  });
+
+  ledgerCase("a key change.json does not define is refused, and a top-level `whole` is told where it goes", (check) => {
+    const f = fixture("keys-unknown", { whole: ["b.txt"], added: ["new.txt"] }, { session: ME });
+    f.write("new.txt", "a new file\n");
+    f.edit("b.txt", { 5: "line 5 changed" });
+    const r = f.kit("record");
+    check("record exits 2 naming the key and the accepted keys", r.status === 2 && /unknown key\(s\) "whole"/.test(r.out) && /the keys are files, added, removed, mode, mine, leave/.test(r.out), r.out);
+    check("it hints where a whole file goes", /"files": \{"<path>": \{"whole": true\}\}/.test(r.out), r.out);
+    f.rechange({ files: { "b.txt": { whole: true } }, added: ["new.txt"], colour: "red" });
+    const other = f.kit("ship");
+    check("any other key is refused without the hint", other.status === 2 && /unknown key\(s\) "colour"/.test(other.out) && !/"whole": true/.test(other.out), other.out);
+    check("nothing is committed", f.git("log", "--oneline").trim().split("\n").length === 1);
+    const landed = f.kit("land", "--no-push");
+    check("land stops on it with exit 2 and prints the reason", landed.status === 2 && /unknown key\(s\) "colour"/.test(landed.out), landed.out);
+  });
+
+  ledgerCase("a change that names paths is refused while this session's recorded lines stand in a file it does not name, unless `leave` lists it", (check) => {
+    const f = fixture("named-leaves-own", { added: ["new.txt"] }, { session: ME });
+    f.as(ME).write("new.txt", "a new file by me\n");
+    f.as(ME).edit("a.txt", { 3: "line 3 by me" });
+    f.as(ME).write("fresh.txt", "a second new file by me\n");
+    f.as(PEER).edit("b.txt", { 5: "line 5 PEER" });
+    f.as(ME).edit("other.txt", { 1: "changed by me" });
+    f.as(ME).edit("other.txt", { 1: "untouched" });
+    const base = f.head();
+    const r = f.kit("ship");
+    const listed = /does not name: (.*?)\. Name them/.exec(r.out)?.[1];
+    check("ship exits 1 listing both files, and neither the peer's nor the reverted one", r.status === 1 && listed === "a.txt, fresh.txt", r.out);
+    check("the refusal says how to leave them", /"leave"/.test(r.out), r.out);
+    check("no commit is made", f.head() === base);
+    f.rechange({ added: ["new.txt"], leave: ["a.txt"] });
+    const half = f.kit("ship");
+    check("one file left and the other unnamed is still refused, naming the unnamed one", half.status === 1 && /does not name: fresh\.txt\. Name them/.test(half.out), half.out);
+    f.rechange({ added: ["new.txt"], leave: ["a.txt", "fresh.txt"] });
+    const shipped = f.ship();
+    check("with both under `leave` ship exits 0", shipped.status === 0, shipped.out);
+    const names = f.git("diff", "--name-only", "HEAD~1", "HEAD").trim();
+    check("the commit holds the named file alone", names === "new.txt", names);
+    check("the left files keep this session's lines in the working tree", working(f).includes("+line 3 by me") && fs.existsSync(path.join(f.repo, "fresh.txt")), working(f));
+
+    const g = fixture("named-leaves-own-land", { added: ["new.txt"] }, { session: ME });
+    g.as(ME).write("new.txt", "a new file by me\n");
+    g.as(ME).edit("a.txt", { 3: "line 3 by me" });
+    const before = g.head();
+    const landed = g.kit("land", "--no-push");
+    check("land exits 1 and its output names the file left", landed.status === 1 && /does not name: a\.txt\. Name them/.test(landed.out), landed.out);
+    check("land makes no commit", g.head() === before);
+
+    const m = fixture("mode-leaves-own", { mode: { "a.txt": "100755" } }, { session: ME });
+    m.as(ME).edit("a.txt", { 3: "line 3 by me" });
+    const refused = m.kit("record");
+    check("a mode path holding this session's lines is refused without `leave`", refused.status === 1 && /does not name: a\.txt\. Name them/.test(refused.out), refused.out);
+    m.rechange({ mode: { "a.txt": "100755" }, leave: ["a.txt"] });
+    const ok = m.ship();
+    check("and lands with the mode and the lines left, once `leave` lists it", ok.status === 0 && modeAt(m, "a.txt") === "100755" && working(m).includes("+line 3 by me"), ok.out);
+  });
+
+  ledgerCase("a change that names a file whose lines the peer wrote is not refused for the peer's file, and `{}` is unchanged", (check) => {
+    const f = fixture("named-peer-only", { files: { "a.txt": {} } }, { session: ME });
+    f.as(ME).edit("a.txt", { 3: "line 3 by me" });
+    f.as(PEER).edit("b.txt", { 5: "line 5 PEER" });
+    const shipped = f.kit("ship");
+    check("ship exits 0", shipped.status === 0, shipped.out);
+    const g = fixture("empty-takes-all", {}, { session: ME });
+    g.as(ME).edit("a.txt", { 3: "line 3 by me" });
+    g.as(ME).edit("b.txt", { 5: "line 5 by me" });
+    const all = g.kit("ship");
+    const names = all.status === 0 ? g.git("diff", "--name-only", "HEAD~1", "HEAD").trim().split("\n").sort().join(",") : all.out;
+    check("`{}` still takes every file this session wrote", all.status === 0 && names === "a.txt,b.txt", names);
+    const h = fixture("mine-beside-names", { mine: true, added: ["new.txt"] }, { session: ME });
+    h.as(ME).write("new.txt", "a new file by me\n");
+    h.as(ME).edit("a.txt", { 3: "line 3 by me" });
+    const beside = h.ship();
+    check("`mine` beside named paths is not refused and takes the unnamed file", beside.status === 0 && h.show("a.txt").includes("line 3 by me"), beside.out);
   });
 
   ledgerCase("a session with nothing of its own in the working tree has nothing to commit", (check) => {

@@ -4725,3 +4725,37 @@ same compile again.
 (Recommended)", since nothing else catches a stale cookbook before it ships.
 On `check-prose-stops`, the owner chose "Add the skip (Recommended)": it skips
 by the same base comparison.
+
+## 2026-11-18 — A change.json key the tool ignores, or a file it leaves, is refused — IN FORCE
+
+**Occurrences.** Three times, two of them on this day, `commit-own-hunks.mjs`
+landed exit 0 with less than the change said, and each time the session found
+out from the tree. (1) acks-extras 6c6f7920: a `change.json` with a top-level `"whole"` list
+of seven paths was not schema, was ignored, and committed only the one `added`
+file. (2) acks-extras bc1a6b2c: `{"added": [one changelog fragment]}` from an
+agent with Edit-recorded lines in six other files committed the fragment alone
+and left the six. (3) Earlier, a60d7f8: the same shape, where `added` alone
+committed 2 of 11 files. The lesson had been written down (the memory "acks-commit
+named paths switch the ledger off"), and it recurred, so it became a gate.
+
+**Ruled.** Two refusals, both at `record` and so at `ship` and `land`:
+- A top-level key outside the tool's list is refused with exit 2, naming the
+  key and the accepted ones; a top-level `whole` is told to use
+  `"files": {"<path>": {"whole": true}}`.
+- A change that names paths (`files`, `added`, `removed`, `mode`) and does not
+  set `mine` is refused while a modified or new file holds a line this session's
+  records gave it and the change neither names it nor lists it under the new
+  key `"leave"`. `{}` is unchanged: it still takes every line of this session.
+  A file whose differences from HEAD are other sessions' alone is not counted.
+
+**Cost.** A change that named a mode alone, or a few files, to commit part of
+its work now says so with `"leave"`; the one test that did it by design carries
+the key. Rejected: warning and going on, which is what the three occurrences
+read past.
+
+**Open finding.** With `files: {<path>: {}}` for six files whose hunks were all
+this change's, the clone built from ledger hunks produced a file that did not
+parse (a `}` and a docstring opener at a hunk seam went missing), so the gate
+went red on a tree the working copy did not have. A ledger-built clone can
+differ from the working copy at a hunk seam; listing the file `{"whole": true}`
+worked and is the workaround. Not reproduced or fixed here.
