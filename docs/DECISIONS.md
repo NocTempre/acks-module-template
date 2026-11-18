@@ -4664,7 +4664,7 @@ restores what an approved design already shows.
 **Cost.** Every UI slice waits on an owner turn before its first edit, so an
 unattended session cannot finish one alone; it designs, reports and stops.
 
-## 2026-11-18 — Work is checked twice: its unit suites, and the land's gate — IN FORCE
+## 2026-11-18 — Work is checked twice: its unit suites, and the land's gate — IN FORCE; its "Measured" paragraph SUPERSEDED IN PART 2026-11-18
 
 **Owner ruling, in an acks-extras session.** "Fix this at the repo level. Work
 needs checked once after build (unit test) and once as part of integration.
@@ -4704,3 +4704,24 @@ the land's lease already serialises the only full gates left.
 guard reads a command's text, not what a script it runs does, so a command
 inside double-quoted `$( )` and a file that runs the gate pass it. An author
 who wants the full gate before landing no longer gets one without the land.
+
+## 2026-11-18 — The two-check entry's cost figure, corrected
+
+**New evidence.** An architect's census of acks-extras' gate logs, the same day.
+The entry above attributed the 735 to 1124 s `validate` runs to hand runs
+overlapping each other and live walks. Every `validate` of 500 s or more since
+2026-11-17 08:17 printed "full recompile" (16 of 16, those two among them). They
+were the cookbook drift check's from-scratch recompile, which took 538 to 545 s
+even with nothing else running. acks-extras' importer DECISIONS (2026-11-18,
+"skip vs gated base") made that check skip when no compile input moved, and
+`validate` runs on the skip path since then took 104 to 339 s.
+
+**What stands.** The ruling and the hook stand. Hand runs were still the waste
+the owner named: 4 of the 5 input-triggered recompiles since the skip landed
+were hand `validate` runs in topic worktrees, before the land's gate ran the
+same compile again.
+
+**Also ruled, in acks-extras.** On the drift check, the owner chose "Keep it
+(Recommended)", since nothing else catches a stale cookbook before it ships.
+On `check-prose-stops`, the owner chose "Add the skip (Recommended)": it skips
+by the same base comparison.
