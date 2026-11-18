@@ -45,6 +45,12 @@
           {
             "type": "command",
             "shell": "bash",
+            "command": "node \"${CLAUDE_PROJECT_DIR:-.}/.claude/hooks/full-gate-guard.mjs\"",
+            "statusMessage": "Checking for a hand-run full gate"
+          },
+          {
+            "type": "command",
+            "shell": "bash",
             "command": "node \"${CLAUDE_PROJECT_DIR:-.}/.claude/hooks/shared-tree-guard.mjs\"",
             "statusMessage": "Checking the shared tree"
           }
@@ -53,6 +59,12 @@
       {
         "matcher": "PowerShell",
         "hooks": [
+          {
+            "type": "command",
+            "shell": "bash",
+            "command": "node \"${CLAUDE_PROJECT_DIR:-.}/.claude/hooks/full-gate-guard.mjs\"",
+            "statusMessage": "Checking for a hand-run full gate"
+          },
           {
             "type": "command",
             "shell": "bash",

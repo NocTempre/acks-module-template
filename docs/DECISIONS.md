@@ -4663,3 +4663,43 @@ restores what an approved design already shows.
 
 **Cost.** Every UI slice waits on an owner turn before its first edit, so an
 unattended session cannot finish one alone; it designs, reports and stops.
+
+## 2026-11-18 — Work is checked twice: its unit suites, and the land's gate — IN FORCE
+
+**Owner ruling, in an acks-extras session.** "Fix this at the repo level. Work
+needs checked once after build (unit test) and once as part of integration.
+All these extra checks are just waste."
+
+**Measured.** A session's slices ran the full offline gate (`npm run validate`
+and `npm test`, through `tools/run-tests.mjs`) by hand in the implementer, again
+in the landing tool's gate, and sometimes again in an orchestrator, and those
+runs overlapped each other and live walks. `validate` took 735 to 1124 s where
+a run alone takes about 104 s.
+
+**Ruled.** After the build the author runs only the unit suites covering the
+files touched (`node tools/test-<name>.mjs`). Integration is the one full gate
+the landing tool runs (`commit-own-hunks.mjs land`, `branch.mjs land`), which
+spawns npm itself and does not pass through a Bash tool call. Nothing else runs
+the full gate by hand.
+
+**Gated and prose.** Gated: `.claude/hooks/full-gate-guard.mjs`, a PreToolUse
+hook for Bash and PowerShell, refuses a command whose command word is `npm
+test`, `npm t`, `npm run test`, `npm run validate`, `node tools/validate.mjs`
+or `node tools/run-tests.mjs`, in any position of a compound command and any
+path spelling. A single suite, `npm run build:packs`, `validate-producers.mjs`,
+`npm run test:tree` and text that only mentions a gate (a commit message, a
+grep pattern, a heredoc body) pass. The escape is a comment `# full-gate-ok:
+<reason>` with the reason on the same line; the release walk's one
+working-tree run (the gitignored rules suites exist only there) and a new
+module's first check carry it. Prose: `implementer.md`, `shared-tree.md`,
+`acks-printed-value`, `acks-sync-toolchain` state the rule, and the sync's own
+verification is now the land's gate. `bin/nightly.mjs`, the release preflight
+and the land tool's code are unchanged: none is a Claude Bash call.
+
+**Rejected.** A lock serialising full gates by hand. With a hand run refused,
+the land's lease already serialises the only full gates left.
+
+**Cost.** A hand-run full gate is refused until an escape is written, and the
+guard reads a command's text, not what a script it runs does, so a command
+inside double-quoted `$( )` and a file that runs the gate pass it. An author
+who wants the full gate before landing no longer gets one without the land.

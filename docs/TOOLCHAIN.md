@@ -694,7 +694,10 @@ Full ruling and its corollaries: DECISIONS, 2026-07-19.
     session, in the git directory, for the commit tool to read; `main`'s tree
     only), `shared-tree-guard.mjs` (refuses a hand-run `git add`,
     `git commit` or discard in a repository that carries the commit tool;
-    `main`'s tree only) and `unpushed-report.mjs` (at the end of a turn,
+    `main`'s tree only), `full-gate-guard.mjs` (refuses a hand-run
+    `npm test`, `npm run validate` or their `node tools/` spellings; the
+    land's gate is the one full gate, DECISIONS 2026-11-18; the escape is a
+    `# full-gate-ok: <reason>` comment) and `unpushed-report.mjs` (at the end of a turn,
     names by sha the commits the checkout and the template beside it hold
     that their upstreams do not, and lists unmerged topic branches, topics
     landed and open, unpushed parked branches and any other local

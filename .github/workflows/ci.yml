@@ -144,6 +144,14 @@ jobs:
       - name: The branch guard refuses hand-made branches, worktree removal and switching main's tree
         run: node bin/test-branch-guard.mjs
 
+      # The full-gate guard fires on every Bash and PowerShell command in
+      # every repo: it must refuse a hand-run `npm test`, `npm run validate`
+      # or their `node tools/...` spellings wherever they sit in a command,
+      # and pass a single suite, a pack build, text that only mentions a
+      # gate, and a command carrying the escape with a reason.
+      - name: The full-gate guard refuses a hand-run full gate and passes single suites
+        run: node bin/test-full-gate-guard.mjs
+
       # The sync writes canon into every module repo and its check gates every
       # push they make, and each of its guards fires only in a tree no run
       # stands in by default: an edit nobody has committed, a commit nobody has
