@@ -1,42 +1,15 @@
-# acks-module-template
+# acks-module-template (retired)
 
-Canonical source of the ACKS module family's shared toolchain, agent
-infrastructure and conventions. **Highest blast radius in the family**: what is
-edited here propagates into every module repo, and a mis-sequenced push reddens
-every downstream CI at once. Read `docs/TOOLCHAIN.md` before changing anything;
-`docs/DECISIONS.md` records why things are the way they are.
+**Retired 2026-11-18. Do not edit, commit or push here.** The toolchain this
+repo distributed was folded into `C:\Proj\foundryvtt-acks-extras` at its commit
+`22cc1101`, and that repo is where it is edited: `.claude/` (skills, rules,
+hooks, agents), `tools/` (validate, the IP scan, the release preflight and
+their suites under `tools/toolchain-tests/`), `.github/workflows/` and
+`docs/TOOLCHAIN.md`.
 
-## Layout
-
-- `skeleton/` — canonical files synced into module repos, plus scaffold for new
-  ones. `manifest.mjs` declares how each file participates (COPY / APPEND_OK /
-  COPY_IF_PACK_DATA / RENDER / package.json MERGE) — a skeleton file NOT in the
-  manifest seeds new modules only and never pushes into existing ones.
-- `.claude/skills/` — the family skills, **canonical here** (COPY_DIRS): synced
-  recursively into each module repo's `.claude/skills/` and CI-gated there.
-  There is no user-level install; a `~/.claude/skills/acks-*` copy is a drift
-  hazard — delete it on sight.
-- `bin/` — dev harness: `sync-toolchain.mjs` (drift check + apply),
-  `new-module.mjs` (scaffold), capture/test drivers.
-- `docs/` — TOOLCHAIN.md (the family contract), DECISIONS.md (dated rulings,
-  append-only), LICENSING.md. Not shipped anywhere.
-
-## Rules
-
-- **`main` is released, and its tree never leaves `main`**; topic and parked
-  branches only through `acks-branch` (`.claude/rules/shared-tree.md`, "Topic
-  and parked branches"), enforced by `.claude/hooks/branch-guard.mjs`, same as
-  every module repo.
-- **Push ordering: template first.** Module-repo CI checks out this repo's
-  `main`; syncing modules before pushing the template edit they depend on turns
-  every downstream toolchain-check red (TOOLCHAIN §9).
-- After editing anything canonical: commit the template, push it on the
-  owner's go-ahead (TOOLCHAIN §2), then run `/acks-sync-toolchain`. `--apply`
-  writes what is on `origin/main` and nothing else, so an edit that is not
-  pushed reaches no module. Drift is fixed by syncing, never by hand-editing
-  the copies in module repos.
-- `skeleton/CLAUDE.md` renders into every module repo — edits there speak to
-  every future session in the family. Keep it lean; put procedures in skills
-  and reference in TOOLCHAIN.
-- This repo has no packs, no module.json, no releases — nothing here ships to
-  users directly.
+- Nothing here is synced anywhere. `bin/sync-toolchain.mjs`,
+  `bin/new-module.mjs`, `skeleton/` and `manifest.mjs` are history; do not run
+  them against another repo.
+- A task that names a file here means its copy in `foundryvtt-acks-extras`.
+- `docs/DECISIONS.md` is the archive that repo's DECISIONS index links to. Read
+  it for why a rule exists; write new rulings in that repo.
