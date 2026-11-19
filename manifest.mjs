@@ -76,12 +76,9 @@ export const CANONICAL_SCRIPTS = {
 };
 
 /**
- * The LIVE module repos (working-dir names under C:\Proj). The ten pre-merge
- * repos this list used to name are retired read-only archives — eight were
- * absorbed by acks-extras 0.1.0, acks-content became acks-importer, and
- * acks-importer itself became acks-extras' `scripts/importer/` subsystem on
- * 2026-09-01 — never sync into them.
+ * The repos a run with no `--repo` and no `--repo-path` syncs. Empty: this
+ * template is retired (README.md) and no repo takes its canon, so such a run
+ * reads nothing and writes nothing. `foundryvtt-acks-extras` holds the
+ * toolchain as its own files, which a sync from here would overwrite.
  */
-export const DEFAULT_TARGETS = [
-  "foundryvtt-acks-extras",
-];
+export const DEFAULT_TARGETS = [];

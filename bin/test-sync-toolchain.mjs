@@ -533,9 +533,12 @@ try {
   await test("this repository's own manifest and skeleton sync into a bare module, which reads level once a commit holds the modes", async (check) => {
     const real = await import(url.pathToFileURL(path.join(TEMPLATE_ROOT, "manifest.mjs")).href);
     const f = fixture("real", {
-      target: real.DEFAULT_TARGETS[0],
       files: (dir) => {
-        fs.copyFileSync(path.join(TEMPLATE_ROOT, "manifest.mjs"), path.join(dir, "manifest.mjs"));
+        // This repository's manifest names no default target; the fixture's copy names the fixture's module.
+        const own = fs.readFileSync(path.join(TEMPLATE_ROOT, "manifest.mjs"), "utf8");
+        const withTarget = own.replace(/^export const DEFAULT_TARGETS = \[[^\]]*\];$/mu, 'export const DEFAULT_TARGETS = ["module-one"];');
+        if (withTarget === own) throw new Error("manifest.mjs holds no DEFAULT_TARGETS line to give the fixture a target");
+        fs.writeFileSync(path.join(dir, "manifest.mjs"), withTarget);
         fs.copyFileSync(path.join(TEMPLATE_ROOT, ".gitattributes"), path.join(dir, ".gitattributes"));
         for (const rel of ["skeleton", ...real.COPY_DIRS]) fs.cpSync(path.join(TEMPLATE_ROOT, rel), path.join(dir, rel), { recursive: true });
       },

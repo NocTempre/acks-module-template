@@ -487,7 +487,9 @@ async function engine(canon, announce) {
   const manifest = await import("../manifest.mjs");
   if (announce) console.log(`canon: ${canon}${announce.detail}`);
   const tally = { read: 0, unread: 0, drift: 0, written: 0, held: 0, left: 0, modes: 0, landings: [], unlanded: 0 };
-  for (const repoDir of targetsOf(manifest)) syncRepo(repoDir, manifest, tally);
+  const targets = targetsOf(manifest);
+  if (!targets.length) console.log("no target: the manifest names none and none was given (--repo, --repo-path)");
+  for (const repoDir of targets) syncRepo(repoDir, manifest, tally);
   if (LAND) for (const landing of tally.landings) if (landRepo(canon.split(" ")[0], landing) !== 0) tally.unlanded++;
 
   // A run that left a target unread says so in place of the line a level run
